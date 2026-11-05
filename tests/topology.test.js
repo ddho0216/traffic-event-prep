@@ -53,6 +53,31 @@ test('현장 설명과 맞다: Juniper가 가장 많고, Cisco는 백본 몇 대
   for (const d of T.devices.filter(x => x.vendor === 'cisco')) assert.match(d.role, /백본/, `${d.id}는 백본이어야 함`);
 });
 
+test('중앙 백본이 2대(이중화)이고 서로 연결돼 있다', () => {
+  const core = T.devices.filter(d => d.center === '중앙').map(d => d.id);
+  assert.equal(core.length, 2);
+  assert.ok(T.links.some(l => core.includes(l.a) && core.includes(l.b)), '중앙 백본끼리 연결이 없음');
+});
+
+test('센터 4개가 모두 중앙 백본에 연결되고, 중앙 백본 2대에 나눠 붙는다 (이중화)', () => {
+  const center = Object.fromEntries(T.devices.map(d => [d.id, d.center]));
+  const core = new Set(T.devices.filter(d => d.center === '중앙').map(d => d.id));
+  const up = {};   // 센터 -> 연결된 중앙 백본 목록
+  for (const l of T.links) {
+    for (const [x, y] of [[l.a, l.b], [l.b, l.a]]) if (core.has(y) && center[x] && center[x] !== '중앙') (up[center[x]] = up[center[x]] || new Set()).add(y);
+  }
+  const centers = ['우리 센터', '센터B', '센터C', '센터D'];
+  for (const c of centers) assert.ok(up[c], `${c}가 중앙 백본에 연결되지 않음`);
+  const used = new Set(); centers.forEach(c => up[c].forEach(x => used.add(x)));
+  assert.equal(used.size, 2, '중앙 백본 2대가 모두 쓰여야 함');
+});
+
+test('CDN 연결이 한 곳이 아니라 여러 곳에 걸쳐 있다', () => {
+  const cdn = T.links.filter(l => l.b === 'CDN-EDGE' || l.a === 'CDN-EDGE');
+  assert.ok(cdn.length >= 2, 'CDN 연결이 하나뿐임');
+  assert.ok(new Set(cdn.map(l => l.a === 'CDN-EDGE' ? l.b : l.a)).size >= 2, 'CDN이 서로 다른 장비 두 곳에 연결돼야 함');
+});
+
 test('심어 둔 포트 이상이 실제 포트에 있다', () => {
   const used = new Set();
   for (const l of T.links) { used.add(`${l.a}|${l.ap}`); used.add(`${l.b}|${l.bp}`); }

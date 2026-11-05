@@ -108,7 +108,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
 
   await page.click('[data-tab=term]');
   const opts = async () => (await page.locator('#devSel option').allInnerTexts()).map(o => o.split(' · ')[0]);
-  check('제조사 기본값은 Juniper이고 Juniper 장비만 나옴', (await page.locator('#vendorSel').inputValue()) === 'juniper' && (await opts()).length === 8 && (await opts()).includes('BB-OUR'));
+  check('제조사 기본값은 Juniper이고 Juniper 장비만 나옴', (await page.locator('#vendorSel').inputValue()) === 'juniper' && (await opts()).length === 10 && (await opts()).includes('BB-OUR') && (await opts()).includes('CORE-1'));
   await page.selectOption('#vendorSel', 'cisco');
   check('Cisco를 고르면 Cisco 장비만 나옴 (백본 2대)', JSON.stringify(await opts()) === JSON.stringify(['BB-B2', 'BB-D1']));
   await page.selectOption('#vendorSel', 'huawei');

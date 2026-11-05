@@ -48,7 +48,7 @@ python3 tests/make_truth.py                # 정답표(tests/ground_truth.json, 
 - `gen_data.py`: 가짜 데이터 생성 (평소 곡선 + 월드컵 7경기 + 새벽 급증 + 급감 2건 + 서버실 온도)
 - `export_site_data.py`: CSV를 사이트용 데이터로 변환
 - `site/lib.js`: 탐지·판정 규칙 (화면 코드 없음, 터미널에서도 실행)
-- `site/topology.js`: 설계도 (가상 장비 18대와 연결표. 장비 분포: Juniper 주력, Cisco는 백본 2대, Huawei는 소형 다수)
+- `site/topology.js`: 설계도 (가상 장비 20대와 연결표. 중앙 백본 2대가 맨 위, 센터 4개가 그 아래, CDN 연결은 여러 곳. 장비 분포: Juniper 주력, Cisco는 센터 백본 2대, Huawei는 소형 다수)
 - `site/`: 정적 웹페이지 (외부 라이브러리 없음)
 - `tests/`, `docs/`: 데이터 규칙 검사, 탐지 정확도 시험, 화면 점검, 정답표
 
