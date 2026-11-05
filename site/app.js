@@ -521,22 +521,25 @@ function renderVisits() {
 })();
 
 /* ---------- 5. 장비 터미널 (가상) ---------- */
-const DEVICES = [
-  { id: "SW-OUR-A", vendor: "juniper", prompt: "admin@SW-OUR-A>", ifs: [["xe-0/0/0", "OUR-A", 0, -3.1], ["xe-0/0/1", "OUR-B", 0, -3.4], ["xe-0/0/2", "IX-1", 2, -3.8], ["xe-0/0/3", "INTL-1", 1423, -14.2]] },
-  { id: "SW-CTR-B", vendor: "cisco", prompt: "SW-CTR-B#", ifs: [["Te1/0/1", "CTR-B1", 0, -2.9], ["Te1/0/2", "CTR-B2", 87, -12.9], ["Te1/0/3", "CTR-C1", 0, -3.3], ["Te1/0/4", "CTR-D1", 0, -3.0]] },
-  { id: "AS-1", vendor: "huawei", prompt: "<AS-1>", ifs: [["XGigabitEthernet0/1/1", "ACC-1", 0, -3.2], ["XGigabitEthernet0/1/2", "ACC-2", 12, -9.8]] }
-];
-// 랙마다 위쪽(ToR) 스위치 1대. 서버 한 대가 포트 하나에 연결된다. A 랙은 Juniper 형식, B 랙은 Cisco 형식 (가상).
+// 설계도(topology.js)에서 가상 장비를 만든다. 포트는 연결표와 랙 서버에서 가져온다.
+const PROMPT = { juniper: id => `admin@${id}>`, cisco: id => `${id}#`, huawei: id => `<${id}>` };
+const DEVICES = TOPOLOGY.devices.map(d => Object.assign({}, d, { prompt: PROMPT[d.vendor](d.id), ifs: [] }));
+const DEV = Object.fromEntries(DEVICES.map(d => [d.id, d]));
+// 포트 한 칸: [포트 이름, 상대(장비·서버·외부), CRC 오류 수, 광 수신값 dBm, 연결 정보]
+const addPort = (dev, port, peer, link) => {
+  const f = TOPOLOGY.faults[`${dev}|${port}`] || {}, d = DEV[dev];
+  d.ifs.push([port, peer, f.crc || 0, f.rx != null ? f.rx : -3.0 - (d.ifs.length % 4) * 0.15, link]);
+};
+TOPOLOGY.links.forEach(l => { addPort(l.a, l.ap, l.b, l); if (DEV[l.b]) addPort(l.b, l.bp, l.a, l); });
+// 랙 서버: 랙 스위치 포트 하나에 서버 한 대 (A 랙은 Juniper, B 랙은 Huawei)
 DATA.racks.forEach((r, ri) => {
-  const j = r.id.startsWith("A");
-  DEVICES.push({
-    id: "SW-" + r.id, vendor: j ? "juniper" : "cisco", prompt: j ? `admin@SW-${r.id}>` : `SW-${r.id}#`,
-    ifs: r.servers.map(sv => {
-      let crc = 0, rx = -3 - ((sv.slot + ri) % 4) * 0.15;
-      if (sv.name === "A-03-S2") rx = -40;                 // 꺼진 서버: 빛이 안 들어옴
-      if (sv.name === "A-02-S3") { crc = 12; rx = -9.8; }  // 디스크 경고 서버: 작은 CRC 오류와 약한 광 수신
-      return [j ? `xe-0/0/${sv.slot - 1}` : `Te1/0/${sv.slot}`, sv.name, crc, rx];
-    })
+  const tor = DEV["SW-" + r.id]; if (!tor) return;
+  r.servers.forEach(sv => {
+    const port = tor.vendor === "juniper" ? `xe-0/0/${sv.slot - 1}` : `XGigabitEthernet0/1/${sv.slot}`;
+    let crc = 0, rx = -3 - ((sv.slot + ri) % 4) * 0.15;
+    if (sv.name === "A-03-S2") rx = -40;                 // 꺼진 서버: 빛이 안 들어옴
+    if (sv.name === "A-02-S3") { crc = 12; rx = -9.8; }  // 디스크 경고 서버: 작은 CRC 오류와 약한 광 수신
+    tor.ifs.push([port, sv.name, crc, rx, null]);
   });
 });
 const dBm = v => (Math.pow(10, v / 10)).toFixed(4);
@@ -555,6 +558,10 @@ const DEV_CMDS = {
     [/^show interfaces? (\S+) \| include CRC$/i, (d, m) => { const f = findIf(d, m[1]); return f ? `     ${f[2]} input errors, ${f[2]} CRC, 0 frame, 0 overrun, 0 ignored` : `% Invalid input detected at '^' marker.`; }]
   ],
   huawei: [
+    [/^display interface (.+?) \| include CRC$/i, (d, m) => {
+      const f = findIf(d, m[1].replace(/\s+/g, "")); if (!f) return "Error: Wrong parameter found at '^' position.";
+      return `    CRC: ${f[2]} packets, Giants: 0 packets, Jabbers: 0 packets`;
+    }],
     [/^display transceiver interface (.+?) verbose$/i, (d, m) => {
       const f = findIf(d, m[1].replace(/\s+/g, "")); if (!f) return "Error: Wrong parameter found at '^' position.";
       const bad = f[3] < -9;
@@ -564,7 +571,7 @@ const DEV_CMDS = {
 };
 function findIf(d, name) { return d.ifs.find(f => f[0].toLowerCase() === String(name).toLowerCase()); }
 const VENDOR_ERR = { juniper: "                     ^\nunknown command.", cisco: "% Invalid input detected at '^' marker.", huawei: "Error: Unrecognized command found at '^' position." };
-const devNow = () => DEVICES[$("#devSel").selectedIndex];
+const devNow = () => DEV[$("#devSel").value] || DEVICES[0];
 function runCmd(raw) {
   const d = devNow(), cmd = raw.trim().replace(/\s+/g, " ");
   if (!cmd) return "";
@@ -574,11 +581,11 @@ function runCmd(raw) {
 }
 function quickCmds() {
   const d = devNow(), focus = termFocus && termFocus.dev === d.id ? d.ifs.find(f => f[1] === termFocus.server) : null;
-  const bad = focus || d.ifs.find(f => f[2] > 50) || d.ifs[0], ok = d.ifs[0];
+  const bad = focus || d.ifs.find(f => f[2] > 50 || f[3] < -9) || d.ifs[0], ok = d.ifs[0];
   const list = {
     juniper: [`show interfaces diagnostics optics ${bad[0]}`, `show interfaces extensive ${bad[0]} | match CRC`, `show interfaces extensive | match "CRC|physical interface"`],
     cisco: [`show interface ${bad[0]} | include CRC`, `show interface ${ok[0]} | include CRC`],
-    huawei: [`display transceiver interface ${bad[0].replace("XGigabitEthernet", "XGigabitEthernet ")} verbose`]
+    huawei: [`display transceiver interface ${bad[0].replace("XGigabitEthernet", "XGigabitEthernet ")} verbose`, `display interface ${bad[0].replace("XGigabitEthernet", "XGigabitEthernet ")} | include CRC`]
   }[d.vendor];
   $("#qcmd").innerHTML = list.map(c => `<button data-c="${esc(c)}">${esc(c)}</button>`).join("");
 }
@@ -587,16 +594,33 @@ const termHist = []; let hp = 0;
 function termPrint(html) { const t = $("#termOut"); t.insertAdjacentHTML("beforeend", html); t.scrollTop = t.scrollHeight; }
 function termBanner() {
   const d = devNow(), f = termFocus && termFocus.dev === d.id ? d.ifs.find(x => x[1] === termFocus.server) : null;
-  $("#termOut").innerHTML = `<span class="muted">가상 장비 ${d.id} (${d.vendor}) 에 연결됨. 실제 장비가 아닙니다.</span>\n` + (f ? `<span class="muted">${esc(termFocus.server)} 가 연결된 포트: ${esc(f[0])}</span>\n` : "");
+  $("#termOut").innerHTML = `<span class="muted">가상 장비 ${d.id} (${d.vendor} · ${d.role}) 에 연결됨. 실제 장비가 아닙니다.</span>\n` + (f ? `<span class="muted">${esc(termFocus.server)} 가 연결된 포트: ${esc(f[0])}</span>\n` : "");
   $("#termPrompt").textContent = d.prompt;
   $("#termTarget").textContent = f ? `${termFocus.server} → ${d.id} · 포트 ${f[0]}` : "";
   quickCmds();
 }
+const VENDORS = [["juniper", "Juniper"], ["cisco", "Cisco"], ["huawei", "Huawei"]];
+function fillDevices(vendor, keep) {   // 고른 제조사의 장비만 목록에 보여 준다
+  const list = DEVICES.filter(d => d.vendor === vendor);
+  $("#devSel").innerHTML = list.map(d => `<option value="${d.id}">${d.id} · ${esc(d.role)}</option>`).join("");
+  if (keep && list.some(d => d.id === keep)) $("#devSel").value = keep;
+}
+function selectDevice(devId) {
+  const d = DEV[devId]; if (!d) return;
+  $("#vendorSel").value = d.vendor; fillDevices(d.vendor, devId); termFocus = null; termBanner();
+}
 // 서버 이름으로 연결: 그 서버가 꽂힌 랙 스위치를 고르고 포트 명령을 채워 둔다
 function termConnect(devId, server) {
-  const k = DEVICES.findIndex(d => d.id === devId); if (k < 0) return;
-  $("#devSel").selectedIndex = k; termFocus = { dev: devId, server }; termBanner();
+  const d = DEV[devId]; if (!d) return;
+  $("#vendorSel").value = d.vendor; fillDevices(d.vendor, devId); termFocus = { dev: devId, server }; termBanner();
   const first = $("#qcmd button"); if (first) $("#termIn").value = first.dataset.c;
+}
+function renderDesign() {
+  const name = Object.fromEntries(VENDORS);
+  $("#devTbl").innerHTML = `<tr><th>제조사</th><th>장비</th><th>역할</th><th>센터</th><th class="n">포트</th></tr>` +
+    VENDORS.map(([v]) => DEVICES.filter(d => d.vendor === v).map(d => `<tr class="click" data-dev="${d.id}"><td><span class="tag">${name[v]}</span></td><td>${d.id}</td><td>${esc(d.role)}</td><td>${esc(d.center)}</td><td class="n">${d.ifs.length}</td></tr>`).join("")).join("");
+  $("#linkTbl").innerHTML = `<tr><th>연결</th><th>A 장비 · 포트</th><th>B 장비 · 포트</th><th>종류</th><th class="n">Gbps</th></tr>` +
+    TOPOLOGY.links.map(l => `<tr class="click" data-dev="${l.a}"><td>${l.link}</td><td>${l.a} ${l.ap}</td><td>${esc(l.b)}${l.bp && l.bp !== "-" ? " " + l.bp : ""}</td><td>${esc(l.kind)}</td><td class="n">${l.gbps}</td></tr>`).join("");
 }
 function openServerTerminal(name) {
   const rack = DATA.racks.find(r => r.servers.some(x => x.name === name)); if (!rack) return;
@@ -608,8 +632,12 @@ function openServerTerminal(name) {
   $("#termTarget").textContent += "  (팝업이 막혀서 이 화면에서 열었습니다)";
 }
 (function initTerm() {
-  $("#devSel").innerHTML = DEVICES.map(d => `<option>${d.id} (${d.vendor})</option>`).join("");
+  $("#vendorSel").innerHTML = VENDORS.map(([v, n]) => `<option value="${v}">${n} (${DEVICES.filter(d => d.vendor === v).length}대)</option>`).join("");
+  fillDevices("juniper");   // 가장 많이 쓰는 Juniper가 기본
+  $("#vendorSel").onchange = () => { termFocus = null; fillDevices($("#vendorSel").value); termBanner(); };
   $("#devSel").onchange = () => { termFocus = null; termBanner(); };
+  ["devTbl", "linkTbl"].forEach(id => $("#" + id).addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { selectDevice(tr.dataset.dev); $("#termIn").focus(); window.scrollTo({ top: 0, behavior: "smooth" }); } }));
+  renderDesign();
   $("#termClear").onclick = termBanner;
   $("#qcmd").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { $("#termIn").value = b.dataset.c; $("#termIn").focus(); } });
   $("#termIn").addEventListener("keydown", e => {

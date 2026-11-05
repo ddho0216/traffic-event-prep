@@ -23,5 +23,7 @@ line('경기 시간대인데 표시가 빠진 알림:', R.untaggedInWindow.lengt
 console.log('\n=== 3. 경기 겹침으로 표시된 알림 종류 ===');
 const by = {}; R.tagged.forEach(a => { const k = `${a.evName} / ${a.kind}`; by[k] = (by[k] || 0) + 1; });
 Object.entries(by).forEach(([k, v]) => line(String(v).padStart(3), k));
+const sp = R.tagged.filter(a => a.kind === 'in 급증 의심').map(a => a.ratio);
+if (sp.length) line('\n경기 중 in 급증', sp.length + '건:', Math.min(...sp).toFixed(2), '~', Math.max(...sp).toFixed(2), '배 (기준 3배 / 은호님 판단: 3배는 알림이 맞고 경계 수준)');
 console.log('\n※ 정답표: docs/ground_truth.md');
 process.exit(found === total && !R.falseAlarms.length && !R.roomFalse.length ? 0 : 1);

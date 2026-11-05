@@ -107,6 +107,13 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('방문 등록 후 회신 초안이 생김', (await page.locator('#vReply').inputValue()).includes('방문 등록 완료'));
 
   await page.click('[data-tab=term]');
+  const opts = async () => (await page.locator('#devSel option').allInnerTexts()).map(o => o.split(' · ')[0]);
+  check('제조사 기본값은 Juniper이고 Juniper 장비만 나옴', (await page.locator('#vendorSel').inputValue()) === 'juniper' && (await opts()).length === 8 && (await opts()).includes('BB-OUR'));
+  await page.selectOption('#vendorSel', 'cisco');
+  check('Cisco를 고르면 Cisco 장비만 나옴 (백본 2대)', JSON.stringify(await opts()) === JSON.stringify(['BB-B2', 'BB-D1']));
+  await page.selectOption('#vendorSel', 'huawei');
+  check('Huawei를 고르면 Huawei 장비만 나옴 (소규모 장비 8대)', (await opts()).length === 8 && (await opts()).includes('AS-1'));
+  await page.selectOption('#vendorSel', 'juniper');
   await page.click('#qcmd button');
   await page.press('#termIn', 'Enter');
   check('터미널 명령 출력', (await page.locator('#termOut').innerText()).includes('Receiver signal'));

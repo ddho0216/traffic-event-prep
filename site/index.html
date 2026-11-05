@@ -222,20 +222,27 @@
   <p class="note" id="termTarget" style="color:var(--in);font-size:13px"></p>
   <div class="cols" style="grid-template-columns:2fr 1fr">
     <div>
-      <div class="toolbar"><label>장비 <select id="devSel"></select></label><button class="btn" id="termClear">화면 지우기</button></div>
+      <div class="toolbar"><label>제조사 <select id="vendorSel"></select></label>
+      <label>장비 <select id="devSel"></select></label><button class="btn" id="termClear">화면 지우기</button></div>
       <div class="term" id="termOut"></div>
       <div class="termin"><span class="p" id="termPrompt"></span><input type="text" id="termIn" autocomplete="off" spellcheck="false" placeholder="명령 입력 후 Enter (위/아래 화살표: 이전 명령)"></div>
     </div>
     <div class="card">
       <h3>자주 쓰던 명령</h3>
       <div class="qcmd" id="qcmd"></div>
-      <p class="note">누르면 입력창에 채워집니다. 장비 종류에 맞는 명령만 동작합니다. <span class="crit-t">xe-0/0/3, Te1/0/2 등 일부 회선에 CRC와 광 수신값 이상이 심어져 있습니다.</span></p>
+      <p class="note">누르면 입력창에 채워집니다. 장비 종류에 맞는 명령만 동작합니다. <span class="crit-t">BB-EDGE xe-0/0/3(해외 연동), BB-B2 Te1/0/1(센터B 백본2), AS-2 업링크 등에 CRC와 광 수신값 이상이 심어져 있습니다.</span></p>
     </div>
+  </div>
+  <h2>설계도 (가상) <small>제가 만든 초안입니다. 행을 누르면 그 장비로 연결됩니다. 장비·연결이 현장과 다르면 알려 주세요.</small></h2>
+  <div class="cols">
+    <div class="card" style="padding:0"><table id="devTbl"></table></div>
+    <div class="card" style="padding:0"><table id="linkTbl"></table></div>
   </div>
 </section>
 </main>
 
 <script src="data.js"></script>
+<script src="topology.js"></script>
 <script src="lib.js"></script>
 <script src="app.js"></script>
 </body>
