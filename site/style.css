@@ -97,3 +97,9 @@ tr.sel td{background:#1d2a36}
 .led.blink{animation:blink 1s steps(2,start) infinite}
 @keyframes blink{50%{opacity:.25}}
 @media(prefers-reduced-motion:reduce){.led.blink{animation:none}}
+
+.srv[data-server]{cursor:pointer}
+.srv[data-server]:hover,.srv[data-server]:focus-visible{border-color:var(--accent);outline:none}
+body.popup nav.tabs{display:none}
+body.popup main{padding-top:10px}
+body.popup .term{height:calc(100vh - 215px)}

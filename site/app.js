@@ -493,6 +493,19 @@ const DEVICES = [
   { id: "SW-CTR-B", vendor: "cisco", prompt: "SW-CTR-B#", ifs: [["Te1/0/1", "CTR-B1", 0, -2.9], ["Te1/0/2", "CTR-B2", 87, -12.9], ["Te1/0/3", "CTR-C1", 0, -3.3], ["Te1/0/4", "CTR-D1", 0, -3.0]] },
   { id: "AS-1", vendor: "huawei", prompt: "<AS-1>", ifs: [["XGigabitEthernet0/1/1", "ACC-1", 0, -3.2], ["XGigabitEthernet0/1/2", "ACC-2", 12, -9.8]] }
 ];
+// 랙마다 위쪽(ToR) 스위치 1대. 서버 한 대가 포트 하나에 연결된다. A 랙은 Juniper 형식, B 랙은 Cisco 형식 (가상).
+DATA.racks.forEach((r, ri) => {
+  const j = r.id.startsWith("A");
+  DEVICES.push({
+    id: "SW-" + r.id, vendor: j ? "juniper" : "cisco", prompt: j ? `admin@SW-${r.id}>` : `SW-${r.id}#`,
+    ifs: r.servers.map(sv => {
+      let crc = 0, rx = -3 - ((sv.slot + ri) % 4) * 0.15;
+      if (sv.name === "A-03-S2") rx = -40;                 // 꺼진 서버: 빛이 안 들어옴
+      if (sv.name === "A-02-S3") { crc = 12; rx = -9.8; }  // 디스크 경고 서버: 작은 CRC 오류와 약한 광 수신
+      return [j ? `xe-0/0/${sv.slot - 1}` : `Te1/0/${sv.slot}`, sv.name, crc, rx];
+    })
+  });
+});
 const dBm = v => (Math.pow(10, v / 10)).toFixed(4);
 function jOptics(f) {
   const bad = f[3] < -11;
@@ -527,7 +540,8 @@ function runCmd(raw) {
   return VENDOR_ERR[d.vendor];
 }
 function quickCmds() {
-  const d = devNow(), bad = d.ifs.find(f => f[2] > 50) || d.ifs[0], ok = d.ifs[0];
+  const d = devNow(), focus = termFocus && termFocus.dev === d.id ? d.ifs.find(f => f[1] === termFocus.server) : null;
+  const bad = focus || d.ifs.find(f => f[2] > 50) || d.ifs[0], ok = d.ifs[0];
   const list = {
     juniper: [`show interfaces diagnostics optics ${bad[0]}`, `show interfaces extensive ${bad[0]} | match CRC`, `show interfaces extensive | match "CRC|physical interface"`],
     cisco: [`show interface ${bad[0]} | include CRC`, `show interface ${ok[0]} | include CRC`],
@@ -535,12 +549,34 @@ function quickCmds() {
   }[d.vendor];
   $("#qcmd").innerHTML = list.map(c => `<button data-c="${esc(c)}">${esc(c)}</button>`).join("");
 }
+let termFocus = null;
 const termHist = []; let hp = 0;
 function termPrint(html) { const t = $("#termOut"); t.insertAdjacentHTML("beforeend", html); t.scrollTop = t.scrollHeight; }
-function termBanner() { const d = devNow(); $("#termOut").innerHTML = `<span class="muted">가상 장비 ${d.id} (${d.vendor}) 에 연결됨. 실제 장비가 아닙니다.</span>\n`; $("#termPrompt").textContent = d.prompt; quickCmds(); }
+function termBanner() {
+  const d = devNow(), f = termFocus && termFocus.dev === d.id ? d.ifs.find(x => x[1] === termFocus.server) : null;
+  $("#termOut").innerHTML = `<span class="muted">가상 장비 ${d.id} (${d.vendor}) 에 연결됨. 실제 장비가 아닙니다.</span>\n` + (f ? `<span class="muted">${esc(termFocus.server)} 가 연결된 포트: ${esc(f[0])}</span>\n` : "");
+  $("#termPrompt").textContent = d.prompt;
+  $("#termTarget").textContent = f ? `${termFocus.server} → ${d.id} · 포트 ${f[0]}` : "";
+  quickCmds();
+}
+// 서버 이름으로 연결: 그 서버가 꽂힌 랙 스위치를 고르고 포트 명령을 채워 둔다
+function termConnect(devId, server) {
+  const k = DEVICES.findIndex(d => d.id === devId); if (k < 0) return;
+  $("#devSel").selectedIndex = k; termFocus = { dev: devId, server }; termBanner();
+  const first = $("#qcmd button"); if (first) $("#termIn").value = first.dataset.c;
+}
+function openServerTerminal(name) {
+  const rack = DATA.racks.find(r => r.servers.some(x => x.name === name)); if (!rack) return;
+  const devId = "SW-" + rack.id;
+  const q = new URLSearchParams({ popup: "term", dev: devId, server: name });
+  const w = window.open(location.pathname + "?" + q.toString(), "term-" + name, "width=880,height=660");
+  if (w) { try { w.focus(); } catch (e) { /* 무시 */ } return; }
+  termConnect(devId, name); showTab("term");   // 팝업이 막히면 같은 화면의 터미널 탭에서 연다
+  $("#termTarget").textContent += "  (팝업이 막혀서 이 화면에서 열었습니다)";
+}
 (function initTerm() {
   $("#devSel").innerHTML = DEVICES.map(d => `<option>${d.id} (${d.vendor})</option>`).join("");
-  $("#devSel").onchange = termBanner;
+  $("#devSel").onchange = () => { termFocus = null; termBanner(); };
   $("#termClear").onclick = termBanner;
   $("#qcmd").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { $("#termIn").value = b.dataset.c; $("#termIn").focus(); } });
   $("#termIn").addEventListener("keydown", e => {
@@ -599,7 +635,7 @@ function renderServerRoom() {
   $("#racks").innerHTML = RACKS.map(r => {
     const t = r.temp[i];
     return `<div class="rack ${tempCls(t)}"><div class="rhd"><b>${r.id}</b><span class="tmp ${tempCls(t)}">${t.toFixed(1)}°C</span></div>` +
-      r.servers.map(sv => `<div class="srv">${ledHtml(srvState(r, sv, i))}<span class="sname">${sv.name}</span><span class="role">${sv.role}</span></div>`).join("") +
+      r.servers.map(sv => `<div class="srv" data-server="${sv.name}" role="button" tabindex="0" title="누르면 이 서버가 연결된 스위치 터미널이 새 창으로 열립니다 (가상)">${ledHtml(srvState(r, sv, i))}<span class="sname">${sv.name}</span><span class="role">${sv.role}</span></div>`).join("") +
       spark(r.temp, Math.max(0, i - 35), i) + `<div class="note" style="margin:2px 0 0">최근 3시간 · 점선 27/30°C</div></div>`;
   }).join("");
   $("#srAlerts").innerHTML = `<tr><th>시각</th><th>랙</th><th class="n">최고 온도</th></tr>` + (ROOM_ALERTS.length ? ROOM_ALERTS.map((a, k) =>
@@ -623,6 +659,8 @@ function renderInspections() {
   $$("[data-sr]").forEach(b => b.onclick = () => { sr.end = idxOf(parseT(b.dataset.sr)); renderServerRoom(); });
   $("#srAlerts").addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { sr.end = ROOM_ALERTS[+tr.dataset.k].peak; renderServerRoom(); } });
   $("#inRack").addEventListener("change", renderServerRoom);
+  $("#racks").addEventListener("click", ev => { const el = ev.target.closest(".srv"); if (el) openServerTerminal(el.dataset.server); });
+  $("#racks").addEventListener("keydown", ev => { if (ev.key === "Enter") { const el = ev.target.closest(".srv"); if (el) openServerTerminal(el.dataset.server); } });
   $("#srFrom").min = $("#srTo").min = MIN_DAY; $("#srFrom").max = $("#srTo").max = MAX_DAY;
   $("#srFrom").value = MIN_DAY; $("#srTo").value = MAX_DAY;
   $("#srTempCsv").onclick = () => {
@@ -649,5 +687,12 @@ function renderInspections() {
 })();
 
 /* ---------- 시작 ---------- */
-const h0 = location.hash.slice(1);
-showTab(["monitor", "monthly", "event", "room", "visit", "term"].includes(h0) ? h0 : "monitor");
+const qs = new URLSearchParams(location.search), h0 = location.hash.slice(1);
+if (qs.get("popup") === "term") {
+  document.body.classList.add("popup");
+  showTab("term"); termConnect(qs.get("dev"), qs.get("server"));
+  document.title = `${qs.get("server")} 터미널 (가상)`;
+  $("#termIn").focus();
+} else {
+  showTab(["monitor", "monthly", "event", "room", "visit", "term"].includes(h0) ? h0 : "monitor");
+}

@@ -115,7 +115,7 @@
 
 <!-- 서버실 -->
 <section class="tab" id="tab-room">
-  <p class="note">서버실 점검 업무: 랙 입구 온도 확인과 육안점검(서버 불빛을 보고 판단). 랙·서버·온도는 모두 가상 데이터이고, 온도 기준(27·30·33°C)은 제가 가정한 값입니다.</p>
+  <p class="note">서버실 점검 업무: 랙 입구 온도 확인과 육안점검(서버 불빛을 보고 판단). 랙·서버·온도는 모두 가상 데이터이고, 온도 기준(27·30·33°C)은 제가 가정한 값입니다. <b>서버 칸을 누르면</b> 그 서버가 연결된 스위치의 가상 터미널이 새 창으로 열립니다.</p>
   <div class="toolbar">
     <label>기준 시각 <input type="datetime-local" id="srTime"></label>
     <button class="btn" id="srPrev">&lsaquo; 이전 1시간</button>
@@ -198,6 +198,7 @@
 <!-- 5. 장비 터미널 -->
 <section class="tab" id="tab-term">
   <p class="note">가상 장비입니다. 실제 장비에는 접속하지 않으며, 출력은 전부 지어낸 값입니다.</p>
+  <p class="note" id="termTarget" style="color:var(--in);font-size:13px"></p>
   <div class="cols" style="grid-template-columns:2fr 1fr">
     <div>
       <div class="toolbar"><label>장비 <select id="devSel"></select></label><button class="btn" id="termClear">화면 지우기</button></div>

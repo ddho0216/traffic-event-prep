@@ -57,6 +57,14 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('[data-sr="2026-10-26T16:15"]');
   check('냉각 이상 시 위험 랙 1개', (await page.locator('.rack.hot, .rack.crit').count()) === 1);
 
+  const [pop] = await Promise.all([ctx.waitForEvent('page'), page.click('.srv[data-server="A-03-S2"]')]);
+  await pop.waitForLoadState('load');
+  check('서버를 누르면 새 창에 해당 스위치 터미널이 열림', pop.url().includes('popup=term') && (await pop.locator('#termTarget').innerText()).includes('A-03-S2 → SW-A-03'), await pop.locator('#termTarget').innerText());
+  check('새 창에는 터미널만 보임', (await pop.locator('#tab-term').isVisible()) && !(await pop.locator('#tab-monitor').isVisible()));
+  await pop.press('#termIn', 'Enter');
+  check('연결된 포트 명령 출력(빛 없음)', (await pop.locator('#termOut').innerText()).includes('-40.00 dBm'));
+  await pop.close();
+
   await page.click('[data-tab=visit]');
   await page.click('#vParse');
   await page.click('#vReg');
