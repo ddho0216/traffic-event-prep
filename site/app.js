@@ -273,70 +273,50 @@ function statsArr(a, from) {
   return { max: a[mxi], at: from + mxi * STEP, min: mn, avg: sum / a.length, p95: p95(a) };
 }
 
-const UNITS = [
-  { key: "month", label: "한 달", hint: "(1일~말일)", dir: "1month" },
-  { key: "week", label: "일주일", hint: "(그 달 마지막 7일)", dir: "1week" },
-  { key: "half", label: "6개월", hint: "(6개월치, 그 달 말일까지)", dir: "6months" },
-  { key: "custom", label: "직접 선택", hint: "(시작일~끝나는 날)", dir: "custom" }
-];
-function addMonths(ms, n) { const d = new Date(ms), m = d.getUTCMonth() + n, last = new Date(Date.UTC(d.getUTCFullYear(), m + 1, 0)).getUTCDate(); return Date.UTC(d.getUTCFullYear(), m, Math.min(d.getUTCDate(), last)); }
 const DATA_END = msOf(N - 1);   // 마지막 데이터 시각
 const monthStart = ym => { const [y, m] = ym.split("-").map(Number); return Date.UTC(y, m - 1, 1); };
 const monthEnd = ms => { const d = new Date(ms); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1) - STEP; };   // 그 달 말일 23:55
-// 기준 월(ym) 기준으로 기간을 만든다. 한 달 = 1일 ~ 말일. 데이터가 없는 날은 마지막 데이터까지만.
-function periodFor(u, ym, fromDay, toDay) {
-  const mStart = monthStart(ym), mEnd = Math.min(monthEnd(mStart), DATA_END), endDay = Math.floor(mEnd / DAY) * DAY;
-  if (u.key === "custom") return { u, from: Math.min(fromDay, toDay), to: Math.min(toDay + DAY - STEP, DATA_END) };
-  if (u.key === "week") return { u, from: endDay - 6 * DAY, to: mEnd };
-  if (u.key === "half") return { u, from: addMonths(mStart, -5), to: mEnd };
-  return { u, from: mStart, to: mEnd };
-}
-const pLabel = q => `${q.u.label} ${ymd(q.from)} ~ ${ymd(q.to)}`;
+// 기간은 하나다: 기본은 대상 월의 1일~말일, 다른 기간이 필요하면 시작일·끝나는 날을 직접 고른다.
 function mState() {
   const c = CUSTOMERS[$("#mCust").selectedIndex];
   const ids = $$("#mLinks input:checked").map(i => i.value);
-  const ym = $("#mMonth").value, fromDay = parseT($("#mFrom").value + "T00:00"), toDay = parseT($("#mTo").value + "T00:00");
-  const units = $$("#mUnits input:checked").map(i => UNITS.find(u => u.key === i.value));
-  return { c, ids, units, month: ym, periods: units.map(u => periodFor(u, ym, fromDay, toDay)) };
+  const fromStr = $("#mFrom").value, toStr = $("#mTo").value;
+  const fromDay = parseT(fromStr + "T00:00"), toDay = parseT(toStr + "T00:00");
+  const bad = !fromStr || !toStr || fromDay > toDay;
+  return { c, ids, bad, fromStr, toStr, from: fromDay, to: Math.min(toDay + DAY - STEP, DATA_END), clamped: toDay + DAY - STEP > DATA_END };
 }
 function mCompute(m) {
-  const res = [];
-  m.periods.forEach(q => m.ids.forEach(id => {
-    const sr = seriesFor(LINK[id], q.from, q.to);
-    res.push({ q, id, sr, st: { out: statsArr(sr.out, q.from), in: statsArr(sr.inn, q.from) } });
-  }));
-  return res;
+  return m.ids.map(id => { const sr = seriesFor(LINK[id], m.from, m.to); return { id, sr, st: { out: statsArr(sr.out, m.from), in: statsArr(sr.inn, m.from) } }; });
 }
 function seriesCsv(id, sr) {
   const l = LINK[id], rows = ["time,link,in_gbps,out_gbps,out_util_pct"];
   for (let k = 0; k < sr.out.length; k++) rows.push(`${ymdhm(sr.from + k * STEP)},${id},${sr.inn[k]},${sr.out[k]},${(sr.out[k] / l.cap * 100).toFixed(1)}`);
   return rows.join("\n");
 }
-function summaryCsv(data) {
-  const rows = ["period,from,to,link,direction,max_gbps,max_time,min_gbps,avg_gbps,p95_gbps"];
-  data.forEach(x => ["out", "in"].forEach(d => { const t = x.st[d]; rows.push(`${x.q.u.dir},${ymd(x.q.from)},${ymd(x.q.to)},${x.id},${d},${t.max.toFixed(2)},${ymdhm(t.at)},${t.min.toFixed(2)},${t.avg.toFixed(2)},${t.p95.toFixed(2)}`); }));
+function summaryCsv(data, m) {
+  const rows = ["from,to,link,direction,max_gbps,max_time,min_gbps,avg_gbps,p95_gbps"];
+  data.forEach(x => ["out", "in"].forEach(d => { const t = x.st[d]; rows.push(`${m.fromStr},${m.toStr},${x.id},${d},${t.max.toFixed(2)},${ymdhm(t.at)},${t.min.toFixed(2)},${t.avg.toFixed(2)},${t.p95.toFixed(2)}`); }));
   return rows.join("\n");
 }
 function renderMonthly() {
-  const m = mState(), data = mCompute(m);
-  const empty = !m.periods.length ? "기간 단위를 하나 이상 고르세요." : !m.ids.length ? "회선을 선택하세요." : "";
-  $("#mSum").innerHTML = `<tr><th>기간</th><th>회선</th><th>방향</th><th class="n">최대</th><th>최대 시각</th><th class="n">최소</th><th class="n">평균</th><th class="n">95%값</th></tr>` +
-    (empty ? `<tr><td colspan="8" class="muted">${empty}</td></tr>` : data.map(x => ["out", "in"].map(d => { const t = x.st[d]; return `<tr><td>${esc(pLabel(x.q))}</td><td>${x.id}</td><td>${d.toUpperCase()}</td><td class="n">${t.max.toFixed(2)}</td><td>${md(t.at)}</td><td class="n">${t.min.toFixed(2)}</td><td class="n">${t.avg.toFixed(2)}</td><td class="n">${t.p95.toFixed(2)}</td></tr>`; }).join("")).join(""));
-  const hist = m.periods.some(q => q.from < T0);
-  const clamped = monthEnd(monthStart(m.month)) > DATA_END;
-  $("#mNote").textContent = [hist ? `※ ${MIN_DAY} 이전 구간은 생성해 둔 데이터가 없어서, 같은 규칙(평소 하루 모양)으로 즉석에서 만든 가상 값입니다. 경기·사고는 없는 평소 기록입니다.` : "",
-    clamped ? `※ ${m.month}은 ${MAX_DAY}까지만 데이터가 있어서 거기까지 보냅니다.` : ""].filter(Boolean).join(" ");
-  const big = m.periods.some(q => q.u.key === "half" || (q.to - q.from) > 60 * DAY);
-  $("#mNote2").textContent = big ? "6개월 자료는 파일이 큽니다 (회선당 약 3MB, 압축하지 않고 묶습니다)." : "";
+  const m = mState();
+  const msg = m.bad ? "시작일이 끝나는 날보다 늦습니다. 날짜를 확인하세요." : !m.ids.length ? "회선을 선택하세요." : "";
+  const data = msg ? [] : mCompute(m);
+  $("#mSum").innerHTML = `<tr><th>회선</th><th>방향</th><th class="n">최대</th><th>최대 시각</th><th class="n">최소</th><th class="n">평균</th><th class="n">95%값</th></tr>` +
+    (msg ? `<tr><td colspan="7" class="${m.bad ? "crit-t" : "muted"}">${msg}</td></tr>` : data.map(x => ["out", "in"].map(d => { const t = x.st[d]; return `<tr><td>${x.id}</td><td>${d.toUpperCase()}</td><td class="n">${t.max.toFixed(2)}</td><td>${md(t.at)}</td><td class="n">${t.min.toFixed(2)}</td><td class="n">${t.avg.toFixed(2)}</td><td class="n">${t.p95.toFixed(2)}</td></tr>`; }).join("")).join(""));
+  $("#mNote").textContent = [
+    !m.bad && m.from < T0 ? `※ ${MIN_DAY} 이전 구간은 생성해 둔 데이터가 없어서, 같은 규칙(평소 하루 모양)으로 즉석에서 만든 가상 값입니다. 경기·사고는 없는 평소 기록입니다.` : "",
+    !m.bad && m.clamped ? `※ 데이터는 ${MAX_DAY}까지만 있어서 거기까지 보냅니다.` : ""].filter(Boolean).join(" ");
+  $("#mNote2").textContent = !m.bad && (m.to - m.from) > 60 * DAY ? "긴 기간은 파일이 큽니다 (6개월이면 회선당 약 3MB, 압축하지 않고 묶습니다)." : "";
   $("#mMail").value =
-`제목: [${m.c.name}] ${m.periods.length ? m.periods.map(q => q.u.label).join("·") : "(기간 선택 없음)"} 회선별 5분 단위 트래픽 자료 송부
+`제목: [${m.c.name}] ${m.fromStr} ~ ${m.toStr} 회선별 5분 단위 트래픽 자료 송부
 
 ${m.c.name} 담당자님, 안녕하세요.
 요청하신 회선별 5분 단위 트래픽 자료를 보내드립니다.
 
 - 대상 회선: ${m.ids.join(", ") || "(선택 없음)"}
-${m.periods.map(q => `- 기간: ${pLabel(q)}`).join("\n") || "- 기간: (선택 없음)"}
-- 첨부: 기간별 폴더에 회선별 5분 단위 CSV, 요약 CSV(최대·최소·평균·95%값)
+- 기간: ${m.fromStr} ~ ${m.toStr}
+- 첨부: 회선별 5분 단위 CSV, 요약 CSV(최대·최소·평균·95%값)
 - 단위: Gbps (IN = 센터로 들어온 트래픽, OUT = 센터에서 나간 트래픽)
 
 추가로 필요한 자료가 있으면 말씀해 주세요.
@@ -344,30 +324,28 @@ ${m.periods.map(q => `- 기간: ${pLabel(q)}`).join("\n") || "- 기간: (선택 
 }
 (function initMonthly() {
   $("#mCust").innerHTML = CUSTOMERS.map(c => `<option>${c.name}</option>`).join("");
-  $("#mUnits").innerHTML = UNITS.map(u => `<label class="chk"><input type="checkbox" value="${u.key}" ${u.key === "month" ? "checked" : ""}> ${u.label} <span class="muted">${u.hint}</span></label>`).join("");
   $("#mMonth").min = MIN_PICK.slice(0, 7); $("#mMonth").max = MAX_DAY.slice(0, 7);
   ["mFrom", "mTo"].forEach(id => { const el = $("#" + id); el.min = MIN_PICK; el.max = MAX_DAY; });
   const syncDates = () => { const ms = monthStart($("#mMonth").value); $("#mFrom").value = ymd(ms); $("#mTo").value = ymd(Math.min(monthEnd(ms), DATA_END)); };
   { const d = new Date(DATA_END); $("#mMonth").value = ymd(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1)).slice(0, 7); }   // 기본: 지난달 (월초에 지난달 자료를 보낸다)
   syncDates();
-  $("#mMonth").onchange = () => { if ($("#mMonth").value) { syncDates(); renderMonthly(); } };
   const drawLinks = () => {
     const c = CUSTOMERS[$("#mCust").selectedIndex];
     $("#mLinks").innerHTML = c.links.map(id => `<label class="chk"><input type="checkbox" value="${id}" checked> ${id}</label>`).join("");
     renderMonthly();
   };
   $("#mCust").onchange = drawLinks;
+  $("#mMonth").onchange = () => { if ($("#mMonth").value) { syncDates(); renderMonthly(); } };
   $("#mFrom").onchange = $("#mTo").onchange = renderMonthly;
   $("#mLinks").addEventListener("change", renderMonthly);
-  $("#mUnits").addEventListener("change", renderMonthly);
   $("#mZip").onclick = () => {
-    const m = mState(); if (!m.ids.length || !m.periods.length) return;
+    const m = mState(); if (m.bad || !m.ids.length) return;
     const enc = new TextEncoder(), data = mCompute(m), files = [];
-    data.forEach(x => files.push({ name: `${x.q.u.dir}/${m.c.name}_${x.id}_5min_${ymd(x.q.from)}_${ymd(x.q.to)}.csv`, data: enc.encode("﻿" + seriesCsv(x.id, x.sr)) }));
-    files.push({ name: `${m.c.name}_요약.csv`, data: enc.encode("﻿" + summaryCsv(data)) });
-    download(`traffic_${m.c.key}_${m.units.map(u => u.key).join("-")}_${m.month}.zip`, makeZip(files));   // 받는 파일 이름은 영문 (한글이면 브라우저가 이름을 잃을 수 있음)
+    data.forEach(x => files.push({ name: `${m.c.name}_${x.id}_5min_${m.fromStr}_${m.toStr}.csv`, data: enc.encode("﻿" + seriesCsv(x.id, x.sr)) }));
+    files.push({ name: `${m.c.name}_요약_${m.fromStr}_${m.toStr}.csv`, data: enc.encode("﻿" + summaryCsv(data, m)) });
+    download(`traffic_${m.c.key}_${m.fromStr}_${m.toStr}.zip`, makeZip(files));   // 받는 파일 이름은 영문 (한글이면 브라우저가 이름을 잃을 수 있음)
   };
-  $("#mSumCsv").onclick = () => { const m = mState(); if (!m.ids.length || !m.periods.length) return; downloadCsv(`summary_${m.c.key}_${m.units.map(u => u.key).join("-")}_${m.month}.csv`, summaryCsv(mCompute(m))); };
+  $("#mSumCsv").onclick = () => { const m = mState(); if (m.bad || !m.ids.length) return; downloadCsv(`summary_${m.c.key}_${m.fromStr}_${m.toStr}.csv`, summaryCsv(mCompute(m), m)); };
   $("#mCopy").onclick = () => copyText($("#mMail").value, $("#mCopy"));
   $("#sendTbl").innerHTML = CUSTOMERS.map(c => `<tr><td>${c.name}</td><td class="muted">${c.links.join(", ")}</td><td><label class="chk"><input type="checkbox" data-sent="${c.name}" ${store.get("sent:" + c.name, false) ? "checked" : ""}> 발송 완료</label></td></tr>`).join("");
   $("#sendTbl").addEventListener("change", e => { if (e.target.dataset.sent) { store.set("sent:" + e.target.dataset.sent, e.target.checked); renderTasks(); } });
