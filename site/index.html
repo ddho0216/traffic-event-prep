@@ -8,7 +8,7 @@
 </head>
 <body>
 <header class="top">
-  <h1>백본 트래픽 관제 · 이벤트 대비</h1>
+  <h1><a href="#monitor" id="homeLink" title="관제(홈)로 가기">백본 트래픽 관제 · 이벤트 대비</a></h1>
   <span class="badge">가상 데이터 · 실제 센터·고객사·수치 아님</span>
   <nav class="tabs" id="tabs">
     <button data-tab="monitor" class="on">관제</button>
@@ -64,9 +64,10 @@
       <h3>1. 요청 조건</h3>
       <div class="form">
         <span>고객사</span><select id="mCust"></select>
+        <span>기준 월</span><span><input type="month" id="mMonth"> <span class="muted">기본은 지난달 1일부터 말일까지 한 달치</span></span>
         <span>기간 단위</span><div id="mUnits"></div>
-        <span>끝나는 날</span><span><input type="date" id="mTo"> <span class="muted">일주일·한 달·6개월은 이 날까지 거꾸로 계산</span></span>
         <span>시작일</span><span><input type="date" id="mFrom"> <span class="muted">"직접 선택"을 체크했을 때만 사용</span></span>
+        <span>끝나는 날</span><span><input type="date" id="mTo"></span>
         <span>회선</span><div id="mLinks"></div>
       </div>
       <p class="note" id="mNote" style="margin:8px 0 0"></p>

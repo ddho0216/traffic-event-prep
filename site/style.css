@@ -102,6 +102,10 @@ tr.sel td{background:#1d2a36}
 .srv[data-server]:hover,.srv[data-server]:focus-visible{border-color:var(--accent);outline:none}
 .cfggrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
 .cfggrid input[type=number]{width:80px}
+header.top h1 a{color:inherit;text-decoration:none}
+header.top h1 a:hover{color:var(--accent)}
+header.top h1 a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+body.popup #homeLink{pointer-events:none}
 body.popup nav.tabs{display:none}
 body.popup main{padding-top:10px}
 body.popup .term{height:calc(100vh - 215px)}

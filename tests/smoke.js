@@ -58,7 +58,13 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const zbuf = require('fs').readFileSync(await zip.path());
   check('월간 자료 zip 시그니처(PK)와 영문 파일 이름', zbuf[0] === 0x50 && zbuf[1] === 0x4b && /^traffic_gasang_.*\.zip$/.test(zip.suggestedFilename()), zip.suggestedFilename());
 
-  await page.uncheck('#mUnits input[value=week]');
+  check('월간 자료 기본값: 지난달 1일~말일 한 달치', (await page.locator('#mMonth').inputValue()) === '2026-10' && (await page.locator('#mFrom').inputValue()) === '2026-10-01' && (await page.locator('#mTo').inputValue()) === '2026-10-31' && await page.locator('#mUnits input[value=month]').isChecked());
+  check('시작일이 끝나는 날보다 위에 있음', await page.evaluate(() => !!(document.querySelector('#mFrom').compareDocumentPosition(document.querySelector('#mTo')) & Node.DOCUMENT_POSITION_FOLLOWING)));
+  check('한 달 요약 기간이 10/01~10/31', (await page.locator('#mSum').innerText()).includes('2026-10-01 ~ 2026-10-31'));
+  await page.fill('#mMonth', '2026-11'); await page.press('#mMonth', 'Tab');
+  check('기준 월을 바꾸면 시작일·끝나는 날이 따라 바뀜(데이터가 있는 날까지)', (await page.locator('#mFrom').inputValue()) === '2026-11-01' && (await page.locator('#mTo').inputValue()) === '2026-11-01');
+  await page.fill('#mMonth', '2026-10'); await page.press('#mMonth', 'Tab');
+  await page.uncheck('#mUnits input[value=month]');
   await page.check('#mUnits input[value=half]');
   const [z6] = await Promise.all([page.waitForEvent('download'), page.click('#mZip')]);
   const z6buf = require('fs').readFileSync(await z6.path());
@@ -69,7 +75,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   });
   check('10/19 이전 가상 구간이 이후 실제 구간과 비슷한 크기(±10%)', Math.abs(ratio - 1) < 0.10, ratio.toFixed(3));
   await page.uncheck('#mUnits input[value=half]');
-  await page.check('#mUnits input[value=week]');
+  await page.check('#mUnits input[value=month]');
 
   await page.click('[data-tab=room]');
   await page.click('[data-sr="2026-10-26T16:15"]');
@@ -100,6 +106,10 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await pop.press('#termIn', 'Enter');
   check('연결된 포트 명령 출력(빛 없음)', (await pop.locator('#termOut').innerText()).includes('-40.00 dBm'));
   await pop.close();
+
+  await page.click('[data-tab=room]');
+  await page.click('#homeLink');
+  check('제목을 누르면 관제(홈)로 이동', await page.locator('#tab-monitor').isVisible());
 
   await page.click('[data-tab=visit]');
   await page.click('#vParse');

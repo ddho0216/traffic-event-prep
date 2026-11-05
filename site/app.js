@@ -238,6 +238,7 @@ $("#taskTbl").addEventListener("click", e => { const b = e.target.closest("[data
 
 /* ---------- 2. 월간 자료 ---------- */
 const MIN_DAY = ymd(T0), MAX_DAY = ymd(msOf(N - 1));
+const REF = {};   // refPeak 계산 결과 보관 (월간 자료가 시작할 때 쓰므로 앞쪽에 선언)
 const DAY = 86400000, HIST_DAYS = 190;       // 10/19 이전은 이 일수까지 즉석에서 만들어 준다 (가상)
 const MIN_PICK = ymd(T0 - HIST_DAYS * DAY);
 function p95(a) { const b = Float64Array.from(a).sort(); return b[Math.floor(0.95 * (b.length - 1))]; }
@@ -273,24 +274,30 @@ function statsArr(a, from) {
 }
 
 const UNITS = [
-  { key: "week", label: "일주일", dir: "1week" },
-  { key: "month", label: "한 달", dir: "1month" },
-  { key: "half", label: "6개월", dir: "6months" },
-  { key: "custom", label: "직접 선택", dir: "custom" }
+  { key: "month", label: "한 달", hint: "(1일~말일)", dir: "1month" },
+  { key: "week", label: "일주일", hint: "(그 달 마지막 7일)", dir: "1week" },
+  { key: "half", label: "6개월", hint: "(6개월치, 그 달 말일까지)", dir: "6months" },
+  { key: "custom", label: "직접 선택", hint: "(시작일~끝나는 날)", dir: "custom" }
 ];
 function addMonths(ms, n) { const d = new Date(ms), m = d.getUTCMonth() + n, last = new Date(Date.UTC(d.getUTCFullYear(), m + 1, 0)).getUTCDate(); return Date.UTC(d.getUTCFullYear(), m, Math.min(d.getUTCDate(), last)); }
-function periodFor(u, endDay, fromDay) {
-  const to = endDay + DAY - STEP;
-  const from = u.key === "week" ? endDay - 6 * DAY : u.key === "month" ? addMonths(endDay, -1) + DAY : u.key === "half" ? addMonths(endDay, -6) + DAY : fromDay;
-  return { u, from: Math.min(from, endDay), to };
+const DATA_END = msOf(N - 1);   // 마지막 데이터 시각
+const monthStart = ym => { const [y, m] = ym.split("-").map(Number); return Date.UTC(y, m - 1, 1); };
+const monthEnd = ms => { const d = new Date(ms); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1) - STEP; };   // 그 달 말일 23:55
+// 기준 월(ym) 기준으로 기간을 만든다. 한 달 = 1일 ~ 말일. 데이터가 없는 날은 마지막 데이터까지만.
+function periodFor(u, ym, fromDay, toDay) {
+  const mStart = monthStart(ym), mEnd = Math.min(monthEnd(mStart), DATA_END), endDay = Math.floor(mEnd / DAY) * DAY;
+  if (u.key === "custom") return { u, from: Math.min(fromDay, toDay), to: Math.min(toDay + DAY - STEP, DATA_END) };
+  if (u.key === "week") return { u, from: endDay - 6 * DAY, to: mEnd };
+  if (u.key === "half") return { u, from: addMonths(mStart, -5), to: mEnd };
+  return { u, from: mStart, to: mEnd };
 }
 const pLabel = q => `${q.u.label} ${ymd(q.from)} ~ ${ymd(q.to)}`;
 function mState() {
   const c = CUSTOMERS[$("#mCust").selectedIndex];
   const ids = $$("#mLinks input:checked").map(i => i.value);
-  const endDay = parseT($("#mTo").value + "T00:00"), fromDay = parseT($("#mFrom").value + "T00:00");
+  const ym = $("#mMonth").value, fromDay = parseT($("#mFrom").value + "T00:00"), toDay = parseT($("#mTo").value + "T00:00");
   const units = $$("#mUnits input:checked").map(i => UNITS.find(u => u.key === i.value));
-  return { c, ids, units, to: $("#mTo").value, periods: units.map(u => periodFor(u, endDay, fromDay)) };
+  return { c, ids, units, month: ym, periods: units.map(u => periodFor(u, ym, fromDay, toDay)) };
 }
 function mCompute(m) {
   const res = [];
@@ -316,7 +323,9 @@ function renderMonthly() {
   $("#mSum").innerHTML = `<tr><th>기간</th><th>회선</th><th>방향</th><th class="n">최대</th><th>최대 시각</th><th class="n">최소</th><th class="n">평균</th><th class="n">95%값</th></tr>` +
     (empty ? `<tr><td colspan="8" class="muted">${empty}</td></tr>` : data.map(x => ["out", "in"].map(d => { const t = x.st[d]; return `<tr><td>${esc(pLabel(x.q))}</td><td>${x.id}</td><td>${d.toUpperCase()}</td><td class="n">${t.max.toFixed(2)}</td><td>${md(t.at)}</td><td class="n">${t.min.toFixed(2)}</td><td class="n">${t.avg.toFixed(2)}</td><td class="n">${t.p95.toFixed(2)}</td></tr>`; }).join("")).join(""));
   const hist = m.periods.some(q => q.from < T0);
-  $("#mNote").textContent = hist ? `※ ${MIN_DAY} 이전 구간은 생성해 둔 데이터가 없어서, 같은 규칙(평소 하루 모양)으로 즉석에서 만든 가상 값입니다. 경기·사고는 없는 평소 기록입니다.` : "";
+  const clamped = monthEnd(monthStart(m.month)) > DATA_END;
+  $("#mNote").textContent = [hist ? `※ ${MIN_DAY} 이전 구간은 생성해 둔 데이터가 없어서, 같은 규칙(평소 하루 모양)으로 즉석에서 만든 가상 값입니다. 경기·사고는 없는 평소 기록입니다.` : "",
+    clamped ? `※ ${m.month}은 ${MAX_DAY}까지만 데이터가 있어서 거기까지 보냅니다.` : ""].filter(Boolean).join(" ");
   const big = m.periods.some(q => q.u.key === "half" || (q.to - q.from) > 60 * DAY);
   $("#mNote2").textContent = big ? "6개월 자료는 파일이 큽니다 (회선당 약 3MB, 압축하지 않고 묶습니다)." : "";
   $("#mMail").value =
@@ -335,9 +344,13 @@ ${m.periods.map(q => `- 기간: ${pLabel(q)}`).join("\n") || "- 기간: (선택 
 }
 (function initMonthly() {
   $("#mCust").innerHTML = CUSTOMERS.map(c => `<option>${c.name}</option>`).join("");
-  $("#mUnits").innerHTML = UNITS.map(u => `<label class="chk"><input type="checkbox" value="${u.key}" ${u.key === "week" ? "checked" : ""}> ${u.label}</label>`).join("");
+  $("#mUnits").innerHTML = UNITS.map(u => `<label class="chk"><input type="checkbox" value="${u.key}" ${u.key === "month" ? "checked" : ""}> ${u.label} <span class="muted">${u.hint}</span></label>`).join("");
+  $("#mMonth").min = MIN_PICK.slice(0, 7); $("#mMonth").max = MAX_DAY.slice(0, 7);
   ["mFrom", "mTo"].forEach(id => { const el = $("#" + id); el.min = MIN_PICK; el.max = MAX_DAY; });
-  $("#mFrom").value = MIN_DAY; $("#mTo").value = MAX_DAY;
+  const syncDates = () => { const ms = monthStart($("#mMonth").value); $("#mFrom").value = ymd(ms); $("#mTo").value = ymd(Math.min(monthEnd(ms), DATA_END)); };
+  { const d = new Date(DATA_END); $("#mMonth").value = ymd(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1)).slice(0, 7); }   // 기본: 지난달 (월초에 지난달 자료를 보낸다)
+  syncDates();
+  $("#mMonth").onchange = () => { if ($("#mMonth").value) { syncDates(); renderMonthly(); } };
   const drawLinks = () => {
     const c = CUSTOMERS[$("#mCust").selectedIndex];
     $("#mLinks").innerHTML = c.links.map(id => `<label class="chk"><input type="checkbox" value="${id}" checked> ${id}</label>`).join("");
@@ -352,9 +365,9 @@ ${m.periods.map(q => `- 기간: ${pLabel(q)}`).join("\n") || "- 기간: (선택 
     const enc = new TextEncoder(), data = mCompute(m), files = [];
     data.forEach(x => files.push({ name: `${x.q.u.dir}/${m.c.name}_${x.id}_5min_${ymd(x.q.from)}_${ymd(x.q.to)}.csv`, data: enc.encode("﻿" + seriesCsv(x.id, x.sr)) }));
     files.push({ name: `${m.c.name}_요약.csv`, data: enc.encode("﻿" + summaryCsv(data)) });
-    download(`traffic_${m.c.key}_${m.units.map(u => u.key).join("-")}_${m.to}.zip`, makeZip(files));   // 받는 파일 이름은 영문 (한글이면 브라우저가 이름을 잃을 수 있음)
+    download(`traffic_${m.c.key}_${m.units.map(u => u.key).join("-")}_${m.month}.zip`, makeZip(files));   // 받는 파일 이름은 영문 (한글이면 브라우저가 이름을 잃을 수 있음)
   };
-  $("#mSumCsv").onclick = () => { const m = mState(); if (!m.ids.length || !m.periods.length) return; downloadCsv(`summary_${m.c.key}_${m.units.map(u => u.key).join("-")}_${m.to}.csv`, summaryCsv(mCompute(m))); };
+  $("#mSumCsv").onclick = () => { const m = mState(); if (!m.ids.length || !m.periods.length) return; downloadCsv(`summary_${m.c.key}_${m.units.map(u => u.key).join("-")}_${m.month}.csv`, summaryCsv(mCompute(m))); };
   $("#mCopy").onclick = () => copyText($("#mMail").value, $("#mCopy"));
   $("#sendTbl").innerHTML = CUSTOMERS.map(c => `<tr><td>${c.name}</td><td class="muted">${c.links.join(", ")}</td><td><label class="chk"><input type="checkbox" data-sent="${c.name}" ${store.get("sent:" + c.name, false) ? "checked" : ""}> 발송 완료</label></td></tr>`).join("");
   $("#sendTbl").addEventListener("change", e => { if (e.target.dataset.sent) { store.set("sent:" + e.target.dataset.sent, e.target.checked); renderTasks(); } });
@@ -379,7 +392,6 @@ function evBaseline(l, ev) {
   }
   return median(vals);
 }
-const REF = {};
 function refPeak(l) {   // 평소 하루 최대 out의 중앙값 (경기 있는 날 제외)
   if (!REF[l.id]) {
     const evDays = new Set(DATA.events.flatMap(x => [Math.floor(idxOf(parseT(x.start)) / PER_DAY), Math.floor(idxOf(parseT(x.end)) / PER_DAY)]));
@@ -772,6 +784,10 @@ function applyRoomCfg(save) {
 })();
 
 /* ---------- 시작 ---------- */
+$("#homeLink").addEventListener("click", e => {   // 제목을 누르면 관제(홈)로
+  if (document.body.classList.contains("popup")) return;
+  e.preventDefault(); showTab("monitor"); window.scrollTo({ top: 0, behavior: "smooth" });
+});
 const qs = new URLSearchParams(location.search), h0 = location.hash.slice(1);
 if (qs.get("popup") === "term") {
   document.body.classList.add("popup");
