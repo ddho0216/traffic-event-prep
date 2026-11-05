@@ -34,6 +34,8 @@
     <span class="muted">빠른 이동</span>
     <button class="btn" data-jump="2026-10-22T21:00">평소 저녁</button>
     <button class="btn" data-jump="2026-10-29T03:20">새벽 급증</button>
+    <button class="btn" data-jump="2026-10-23T20:35">급감 (IX-1)</button>
+    <button class="btn" data-jump="2026-10-21T14:35">회선 다운 (B1)</button>
     <select id="jumpEv"></select>
     <button class="btn primary" id="csvAll">전체 CSV 내려받기</button>
   </div>
@@ -42,7 +44,7 @@
 
   <div class="cols">
     <div>
-      <h2>경고 이력 <small>out 사용률 80% 이상, in이 같은 시간대 평소의 3배 이상 (행을 누르면 해당 시각으로 이동)</small></h2>
+      <h2>경고 이력 <small>사용률 80% 이상 · 같은 시간대 평소의 3배 이상(급증) · 40% 미만(급감) (행을 누르면 해당 시각으로 이동)</small></h2>
       <div class="card" style="padding:0"><table id="alertTbl"></table></div>
     </div>
     <div>
@@ -62,9 +64,12 @@
       <h3>1. 요청 조건</h3>
       <div class="form">
         <span>고객사</span><select id="mCust"></select>
-        <span>기간</span><span><input type="date" id="mFrom"> ~ <input type="date" id="mTo"></span>
+        <span>기간 단위</span><div id="mUnits"></div>
+        <span>끝나는 날</span><span><input type="date" id="mTo"> <span class="muted">일주일·한 달·6개월은 이 날까지 거꾸로 계산</span></span>
+        <span>시작일</span><span><input type="date" id="mFrom"> <span class="muted">"직접 선택"을 체크했을 때만 사용</span></span>
         <span>회선</span><div id="mLinks"></div>
       </div>
+      <p class="note" id="mNote" style="margin:8px 0 0"></p>
     </div>
     <div class="card">
       <h3>이번 달 발송 현황</h3>
@@ -76,6 +81,7 @@
   <div class="toolbar" style="margin-top:12px">
     <button class="btn primary" id="mZip">회선별 5분 CSV + 요약을 zip으로 받기</button>
     <button class="btn" id="mSumCsv">요약만 CSV로</button>
+    <span class="muted" id="mNote2"></span>
   </div>
   <h2>3. 메일 본문 초안</h2>
   <textarea id="mMail" rows="9"></textarea>

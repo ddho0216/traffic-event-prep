@@ -35,6 +35,11 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.selectOption('#cust', '샘플게임즈');
   check('고객사 선택 시 해당 그래프만 보임', (await page.locator('.panel:visible').count()) === 2);
   await page.selectOption('#cust', 'all');
+  check('경고 이력에 급감이 잡힘', (await page.locator('#alertTbl').innerText()).includes('급감'));
+  await page.click('[data-jump="2026-10-23T20:35"]');
+  check('급감 구간에서 IX-1 패널에 급감 표시', (await page.locator('#p-IX-1 .chip').innerText()) === '급감');
+  await page.click('[data-jump="2026-10-21T14:35"]');
+  check('회선 다운 구간에서 CTR-B1 패널에 급감 표시', (await page.locator('#p-CTR-B1 .chip').innerText()) === '급감');
 
   await page.selectOption('#jumpEv', '4');
   await page.waitForTimeout(200);
@@ -52,6 +57,19 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const [zip] = await Promise.all([page.waitForEvent('download'), page.click('#mZip')]);
   const zbuf = require('fs').readFileSync(await zip.path());
   check('월간 자료 zip 시그니처(PK)와 영문 파일 이름', zbuf[0] === 0x50 && zbuf[1] === 0x4b && /^traffic_gasang_.*\.zip$/.test(zip.suggestedFilename()), zip.suggestedFilename());
+
+  await page.uncheck('#mUnits input[value=week]');
+  await page.check('#mUnits input[value=half]');
+  const [z6] = await Promise.all([page.waitForEvent('download'), page.click('#mZip')]);
+  const z6buf = require('fs').readFileSync(await z6.path());
+  check('6개월 zip: 크기가 크고(>3MB) 6months 폴더가 들어 있음', z6buf.length > 3e6 && z6buf.toString('utf8', 0, 300).includes('6months/'), (z6buf.length / 1e6).toFixed(1) + 'MB ' + z6.suggestedFilename());
+  const ratio = await page.evaluate(() => {
+    const l = LINK['OUR-A'], f = d => Math.max(...seriesFor(l, parseT(d + 'T00:00'), parseT(d + 'T23:55')).out);
+    return f('2026-10-12') / f('2026-10-19');
+  });
+  check('10/19 이전 가상 구간이 이후 실제 구간과 비슷한 크기(±10%)', Math.abs(ratio - 1) < 0.10, ratio.toFixed(3));
+  await page.uncheck('#mUnits input[value=half]');
+  await page.check('#mUnits input[value=week]');
 
   await page.click('[data-tab=room]');
   await page.click('[data-sr="2026-10-26T16:15"]');

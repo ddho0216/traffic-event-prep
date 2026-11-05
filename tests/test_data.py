@@ -75,6 +75,19 @@ class TrafficData(unittest.TestCase):
         normal = b[pd.Timestamp("2026-10-29 03:20") - pd.Timedelta(days=1)]
         self.assertGreater(b[pd.Timestamp("2026-10-29 03:20")], 3 * normal)
 
+    def test_sudden_drop_scenarios(self):
+        idx = self.t.set_index(["link", "time"])
+        out, inn = idx.out_gbps, idx.in_gbps
+        ts = pd.Timestamp
+        # IX-1: 저녁 피크 중에 전날 같은 시각의 30%보다 낮다
+        self.assertLess(out[("IX-1", ts("2026-10-23 20:30"))], 0.3 * out[("IX-1", ts("2026-10-22 20:30"))])
+        # 빠진 트래픽의 일부를 INTL-1이 더 받는다
+        self.assertGreater(out[("INTL-1", ts("2026-10-23 20:30"))], 1.15 * out[("INTL-1", ts("2026-10-22 20:30"))])
+        # CTR-B1: in·out이 모두 거의 0 (회선 다운), 끝나면 돌아온다
+        self.assertLess(out[("CTR-B1", ts("2026-10-21 14:30"))], 1.0)
+        self.assertLess(inn[("CTR-B1", ts("2026-10-21 14:30"))], 1.0)
+        self.assertGreater(out[("CTR-B1", ts("2026-10-21 15:00"))], 5)
+
     def test_same_seed_gives_same_data(self):
         def digest():
             return hashlib.sha256((DATA / "traffic.csv").read_bytes()).hexdigest()

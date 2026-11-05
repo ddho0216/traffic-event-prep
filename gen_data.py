@@ -53,6 +53,15 @@ MATCHES = [
 # 예고 없던 일: 새벽 in 트래픽 급증(DDoS 의심). 경기 없는 날 새벽.
 UNPLANNED = ("2026-10-29 03:10", "2026-10-29 03:35", "OUR-B", 6.0)
 
+# 갑자기 빠지는 일(급감): 정상 운영 중 트래픽이 평소보다 크게 줄어든다.
+# 시작, 끝, 링크, 남는 비율(out), 남는 비율(in), 설명
+DROPS = [
+    ("2026-10-23 20:10", "2026-10-23 20:55", "IX-1", 0.15, 0.15, "연동 회선 장애로 우회 (저녁 피크 중)"),
+    ("2026-10-21 14:20", "2026-10-21 14:45", "CTR-B1", 0.02, 0.02, "회선 다운 (in·out 모두 거의 0)"),
+]
+# IX-1에서 빠진 트래픽의 60%가 INTL-1로 돌아간다 (한쪽이 빠지면 다른 쪽이 튄다)
+SHIFT = ("IX-1", "INTL-1", 0.6)
+
 # 서버실: 랙 6개 x 서버 4대. 랙 입구 온도(inlet)를 5분 간격으로 만든다. 전부 가상.
 RACKS = ["A-01", "A-02", "A-03", "B-01", "B-02", "B-03"]
 ROLES = ["웹", "DB", "캐시", "스토리지"]
@@ -154,6 +163,7 @@ def main() -> None:
         minute[idx[ok]] = p[ok]
         prof5[eid] = minute.reshape(-1, 5).mean(axis=1)
 
+    lost = np.zeros(len(times))   # IX-1에서 빠진 양 (INTL-1이 이어서 받는다)
     rows = []
     for name, _desc, cap, peak in LINKS:
         shape = np.where(weekend, daily_shape(hours, True), daily_shape(hours, False))
@@ -170,6 +180,17 @@ def main() -> None:
         if name == u_link:
             mask = (times >= pd.Timestamp(u_start)) & (times <= pd.Timestamp(u_end))
             inn = np.where(mask, inn * mult * rng.normal(1.0, 0.08, len(times)), inn)
+
+        for d_start, d_end, d_link, d_out, d_in, _why in DROPS:
+            if name == d_link:
+                mask = (times >= pd.Timestamp(d_start)) & (times <= pd.Timestamp(d_end))
+                before = out.copy()
+                out = np.where(mask, out * d_out, out)
+                inn = np.where(mask, inn * d_in, inn)
+                if name == SHIFT[0]:
+                    lost = np.where(mask, before - out, 0.0)
+        if name == SHIFT[1]:
+            out = out + SHIFT[2] * lost
 
         out = np.clip(out, 0.1, cap)   # 회선 용량을 넘을 수는 없다
         inn = np.clip(inn, 0.05, cap)

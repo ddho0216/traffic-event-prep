@@ -78,6 +78,7 @@ function runs(flags) {
   return out;
 }
 function median(a) { const b = [...a].sort((x, y) => x - y); return b[Math.floor(b.length / 2)]; }
+const DROP = {};   // 링크별 급감 여부 (그래프 패널 표시용)
 const ALERTS = (() => {
   const res = [];
   for (const l of LINKS) {
@@ -92,6 +93,16 @@ const ALERTS = (() => {
       let p = s; for (let i = s; i <= e; i++) if (l.in[i] / slotMed[i % PER_DAY] > l.in[p] / slotMed[p % PER_DAY]) p = i;
       res.push({ link: l.id, kind: "in 급증 의심", s, e, peak: p, val: `평소의 ${(l.in[p] / slotMed[p % PER_DAY]).toFixed(1)}배 (${l.in[p].toFixed(1)}G)`, sev: "warn" });
     });
+    // 3) out 또는 in이 같은 시간대 평소의 40% 미만으로 15분(3점) 이상 = 급감 의심
+    const medOf = arr => Array.from({ length: PER_DAY }, (_, k) => { const v = []; for (let i = k; i < N; i += PER_DAY) v.push(arr[i]); return median(v); });
+    const mo = medOf(l.out), mi = medOf(l.in);
+    const dOut = l.out.map((v, i) => v < 0.4 * mo[i % PER_DAY]), dIn = l.in.map((v, i) => v < 0.4 * mi[i % PER_DAY]);
+    DROP[l.id] = dOut.map((f, i) => f || dIn[i]);
+    const longRuns = flags => runs(flags).filter(([a, b]) => b - a >= 2);
+    const lowest = (a, b, arr, med) => { let p = a; for (let i = a; i <= b; i++) if (arr[i] / med[i % PER_DAY] < arr[p] / med[p % PER_DAY]) p = i; return p; };
+    longRuns(dOut.map((f, i) => f && dIn[i])).forEach(([a, b]) => { const p = lowest(a, b, l.out, mo); res.push({ link: l.id, kind: "in·out 동시 급감", s: a, e: b, peak: p, val: `평소의 ${(l.out[p] / mo[p % PER_DAY] * 100).toFixed(0)}% (out ${l.out[p].toFixed(1)}G)`, sev: "crit" }); });
+    longRuns(dOut.map((f, i) => f && !dIn[i])).forEach(([a, b]) => { const p = lowest(a, b, l.out, mo); res.push({ link: l.id, kind: "out 급감", s: a, e: b, peak: p, val: `평소의 ${(l.out[p] / mo[p % PER_DAY] * 100).toFixed(0)}% (out ${l.out[p].toFixed(1)}G)`, sev: "warn" }); });
+    longRuns(dIn.map((f, i) => f && !dOut[i])).forEach(([a, b]) => { const p = lowest(a, b, l.in, mi); res.push({ link: l.id, kind: "in 급감", s: a, e: b, peak: p, val: `평소의 ${(l.in[p] / mi[p % PER_DAY] * 100).toFixed(0)}% (in ${l.in[p].toFixed(1)}G)`, sev: "warn" }); });
   }
   const evWin = DATA.events.map(ev => ({ ev, a: idxOf(parseT(ev.start)) - 6, b: idxOf(parseT(ev.end)) + 4 }));
   res.forEach(a => { const hit = evWin.find(w => a.peak >= w.a && a.peak <= w.b); a.evName = hit ? hit.ev.name : ""; });
@@ -185,9 +196,10 @@ function renderPanel(l) {
   ov.addEventListener("pointerleave", () => { xh.style.display = co.style.display = ci.style.display = tip.style.display = "none"; });
 
   let wmax = 0; for (let i = s; i <= e; i++) wmax = Math.max(wmax, l.out[i]);
-  const util = l.out[e] / l.cap, wutil = wmax / l.cap, cls = wutil >= 0.8 ? "crit" : wutil >= 0.7 ? "warn" : "";
+  let dropped = false; for (let i = s; i <= e; i++) if (DROP[l.id][i]) { dropped = true; break; }
+  const util = l.out[e] / l.cap, wutil = wmax / l.cap, cls = wutil >= 0.8 || dropped ? "crit" : wutil >= 0.7 ? "warn" : "";
   root.className = "panel " + cls;
-  $(".chip", root).textContent = wutil >= 0.8 ? "경고" : wutil >= 0.7 ? "주의" : "정상";
+  $(".chip", root).textContent = wutil >= 0.8 ? "경고" : dropped ? "급감" : wutil >= 0.7 ? "주의" : "정상";
   $(".now", root).innerHTML = `<span class="o">OUT ${l.out[e].toFixed(1)}G</span><span class="i">IN ${l.in[e].toFixed(1)}G</span><span class="muted">${(util * 100).toFixed(0)}% · 창 최대 out ${wmax.toFixed(1)}G</span>`;
 }
 function renderAll() {
@@ -244,11 +256,12 @@ function renderTasks() {
   const checks = DATA.events.map(ev => (store.get("chk:" + ev.id, []) || []).length);
   const visits = store.get("visits", []).length;
   const spikes = ALERTS.filter(a => a.kind === "in 급증 의심" && !a.evName).length;
+  const drops = ALERTS.filter(a => a.kind.includes("급감") && !a.evName).length;
   const rows = [
     ["월말 자료 발송", `${sent}/${CUSTOMERS.length} 고객사 완료`, sent === CUSTOMERS.length ? "ok" : "warn", "monthly"],
     ["이벤트 대비", `월드컵 ${checks.filter(c => c === CHECK_ITEMS.length).length}/${DATA.events.length}경기 체크 완료`, "warn", "event"],
     ["방문 신청 등록", `등록 ${visits}건`, "ok", "visit"],
-    ["새벽 급증 확인", `경기와 겹치지 않는 in 급증 ${spikes}건 (경고 이력 참고)`, spikes ? "warn" : "ok", "monitor"],
+    ["트래픽 급증·급감 확인", `경기와 겹치지 않는 급증 ${spikes}건 · 급감 ${drops}건 (경고 이력 참고)`, spikes + drops ? "warn" : "ok", "monitor"],
     ["서버실 온도·육안점검", `온도 경고 ${ROOM_ALERTS.length}건 · 점검 기록 ${store.get("inspections", []).length}건`, ROOM_ALERTS.length ? "warn" : "ok", "room"],
     ["장비 점검 (광값·CRC)", "CRC·광 수신값 이상 회선 있음", "crit", "term"]
   ];
@@ -258,53 +271,105 @@ $("#taskTbl").addEventListener("click", e => { const b = e.target.closest("[data
 
 /* ---------- 2. 월간 자료 ---------- */
 const MIN_DAY = ymd(T0), MAX_DAY = ymd(msOf(N - 1));
-function p95(a) { const b = [...a].sort((x, y) => x - y); return b[Math.floor(0.95 * (b.length - 1))]; }
-function statsOf(l, s, e) {
-  const r = {};
-  for (const dir of ["out", "in"]) {
-    const a = l[dir].slice(s, e + 1); let mxi = 0;
-    a.forEach((v, i) => { if (v > a[mxi]) mxi = i; });
-    r[dir] = { max: a[mxi], at: msOf(s + mxi), min: Math.min(...a), avg: a.reduce((x, y) => x + y, 0) / a.length, p95: p95(a) };
-  }
-  return r;
+const DAY = 86400000, HIST_DAYS = 190;       // 10/19 이전은 이 일수까지 즉석에서 만들어 준다 (가상)
+const MIN_PICK = ymd(T0 - HIST_DAYS * DAY);
+function p95(a) { const b = Float64Array.from(a).sort(); return b[Math.floor(0.95 * (b.length - 1))]; }
+
+/* 10/19 이전: 생성해 둔 데이터가 없으므로 같은 규칙(평소 하루 모양 + 작은 잡음)으로 그때그때 만든다.
+   같은 시각이면 항상 같은 값이 나온다. 경기·사고는 없는 "평소" 기록이다. */
+const SHAPE = (() => {
+  const f = (x, we) => { let v = 0.25 + 0.15 * Math.sin((x - 9) / 24 * 2 * Math.PI) + 0.65 * Math.exp(-((x - 21) ** 2) / (2 * 2.2 ** 2)); if (we) v += 0.10 * Math.exp(-((x - 14) ** 2) / (2 * 3.0 ** 2)); return v; };
+  let mw = 0, me = 0; for (let k = 0; k < 288; k++) { mw = Math.max(mw, f(k / 12, false)); me = Math.max(me, f(k / 12, true)); }
+  return { f, mw, me };
+})();
+function hn(seed) { let t = (seed + 0x6D2B79F5) | 0; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }
+function gauss(seed) { return (hn(seed) + hn(seed + 1) + hn(seed + 2) + hn(seed + 3) - 2) * 1.7; }
+function synthPoint(l, ms) {
+  const d = new Date(ms), x = d.getUTCHours() + d.getUTCMinutes() / 60, we = d.getUTCDay() === 0 || d.getUTCDay() === 6;
+  const sh = SHAPE.f(x, we) / (we ? SHAPE.me : SHAPE.mw), k = Math.round((ms - T0) / STEP), li = LINKS.indexOf(l), ref = refPeak(l);
+  const out = clamp(ref * sh * (1 + 0.02 * gauss(k * 8 + li * 100003)), 0.1, l.cap);
+  const inn = clamp(ref * 0.35 * sh * (1 + 0.025 * gauss(k * 8 + li * 100003 + 4)), 0.05, l.cap);
+  return [+out.toFixed(2), +inn.toFixed(2)];
 }
+function seriesFor(l, fromMs, toMs) {
+  const n = Math.round((toMs - fromMs) / STEP) + 1, out = new Array(n), inn = new Array(n);
+  for (let k = 0; k < n; k++) {
+    const ms = fromMs + k * STEP, i = idxOf(ms);
+    if (i >= 0 && i < N) { out[k] = l.out[i]; inn[k] = l.in[i]; } else { const v = synthPoint(l, ms); out[k] = v[0]; inn[k] = v[1]; }
+  }
+  return { out, inn, from: fromMs };
+}
+function statsArr(a, from) {
+  let mxi = 0, mn = a[0], sum = 0;
+  for (let i = 0; i < a.length; i++) { if (a[i] > a[mxi]) mxi = i; if (a[i] < mn) mn = a[i]; sum += a[i]; }
+  return { max: a[mxi], at: from + mxi * STEP, min: mn, avg: sum / a.length, p95: p95(a) };
+}
+
+const UNITS = [
+  { key: "week", label: "일주일", dir: "1week" },
+  { key: "month", label: "한 달", dir: "1month" },
+  { key: "half", label: "6개월", dir: "6months" },
+  { key: "custom", label: "직접 선택", dir: "custom" }
+];
+function addMonths(ms, n) { const d = new Date(ms), m = d.getUTCMonth() + n, last = new Date(Date.UTC(d.getUTCFullYear(), m + 1, 0)).getUTCDate(); return Date.UTC(d.getUTCFullYear(), m, Math.min(d.getUTCDate(), last)); }
+function periodFor(u, endDay, fromDay) {
+  const to = endDay + DAY - STEP;
+  const from = u.key === "week" ? endDay - 6 * DAY : u.key === "month" ? addMonths(endDay, -1) + DAY : u.key === "half" ? addMonths(endDay, -6) + DAY : fromDay;
+  return { u, from: Math.min(from, endDay), to };
+}
+const pLabel = q => `${q.u.label} ${ymd(q.from)} ~ ${ymd(q.to)}`;
 function mState() {
   const c = CUSTOMERS[$("#mCust").selectedIndex];
   const ids = $$("#mLinks input:checked").map(i => i.value);
-  let s = idxOf(parseT($("#mFrom").value + "T00:00")), e = idxOf(parseT($("#mTo").value + "T23:55"));
-  s = clamp(s, 0, N - 1); e = clamp(e, s, N - 1);
-  return { c, ids, s, e, from: $("#mFrom").value, to: $("#mTo").value };
+  const endDay = parseT($("#mTo").value + "T00:00"), fromDay = parseT($("#mFrom").value + "T00:00");
+  const units = $$("#mUnits input:checked").map(i => UNITS.find(u => u.key === i.value));
+  return { c, ids, units, to: $("#mTo").value, periods: units.map(u => periodFor(u, endDay, fromDay)) };
 }
-function mSummaryRows(m) {
-  const rows = [];
-  m.ids.forEach(id => { const st = statsOf(LINK[id], m.s, m.e); ["out", "in"].forEach(d => rows.push({ id, d, ...st[d] })); });
-  return rows;
+function mCompute(m) {
+  const res = [];
+  m.periods.forEach(q => m.ids.forEach(id => {
+    const sr = seriesFor(LINK[id], q.from, q.to);
+    res.push({ q, id, sr, st: { out: statsArr(sr.out, q.from), in: statsArr(sr.inn, q.from) } });
+  }));
+  return res;
+}
+function seriesCsv(id, sr) {
+  const l = LINK[id], rows = ["time,link,in_gbps,out_gbps,out_util_pct"];
+  for (let k = 0; k < sr.out.length; k++) rows.push(`${ymdhm(sr.from + k * STEP)},${id},${sr.inn[k]},${sr.out[k]},${(sr.out[k] / l.cap * 100).toFixed(1)}`);
+  return rows.join("\n");
+}
+function summaryCsv(data) {
+  const rows = ["period,from,to,link,direction,max_gbps,max_time,min_gbps,avg_gbps,p95_gbps"];
+  data.forEach(x => ["out", "in"].forEach(d => { const t = x.st[d]; rows.push(`${x.q.u.dir},${ymd(x.q.from)},${ymd(x.q.to)},${x.id},${d},${t.max.toFixed(2)},${ymdhm(t.at)},${t.min.toFixed(2)},${t.avg.toFixed(2)},${t.p95.toFixed(2)}`); }));
+  return rows.join("\n");
 }
 function renderMonthly() {
-  const m = mState();
-  const rows = mSummaryRows(m);
-  $("#mSum").innerHTML = `<tr><th>회선</th><th>방향</th><th class="n">최대</th><th>최대 시각</th><th class="n">최소</th><th class="n">평균</th><th class="n">95%값</th></tr>` +
-    (rows.length ? rows.map(r => `<tr><td>${r.id}</td><td>${r.d.toUpperCase()}</td><td class="n">${r.max.toFixed(2)}</td><td>${md(r.at)}</td><td class="n">${r.min.toFixed(2)}</td><td class="n">${r.avg.toFixed(2)}</td><td class="n">${r.p95.toFixed(2)}</td></tr>`).join("") : `<tr><td colspan="7" class="muted">회선을 선택하세요.</td></tr>`);
+  const m = mState(), data = mCompute(m);
+  const empty = !m.periods.length ? "기간 단위를 하나 이상 고르세요." : !m.ids.length ? "회선을 선택하세요." : "";
+  $("#mSum").innerHTML = `<tr><th>기간</th><th>회선</th><th>방향</th><th class="n">최대</th><th>최대 시각</th><th class="n">최소</th><th class="n">평균</th><th class="n">95%값</th></tr>` +
+    (empty ? `<tr><td colspan="8" class="muted">${empty}</td></tr>` : data.map(x => ["out", "in"].map(d => { const t = x.st[d]; return `<tr><td>${esc(pLabel(x.q))}</td><td>${x.id}</td><td>${d.toUpperCase()}</td><td class="n">${t.max.toFixed(2)}</td><td>${md(t.at)}</td><td class="n">${t.min.toFixed(2)}</td><td class="n">${t.avg.toFixed(2)}</td><td class="n">${t.p95.toFixed(2)}</td></tr>`; }).join("")).join(""));
+  const hist = m.periods.some(q => q.from < T0);
+  $("#mNote").textContent = hist ? `※ ${MIN_DAY} 이전 구간은 생성해 둔 데이터가 없어서, 같은 규칙(평소 하루 모양)으로 즉석에서 만든 가상 값입니다. 경기·사고는 없는 평소 기록입니다.` : "";
+  const big = m.periods.some(q => q.u.key === "half" || (q.to - q.from) > 60 * DAY);
+  $("#mNote2").textContent = big ? "6개월 자료는 파일이 큽니다 (회선당 약 3MB, 압축하지 않고 묶습니다)." : "";
   $("#mMail").value =
-`제목: [${m.c.name}] ${m.from} ~ ${m.to} 회선별 5분 단위 트래픽 자료 송부
+`제목: [${m.c.name}] ${m.periods.length ? m.periods.map(q => q.u.label).join("·") : "(기간 선택 없음)"} 회선별 5분 단위 트래픽 자료 송부
 
 ${m.c.name} 담당자님, 안녕하세요.
-요청하신 ${m.from} ~ ${m.to} 회선별 5분 단위 트래픽 자료를 보내드립니다.
+요청하신 회선별 5분 단위 트래픽 자료를 보내드립니다.
 
 - 대상 회선: ${m.ids.join(", ") || "(선택 없음)"}
-- 첨부: 회선별 5분 단위 CSV, 요약(최대·최소·평균·95%값)
+${m.periods.map(q => `- 기간: ${pLabel(q)}`).join("\n") || "- 기간: (선택 없음)"}
+- 첨부: 기간별 폴더에 회선별 5분 단위 CSV, 요약 CSV(최대·최소·평균·95%값)
 - 단위: Gbps (IN = 센터로 들어온 트래픽, OUT = 센터에서 나간 트래픽)
 
 추가로 필요한 자료가 있으면 말씀해 주세요.
 감사합니다.`;
 }
-function summaryCsv(m) {
-  return ["link,direction,max_gbps,max_time,min_gbps,avg_gbps,p95_gbps"].concat(
-    mSummaryRows(m).map(r => `${r.id},${r.d},${r.max.toFixed(2)},${ymdhm(r.at)},${r.min.toFixed(2)},${r.avg.toFixed(2)},${r.p95.toFixed(2)}`)).join("\n");
-}
 (function initMonthly() {
   $("#mCust").innerHTML = CUSTOMERS.map(c => `<option>${c.name}</option>`).join("");
-  ["mFrom", "mTo"].forEach(id => { const el = $("#" + id); el.min = MIN_DAY; el.max = MAX_DAY; });
+  $("#mUnits").innerHTML = UNITS.map(u => `<label class="chk"><input type="checkbox" value="${u.key}" ${u.key === "week" ? "checked" : ""}> ${u.label}</label>`).join("");
+  ["mFrom", "mTo"].forEach(id => { const el = $("#" + id); el.min = MIN_PICK; el.max = MAX_DAY; });
   $("#mFrom").value = MIN_DAY; $("#mTo").value = MAX_DAY;
   const drawLinks = () => {
     const c = CUSTOMERS[$("#mCust").selectedIndex];
@@ -314,14 +379,15 @@ function summaryCsv(m) {
   $("#mCust").onchange = drawLinks;
   $("#mFrom").onchange = $("#mTo").onchange = renderMonthly;
   $("#mLinks").addEventListener("change", renderMonthly);
+  $("#mUnits").addEventListener("change", renderMonthly);
   $("#mZip").onclick = () => {
-    const m = mState(); if (!m.ids.length) return;
-    const enc = new TextEncoder(), tag = `${m.from}_${m.to}`;
-    const files = m.ids.map(id => ({ name: `${m.c.name}_${id}_5min_${tag}.csv`, data: enc.encode("﻿" + csvOf([id], m.s, m.e)) }));
-    files.push({ name: `${m.c.name}_요약_${tag}.csv`, data: enc.encode("﻿" + summaryCsv(m)) });
-    download(`traffic_${m.c.key}_${tag}.zip`, makeZip(files));   // 받는 파일 이름은 영문 (한글이면 브라우저가 이름을 잃을 수 있음)
+    const m = mState(); if (!m.ids.length || !m.periods.length) return;
+    const enc = new TextEncoder(), data = mCompute(m), files = [];
+    data.forEach(x => files.push({ name: `${x.q.u.dir}/${m.c.name}_${x.id}_5min_${ymd(x.q.from)}_${ymd(x.q.to)}.csv`, data: enc.encode("﻿" + seriesCsv(x.id, x.sr)) }));
+    files.push({ name: `${m.c.name}_요약.csv`, data: enc.encode("﻿" + summaryCsv(data)) });
+    download(`traffic_${m.c.key}_${m.units.map(u => u.key).join("-")}_${m.to}.zip`, makeZip(files));   // 받는 파일 이름은 영문 (한글이면 브라우저가 이름을 잃을 수 있음)
   };
-  $("#mSumCsv").onclick = () => { const m = mState(); downloadCsv(`summary_${m.c.key}_${m.from}_${m.to}.csv`, summaryCsv(m)); };
+  $("#mSumCsv").onclick = () => { const m = mState(); if (!m.ids.length || !m.periods.length) return; downloadCsv(`summary_${m.c.key}_${m.units.map(u => u.key).join("-")}_${m.to}.csv`, summaryCsv(mCompute(m))); };
   $("#mCopy").onclick = () => copyText($("#mMail").value, $("#mCopy"));
   $("#sendTbl").innerHTML = CUSTOMERS.map(c => `<tr><td>${c.name}</td><td class="muted">${c.links.join(", ")}</td><td><label class="chk"><input type="checkbox" data-sent="${c.name}" ${store.get("sent:" + c.name, false) ? "checked" : ""}> 발송 완료</label></td></tr>`).join("");
   $("#sendTbl").addEventListener("change", e => { if (e.target.dataset.sent) { store.set("sent:" + e.target.dataset.sent, e.target.checked); renderTasks(); } });
