@@ -70,44 +70,10 @@ const CUSTOMERS = [
 ];
 const CENTER = id => id.startsWith("OUR") ? "우리 센터" : id.startsWith("CTR-B") ? "센터B" : id === "CTR-C1" ? "센터C" : id === "CTR-D1" ? "센터D" : "연동";
 
-/* ---------- 경고 탐지 (관제 화면 아래 표) ---------- */
-function runs(flags) {
-  const out = []; let s = -1;
-  flags.forEach((f, i) => { if (f && s < 0) s = i; if (!f && s >= 0) { out.push([s, i - 1]); s = -1; } });
-  if (s >= 0) out.push([s, flags.length - 1]);
-  return out;
-}
-function median(a) { const b = [...a].sort((x, y) => x - y); return b[Math.floor(b.length / 2)]; }
+/* ---------- 경고 탐지: 규칙은 lib.js에 있다 (터미널에서도 시험할 수 있게 분리) ---------- */
+const { runs, median } = Lib;
 const DROP = {};   // 링크별 급감 여부 (그래프 패널 표시용)
-const ALERTS = (() => {
-  const res = [];
-  for (const l of LINKS) {
-    // 1) out 사용률 80% 이상
-    runs(l.out.map(v => v >= l.cap * 0.8)).forEach(([s, e]) => {
-      let p = s; for (let i = s; i <= e; i++) if (l.out[i] > l.out[p]) p = i;
-      res.push({ link: l.id, kind: "사용률 80%+", s, e, peak: p, val: `${(l.out[p] / l.cap * 100).toFixed(0)}% (${l.out[p].toFixed(1)}G)`, sev: "crit" });
-    });
-    // 2) in이 같은 시간대 평소(14일 중앙값)의 3배 이상 = 급증 의심
-    const slotMed = Array.from({ length: PER_DAY }, (_, k) => { const v = []; for (let i = k; i < N; i += PER_DAY) v.push(l.in[i]); return median(v); });
-    runs(l.in.map((v, i) => v >= 3 * slotMed[i % PER_DAY])).forEach(([s, e]) => {
-      let p = s; for (let i = s; i <= e; i++) if (l.in[i] / slotMed[i % PER_DAY] > l.in[p] / slotMed[p % PER_DAY]) p = i;
-      res.push({ link: l.id, kind: "in 급증 의심", s, e, peak: p, val: `평소의 ${(l.in[p] / slotMed[p % PER_DAY]).toFixed(1)}배 (${l.in[p].toFixed(1)}G)`, sev: "warn" });
-    });
-    // 3) out 또는 in이 같은 시간대 평소의 40% 미만으로 15분(3점) 이상 = 급감 의심
-    const medOf = arr => Array.from({ length: PER_DAY }, (_, k) => { const v = []; for (let i = k; i < N; i += PER_DAY) v.push(arr[i]); return median(v); });
-    const mo = medOf(l.out), mi = medOf(l.in);
-    const dOut = l.out.map((v, i) => v < 0.4 * mo[i % PER_DAY]), dIn = l.in.map((v, i) => v < 0.4 * mi[i % PER_DAY]);
-    DROP[l.id] = dOut.map((f, i) => f || dIn[i]);
-    const longRuns = flags => runs(flags).filter(([a, b]) => b - a >= 2);
-    const lowest = (a, b, arr, med) => { let p = a; for (let i = a; i <= b; i++) if (arr[i] / med[i % PER_DAY] < arr[p] / med[p % PER_DAY]) p = i; return p; };
-    longRuns(dOut.map((f, i) => f && dIn[i])).forEach(([a, b]) => { const p = lowest(a, b, l.out, mo); res.push({ link: l.id, kind: "in·out 동시 급감", s: a, e: b, peak: p, val: `평소의 ${(l.out[p] / mo[p % PER_DAY] * 100).toFixed(0)}% (out ${l.out[p].toFixed(1)}G)`, sev: "crit" }); });
-    longRuns(dOut.map((f, i) => f && !dIn[i])).forEach(([a, b]) => { const p = lowest(a, b, l.out, mo); res.push({ link: l.id, kind: "out 급감", s: a, e: b, peak: p, val: `평소의 ${(l.out[p] / mo[p % PER_DAY] * 100).toFixed(0)}% (out ${l.out[p].toFixed(1)}G)`, sev: "warn" }); });
-    longRuns(dIn.map((f, i) => f && !dOut[i])).forEach(([a, b]) => { const p = lowest(a, b, l.in, mi); res.push({ link: l.id, kind: "in 급감", s: a, e: b, peak: p, val: `평소의 ${(l.in[p] / mi[p % PER_DAY] * 100).toFixed(0)}% (in ${l.in[p].toFixed(1)}G)`, sev: "warn" }); });
-  }
-  const evWin = DATA.events.map(ev => ({ ev, a: idxOf(parseT(ev.start)) - 6, b: idxOf(parseT(ev.end)) + 4 }));
-  res.forEach(a => { const hit = evWin.find(w => a.peak >= w.a && a.peak <= w.b); a.evName = hit ? hit.ev.name : ""; });
-  return res.sort((a, b) => a.s - b.s);
-})();
+const ALERTS = (() => { const r = Lib.detectTraffic(DATA); Object.assign(DROP, r.drop); return r.alerts; })();
 
 /* ---------- 탭 ---------- */
 function showTab(name) {
@@ -664,22 +630,11 @@ const cfg = Object.assign({}, ROOM_DEFAULT, store.get("roomCfg", {}));
 let TEMP_WARN = cfg.warn, TEMP_HOT = cfg.hot, TEMP_CRIT = cfg.crit;
 const RACKS = DATA.racks;
 const sr = { end: idxOf(parseT("2026-10-22T21:00")) };
-const tempCls = t => t >= TEMP_CRIT ? "crit" : t >= TEMP_HOT ? "hot" : t >= TEMP_WARN ? "warn" : "ok";
-function srvState(rack, sv, i) {
-  const t = rack.temp[i], ms = msOf(i);
-  const down = !!sv.downStart && ms >= parseT(sv.downStart) && ms < parseT(sv.downEnd);
-  if (down) return { power: false, status: "crit", hdd: "off" };
-  return { power: true, status: t >= TEMP_CRIT ? "crit" : t >= TEMP_HOT ? "warn" : "ok", hdd: sv.hddWarn ? "warn" : "ok" };
-}
+const thNow = () => ({ warn: TEMP_WARN, hot: TEMP_HOT, crit: TEMP_CRIT });
+const tempCls = t => Lib.tempLevel(t, thNow());
+function srvState(rack, sv, i) { return Lib.serverLed(rack.temp[i], sv, msOf(i), thNow()); }
 let ROOM_ALERTS = [];
-function computeRoomAlerts() {
-  const res = [];
-  RACKS.forEach(r => runs(r.temp.map(t => t >= TEMP_HOT)).forEach(([a, b]) => {
-    let p = a; for (let i = a; i <= b; i++) if (r.temp[i] > r.temp[p]) p = i;
-    res.push({ rack: r.id, s: a, e: b, peak: p, max: r.temp[p] });
-  }));
-  ROOM_ALERTS = res.sort((x, y) => x.s - y.s);
-}
+function computeRoomAlerts() { ROOM_ALERTS = Lib.detectRoom(RACKS, thNow()); }
 computeRoomAlerts();
 function spark(arr, s, e) {
   const w = 160, h = 38, lo = 18, hi = Math.max(36, TEMP_CRIT + 3), X = i => 2 + (i - s) / Math.max(1, e - s) * (w - 4), Y = v => h - 3 - (clamp(v, lo, hi) - lo) / (hi - lo) * (h - 6);

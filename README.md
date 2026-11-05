@@ -31,18 +31,28 @@ cd site && python3 -m http.server 8000   # http://localhost:8000
 
 ## 테스트
 ```bash
-python3 -m unittest discover -s tests -v   # 데이터 규칙 14개 (pandas 필요)
-node tests/smoke.js                        # 화면 점검 16개 (playwright 필요, 주소를 넘기면 배포본도 점검)
+python3 -m unittest discover -s tests -v   # 데이터 규칙 + 파이썬 교차 검증 + 정답표 최신 여부 (pandas, node 필요)
+node --test "tests/*.test.js"              # 탐지 정확도(정답표 비교) + 규칙 경계값 (Node 18 이상)
+node tests/report.js                       # 정답표 vs 탐지 결과를 표로 출력 (재현율·오탐)
+node tests/sweep.js                        # 탐지 기준값을 바꿔 가며 놓침·오탐 변화 보기
+node tests/smoke.js                        # 화면 점검 (playwright 필요, 주소를 넘기면 배포본도 점검)
+python3 tests/make_truth.py                # 정답표(tests/ground_truth.json, docs/ground_truth.md) 다시 만들기
 ```
+
+- 정답표: 데이터에 일부러 심은 사건이 정답입니다. 사람이 읽는 표는 `docs/ground_truth.md`입니다.
+- 교차 검증: 사이트의 탐지(JavaScript)를 파이썬으로 따로 다시 계산해 같은 결과가 나오는지 비교합니다.
+- 규칙 경계값: 79.9%/80.0%, 2.99배/3.0배, 10분/15분 같은 기준 바로 위·아래를 확인합니다.
 
 ## 구조
 - `gen_data.py`: 가짜 데이터 생성 (평소 곡선 + 월드컵 7경기 + 새벽 급증 + 급감 2건 + 서버실 온도)
 - `export_site_data.py`: CSV를 사이트용 데이터로 변환
+- `site/lib.js`: 탐지·판정 규칙 (화면 코드 없음, 터미널에서도 실행)
 - `site/`: 정적 웹페이지 (외부 라이브러리 없음)
-- `tests/`: 데이터 규칙 검사, 화면 점검
+- `tests/`, `docs/`: 데이터 규칙 검사, 탐지 정확도 시험, 화면 점검, 정답표
 
 ## 알아 둘 점
 - 사후 정리의 "실제"는 분산 조치 전 가상 데이터 기준입니다.
 - 내려받는 파일 이름은 영문입니다. 한글 이름이면 일부 브라우저에서 이름이 사라지는 것을 확인했습니다.
 - 생성해 둔 데이터는 14일치(10/19~11/01)입니다. 월간 자료의 한 달·6개월 중 10/19 이전 구간은 같은 규칙(평소 하루 모양)으로 화면에서 즉석에서 만든 가상 값이며, 경기·사고는 없는 평소 기록입니다.
+- 정답표 시험은 "깨끗한" 가짜 데이터(평소 잡음 2%)로 하므로, 탐지 기준이 느슨해도 통과합니다 (`node tests/sweep.js`로 확인). 애매한 케이스(완만한 감소, 짧은 하락, 잡음이 큰 날 등)를 추가해야 기준의 좋고 나쁨을 가릴 수 있습니다.
 - 방문 등록·육안점검 기록은 브라우저(localStorage)에만 저장되며 서버로 보내지 않습니다.
