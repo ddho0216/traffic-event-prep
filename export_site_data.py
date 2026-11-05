@@ -28,5 +28,16 @@ for r in links.itertuples():
     d = t[t.link == r.link].sort_values("time")
     out["links"].append({"id": r.link, "desc": r.description, "cap": int(r.capacity_gbps),
                          "in": d.in_gbps.round(2).tolist(), "out": d.out_gbps.round(2).tolist()})
+temps = pd.read_csv(ROOT / "data/temps.csv")
+servers = pd.read_csv(ROOT / "data/servers.csv").fillna("")
+out["racks"] = []
+for rack, g in servers.groupby("rack", sort=False):
+    out["racks"].append({
+        "id": rack,
+        "servers": [{"slot": int(r.slot), "name": r.name, "role": r.role, "hddWarn": bool(r.hdd_warn),
+                     "downStart": str(r.down_start).replace(" ", "T"), "downEnd": str(r.down_end).replace(" ", "T")}
+                    for r in g.itertuples()],
+        "temp": temps[temps.rack == rack].sort_values("time").inlet_c.tolist(),
+    })
 (ROOT / "site/data.js").write_text("const DATA = " + json.dumps(out, ensure_ascii=False, separators=(",", ":")) + ";\n", encoding="utf-8")
 print("site/data.js 완료", out["n"], "점 x", len(out["links"]), "링크")

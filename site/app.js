@@ -64,9 +64,9 @@ function makeZip(files) {
 
 /* ---------- 가상 고객사·센터 ---------- */
 const CUSTOMERS = [
-  { name: "가상물산", links: ["OUR-A", "OUR-B"] },
-  { name: "예시미디어", links: ["OUR-A", "CTR-B1", "IX-1"] },
-  { name: "샘플게임즈", links: ["CTR-C1", "CTR-D1"] }
+  { name: "가상물산", key: "gasang", links: ["OUR-A", "OUR-B"] },
+  { name: "예시미디어", key: "yesi-media", links: ["OUR-A", "CTR-B1", "IX-1"] },
+  { name: "샘플게임즈", key: "sample-games", links: ["CTR-C1", "CTR-D1"] }
 ];
 const CENTER = id => id.startsWith("OUR") ? "우리 센터" : id.startsWith("CTR-B") ? "센터B" : id === "CTR-C1" ? "센터C" : id === "CTR-D1" ? "센터D" : "연동";
 
@@ -103,6 +103,7 @@ function showTab(name) {
   $$("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
   $$("section.tab").forEach(s => s.classList.toggle("on", s.id === "tab-" + name));
   if (name === "monitor") { renderAll(); renderTasks(); }
+  if (name === "room") renderServerRoom();
   try { history.replaceState(null, "", "#" + name); } catch (e) { /* 무시 */ }
 }
 $("#tabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) showTab(b.dataset.tab); });
@@ -242,12 +243,13 @@ function renderTasks() {
   const sent = CUSTOMERS.filter(c => store.get("sent:" + c.name, false)).length;
   const checks = DATA.events.map(ev => (store.get("chk:" + ev.id, []) || []).length);
   const visits = store.get("visits", []).length;
-  const spikes = ALERTS.filter(a => a.kind === "in 급증 의심").length;
+  const spikes = ALERTS.filter(a => a.kind === "in 급증 의심" && !a.evName).length;
   const rows = [
     ["월말 자료 발송", `${sent}/${CUSTOMERS.length} 고객사 완료`, sent === CUSTOMERS.length ? "ok" : "warn", "monthly"],
     ["이벤트 대비", `월드컵 ${checks.filter(c => c === CHECK_ITEMS.length).length}/${DATA.events.length}경기 체크 완료`, "warn", "event"],
     ["방문 신청 등록", `등록 ${visits}건`, "ok", "visit"],
-    ["새벽 급증 확인", `in 급증 의심 ${spikes}건 (경고 이력 참고)`, spikes ? "warn" : "ok", "monitor"],
+    ["새벽 급증 확인", `경기와 겹치지 않는 in 급증 ${spikes}건 (경고 이력 참고)`, spikes ? "warn" : "ok", "monitor"],
+    ["서버실 온도·육안점검", `온도 경고 ${ROOM_ALERTS.length}건 · 점검 기록 ${store.get("inspections", []).length}건`, ROOM_ALERTS.length ? "warn" : "ok", "room"],
     ["장비 점검 (광값·CRC)", "CRC·광 수신값 이상 회선 있음", "crit", "term"]
   ];
   $("#taskTbl").innerHTML = rows.map(r => `<tr><td>${r[0]}</td><td><span class="tag ${r[2]}">${r[1]}</span></td><td><button class="btn sm" data-go="${r[3]}">열기</button></td></tr>`).join("");
@@ -317,9 +319,9 @@ function summaryCsv(m) {
     const enc = new TextEncoder(), tag = `${m.from}_${m.to}`;
     const files = m.ids.map(id => ({ name: `${m.c.name}_${id}_5min_${tag}.csv`, data: enc.encode("﻿" + csvOf([id], m.s, m.e)) }));
     files.push({ name: `${m.c.name}_요약_${tag}.csv`, data: enc.encode("﻿" + summaryCsv(m)) });
-    download(`${m.c.name}_트래픽자료_${tag}.zip`, makeZip(files));
+    download(`traffic_${m.c.key}_${tag}.zip`, makeZip(files));   // 받는 파일 이름은 영문 (한글이면 브라우저가 이름을 잃을 수 있음)
   };
-  $("#mSumCsv").onclick = () => { const m = mState(); downloadCsv(`${m.c.name}_요약_${m.from}_${m.to}.csv`, summaryCsv(m)); };
+  $("#mSumCsv").onclick = () => { const m = mState(); downloadCsv(`summary_${m.c.key}_${m.from}_${m.to}.csv`, summaryCsv(m)); };
   $("#mCopy").onclick = () => copyText($("#mMail").value, $("#mCopy"));
   $("#sendTbl").innerHTML = CUSTOMERS.map(c => `<tr><td>${c.name}</td><td class="muted">${c.links.join(", ")}</td><td><label class="chk"><input type="checkbox" data-sent="${c.name}" ${store.get("sent:" + c.name, false) ? "checked" : ""}> 발송 완료</label></td></tr>`).join("");
   $("#sendTbl").addEventListener("change", e => { if (e.target.dataset.sent) { store.set("sent:" + e.target.dataset.sent, e.target.checked); renderTasks(); } });
@@ -553,6 +555,99 @@ function termBanner() { const d = devNow(); $("#termOut").innerHTML = `<span cla
   termBanner();
 })();
 
+/* ---------- 서버실: 온도 체크 + 육안점검 ---------- */
+const TEMP_WARN = 27, TEMP_HOT = 30, TEMP_CRIT = 33;   // 랙 입구 온도 기준 (제가 가정한 값)
+const RACKS = DATA.racks;
+const sr = { end: idxOf(parseT("2026-10-22T21:00")) };
+const tempCls = t => t >= TEMP_CRIT ? "crit" : t >= TEMP_HOT ? "hot" : t >= TEMP_WARN ? "warn" : "ok";
+function srvState(rack, sv, i) {
+  const t = rack.temp[i], ms = msOf(i);
+  const down = !!sv.downStart && ms >= parseT(sv.downStart) && ms < parseT(sv.downEnd);
+  if (down) return { power: false, status: "crit", hdd: "off" };
+  return { power: true, status: t >= TEMP_CRIT ? "crit" : t >= TEMP_HOT ? "warn" : "ok", hdd: sv.hddWarn ? "warn" : "ok" };
+}
+const ROOM_ALERTS = (() => {
+  const res = [];
+  RACKS.forEach(r => runs(r.temp.map(t => t >= TEMP_HOT)).forEach(([a, b]) => {
+    let p = a; for (let i = a; i <= b; i++) if (r.temp[i] > r.temp[p]) p = i;
+    res.push({ rack: r.id, s: a, e: b, peak: p, max: r.temp[p] });
+  }));
+  return res.sort((x, y) => x.s - y.s);
+})();
+function spark(arr, s, e) {
+  const w = 160, h = 38, lo = 18, hi = 36, X = i => 2 + (i - s) / Math.max(1, e - s) * (w - 4), Y = v => h - 3 - (clamp(v, lo, hi) - lo) / (hi - lo) * (h - 6);
+  let d = ""; for (let i = s; i <= e; i++) d += (i === s ? "M" : "L") + X(i).toFixed(1) + "," + Y(arr[i]).toFixed(1);
+  return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}"><line x1="0" x2="${w}" y1="${Y(TEMP_HOT)}" y2="${Y(TEMP_HOT)}" stroke="#e5604d" stroke-dasharray="3 3" opacity=".7"/><line x1="0" x2="${w}" y1="${Y(TEMP_WARN)}" y2="${Y(TEMP_WARN)}" stroke="#d9b13b" stroke-dasharray="3 3" opacity=".6"/><path d="${d}" fill="none" stroke="#e5a93d" stroke-width="1.6"/></svg>`;
+}
+function ledHtml(st) {
+  return `<span class="led ${st.power ? "ok" : "off"}" title="전원"></span><span class="led ${st.status} ${st.status === "crit" ? "blink" : ""}" title="상태"></span><span class="led ${st.hdd}" title="디스크"></span>`;
+}
+function inspSummary(rack, i) {
+  const sts = rack.servers.map(sv => srvState(rack, sv, i)), n = k => sts.filter(x => x.status === k).length;
+  const off = sts.filter(x => !x.power).length, hdd = sts.filter(x => x.hdd === "warn").length;
+  const parts = [`입구 ${rack.temp[i].toFixed(1)}°C`];
+  if (off) parts.push(`전원 꺼짐 ${off}대`);
+  if (n("crit") - off > 0) parts.push(`상태 장애 ${n("crit") - off}대`);
+  if (n("warn")) parts.push(`상태 주의 ${n("warn")}대`);
+  if (hdd) parts.push(`디스크 주의 ${hdd}대`);
+  return parts.join(", ");
+}
+function renderServerRoom() {
+  if (!$("#tab-room").classList.contains("on")) return;
+  const i = clamp(sr.end, 0, N - 1);
+  $("#srTime").value = isoLocal(msOf(i));
+  $("#racks").innerHTML = RACKS.map(r => {
+    const t = r.temp[i];
+    return `<div class="rack ${tempCls(t)}"><div class="rhd"><b>${r.id}</b><span class="tmp ${tempCls(t)}">${t.toFixed(1)}°C</span></div>` +
+      r.servers.map(sv => `<div class="srv">${ledHtml(srvState(r, sv, i))}<span class="sname">${sv.name}</span><span class="role">${sv.role}</span></div>`).join("") +
+      spark(r.temp, Math.max(0, i - 35), i) + `<div class="note" style="margin:2px 0 0">최근 3시간 · 점선 27/30°C</div></div>`;
+  }).join("");
+  $("#srAlerts").innerHTML = `<tr><th>시각</th><th>랙</th><th class="n">최고 온도</th></tr>` + (ROOM_ALERTS.length ? ROOM_ALERTS.map((a, k) =>
+    `<tr class="click" data-k="${k}"><td>${md(msOf(a.s))} ~ ${hm(msOf(a.e))}</td><td>${a.rack}</td><td class="n crit-t">${a.max.toFixed(1)}°C</td></tr>`).join("") : `<tr><td colspan="3" class="muted">30°C 이상 기록이 없습니다.</td></tr>`);
+  const sel = $("#inRack").value || RACKS[0].id;
+  $("#inRack").innerHTML = RACKS.map(r => `<option ${r.id === sel ? "selected" : ""}>${r.id}</option>`).join("");
+  const rk = RACKS.find(r => r.id === $("#inRack").value);
+  $("#inHint").textContent = `지금 화면 기준: ${inspSummary(rk, i)}`;
+  renderInspections();
+}
+function renderInspections() {
+  const v = store.get("inspections", []);
+  $("#inspTbl").innerHTML = `<tr><th>화면 시각</th><th>랙</th><th>판정</th><th>점검자</th><th>화면 상태</th><th>메모</th></tr>` + (v.length ?
+    v.map(r => `<tr><td>${esc(r.at)}</td><td>${esc(r.rack)}</td><td><span class="tag ${r.result === "이상 없음" ? "ok" : "crit"}">${esc(r.result)}</span></td><td>${esc(r.who)}</td><td>${esc(r.summary)}</td><td>${esc(r.memo)}</td></tr>`).join("") :
+    `<tr><td colspan="6" class="muted">아직 점검 기록이 없습니다.</td></tr>`);
+}
+(function initRoom() {
+  $("#srTime").addEventListener("change", e => { if (e.target.value) { sr.end = idxOf(parseT(e.target.value)); renderServerRoom(); } });
+  $("#srPrev").onclick = () => { sr.end -= 12; renderServerRoom(); };
+  $("#srNext").onclick = () => { sr.end += 12; renderServerRoom(); };
+  $$("[data-sr]").forEach(b => b.onclick = () => { sr.end = idxOf(parseT(b.dataset.sr)); renderServerRoom(); });
+  $("#srAlerts").addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { sr.end = ROOM_ALERTS[+tr.dataset.k].peak; renderServerRoom(); } });
+  $("#inRack").addEventListener("change", renderServerRoom);
+  $("#srFrom").min = $("#srTo").min = MIN_DAY; $("#srFrom").max = $("#srTo").max = MAX_DAY;
+  $("#srFrom").value = MIN_DAY; $("#srTo").value = MAX_DAY;
+  $("#srTempCsv").onclick = () => {
+    const a = clamp(idxOf(parseT($("#srFrom").value + "T00:00")), 0, N - 1), b = clamp(idxOf(parseT($("#srTo").value + "T23:55")), a, N - 1);
+    const rows = ["time,rack,inlet_c"];
+    for (let i = a; i <= b; i++) RACKS.forEach(r => rows.push(`${ymdhm(msOf(i))},${r.id},${r.temp[i]}`));
+    downloadCsv(`rack_temps_${$("#srFrom").value}_${$("#srTo").value}.csv`, rows.join("\n"));
+  };
+  $("#srSheetCsv").onclick = () => {
+    const i = clamp(sr.end, 0, N - 1), rows = ["time,rack,server,role,inlet_c,power,status,disk"];
+    const lab = { ok: "정상", warn: "주의", crit: "장애", off: "꺼짐" };
+    RACKS.forEach(r => r.servers.forEach(sv => { const st = srvState(r, sv, i); rows.push(`${ymdhm(msOf(i))},${r.id},${sv.name},${sv.role},${r.temp[i]},${st.power ? "켜짐" : "꺼짐"},${lab[st.status]},${lab[st.hdd]}`); }));
+    downloadCsv(`inspection_sheet_${fileStamp(msOf(i))}.csv`, rows.join("\n"));
+  };
+  $("#inAdd").onclick = () => {
+    const i = clamp(sr.end, 0, N - 1), rack = $("#inRack").value, rk = RACKS.find(r => r.id === rack);
+    const rec = { at: ymdhm(msOf(i)), rack, result: $("#inResult").value, who: $("#inWho").value.trim() || "관제 담당", memo: $("#inMemo").value.trim(), summary: inspSummary(rk, i) };
+    store.set("inspections", store.get("inspections", []).concat([rec])); $("#inMemo").value = ""; renderInspections(); renderTasks();
+  };
+  $("#inCsv").onclick = () => {
+    const v = store.get("inspections", []), q = x => `"${String(x).replace(/"/g, '""')}"`;
+    downloadCsv("inspection_log.csv", ["screen_time,rack,result,inspector,screen_state,memo"].concat(v.map(r => [r.at, r.rack, r.result, r.who, r.summary, r.memo].map(q).join(","))).join("\n"));
+  };
+})();
+
 /* ---------- 시작 ---------- */
 const h0 = location.hash.slice(1);
-showTab(["monitor", "monthly", "event", "visit", "term"].includes(h0) ? h0 : "monitor");
+showTab(["monitor", "monthly", "event", "room", "visit", "term"].includes(h0) ? h0 : "monitor");

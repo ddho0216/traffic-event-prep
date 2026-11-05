@@ -14,6 +14,7 @@
     <button data-tab="monitor" class="on">관제</button>
     <button data-tab="monthly">월간 자료</button>
     <button data-tab="event">이벤트 대비</button>
+    <button data-tab="room">서버실</button>
     <button data-tab="visit">방문 신청</button>
     <button data-tab="term">장비 터미널</button>
   </nav>
@@ -110,6 +111,53 @@
 
   <h2>체크리스트</h2>
   <div class="card" id="evCheck"></div>
+</section>
+
+<!-- 서버실 -->
+<section class="tab" id="tab-room">
+  <p class="note">서버실 점검 업무: 랙 입구 온도 확인과 육안점검(서버 불빛을 보고 판단). 랙·서버·온도는 모두 가상 데이터이고, 온도 기준(27·30·33°C)은 제가 가정한 값입니다.</p>
+  <div class="toolbar">
+    <label>기준 시각 <input type="datetime-local" id="srTime"></label>
+    <button class="btn" id="srPrev">&lsaquo; 이전 1시간</button>
+    <button class="btn" id="srNext">다음 1시간 &rsaquo;</button>
+    <span class="sp"></span>
+    <span class="muted">빠른 이동</span>
+    <button class="btn" data-sr="2026-10-22T21:00">평소 저녁</button>
+    <button class="btn" data-sr="2026-10-26T15:55">냉각 이상 (A-03)</button>
+    <button class="btn" data-sr="2026-10-26T16:15">서버 꺼짐</button>
+  </div>
+  <p class="note">LED(왼쪽부터 전원 · 상태 · 디스크): 초록 = 정상, 주황 = 주의, 빨강 깜박임 = 장애, 꺼짐 = 전원 없음</p>
+  <div class="racks" id="racks"></div>
+  <div class="cols">
+    <div>
+      <h2>온도 경고 이력 <small>30°C 이상 (행을 누르면 그 시각으로 이동)</small></h2>
+      <div class="card" style="padding:0"><table id="srAlerts"></table></div>
+      <h2>자료 내려받기</h2>
+      <div class="card">
+        <div class="form" style="grid-template-columns:90px 1fr">
+          <span>기간</span><span><input type="date" id="srFrom"> ~ <input type="date" id="srTo"></span>
+        </div>
+        <div class="toolbar" style="margin:10px 0 0">
+          <button class="btn primary" id="srTempCsv">온도 기록 CSV (기간)</button>
+          <button class="btn" id="srSheetCsv">지금 화면 점검표 CSV</button>
+        </div>
+      </div>
+    </div>
+    <div>
+      <h2>육안점검 기록 <small>화면의 불빛을 보고 판정해 남깁니다</small></h2>
+      <div class="card">
+        <div class="form">
+          <span>랙</span><select id="inRack"></select>
+          <span>판정</span><select id="inResult"><option>이상 없음</option><option>이상 있음</option></select>
+          <span>점검자</span><input type="text" id="inWho" placeholder="관제 담당">
+          <span>메모</span><input type="text" id="inMemo" placeholder="예: A-03 냉각기 확인 요청">
+        </div>
+        <p class="note" id="inHint" style="margin:8px 0 0"></p>
+        <div class="toolbar" style="margin:8px 0 0"><button class="btn primary" id="inAdd">기록 남기기</button><button class="btn" id="inCsv">기록 CSV</button></div>
+      </div>
+      <div class="card" style="padding:0;margin-top:10px"><table id="inspTbl"></table></div>
+    </div>
+  </div>
 </section>
 
 <!-- 4. 방문 신청 -->

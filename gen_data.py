@@ -3,6 +3,8 @@
 만드는 파일 (data/ 폴더):
   links.csv    - 링크 8개와 회선 용량(Gbps)
   events.csv   - 가상 월드컵 경기 7개와 "예상 배율", 경기 중 표시 구간(marks)
+  temps.csv    - 서버실 랙 6개의 입구 온도(5분 간격), 냉각 이상 사례 1건
+  servers.csv  - 서버 24대 (역할, 디스크 경고, 꺼짐 시간)
   traffic.csv  - 5분 간격 in/out (Gbps), 14일치
 
 실제 회사·센터·회선 수치와 실제 월드컵 일정·팀은 쓰지 않았다. 일정과 숫자는 모두 지어낸 것이다.
@@ -51,6 +53,16 @@ MATCHES = [
 # 예고 없던 일: 새벽 in 트래픽 급증(DDoS 의심). 경기 없는 날 새벽.
 UNPLANNED = ("2026-10-29 03:10", "2026-10-29 03:35", "OUR-B", 6.0)
 
+# 서버실: 랙 6개 x 서버 4대. 랙 입구 온도(inlet)를 5분 간격으로 만든다. 전부 가상.
+RACKS = ["A-01", "A-02", "A-03", "B-01", "B-02", "B-03"]
+ROLES = ["웹", "DB", "캐시", "스토리지"]
+# 냉각 이상: A-03 랙, 14:30에 오르기 시작 -> 15:30 최고 -> 16:30까지 유지 -> 17:15에 복구
+COOLING = ("A-03", "2026-10-26 14:30", "2026-10-26 15:30", "2026-10-26 16:30", "2026-10-26 17:15", 11.5)
+# 과열로 서버 한 대가 꺼짐: A-03의 2번 서버, 16:05~16:25
+SERVER_DOWN = ("A-03", 2, "2026-10-26 16:05", "2026-10-26 16:25")
+# 디스크 경고가 계속 켜져 있는 서버(교체 대기): A-02의 3번 서버
+HDD_WARN = ("A-02", 3)
+
 
 def daily_shape(hours: np.ndarray, weekend: bool) -> np.ndarray:
     """평소 하루 모양: 새벽 낮음, 저녁 피크. 0~1 사이 값."""
@@ -88,6 +100,39 @@ def match_profile(k: int):
     for g in rng.choice(goal_pool, 2, replace=False):   # 골 장면: 잠깐 3분 +10%
         p[(m >= g) & (m < g + 3)] *= 1.10
     return m, p
+
+
+def write_server_room(times: pd.DatetimeIndex, hours: np.ndarray) -> None:
+    """랙 입구 온도(temps.csv)와 서버 목록(servers.csv)을 만든다."""
+    rng = np.random.default_rng(SEED + 100)   # 트래픽 난수와 분리 (트래픽 데이터는 그대로)
+    shape = daily_shape(hours, False)
+    tm = np.asarray((times - times[0]) / pd.Timedelta(minutes=1))
+    mins = lambda ts: (pd.Timestamp(ts) - times[0]) / pd.Timedelta(minutes=1)
+    rows = []
+    for i, rack in enumerate(RACKS):
+        temp = 21.5 + 0.3 * i + 1.5 * shape + rng.normal(0, 0.12, len(times))
+        if rack == COOLING[0]:
+            _r, a, pk, hold, end, add = COOLING
+            a, pk, hold, end = mins(a), mins(pk), mins(hold), mins(end)
+            d = np.zeros(len(times))
+            up = (tm >= a) & (tm < pk)
+            d[up] = add * (tm[up] - a) / (pk - a)
+            d[(tm >= pk) & (tm < hold)] = add
+            dn = (tm >= hold) & (tm < end)
+            d[dn] = add * (1 - (tm[dn] - hold) / (end - hold))
+            temp = temp + d
+        rows.append(pd.DataFrame({"time": times, "rack": rack, "inlet_c": temp.round(1)}))
+    pd.concat(rows).to_csv(OUT / "temps.csv", index=False)
+
+    srv = []
+    for rack in RACKS:
+        for slot in range(1, 5):
+            down = SERVER_DOWN if (rack, slot) == SERVER_DOWN[:2] else None
+            srv.append((rack, slot, f"{rack}-S{slot}", ROLES[slot - 1],
+                        int((rack, slot) == HDD_WARN),
+                        down[2] if down else "", down[3] if down else ""))
+    pd.DataFrame(srv, columns=["rack", "slot", "name", "role", "hdd_warn", "down_start", "down_end"]
+                 ).to_csv(OUT / "servers.csv", index=False)
 
 
 def main() -> None:
@@ -141,6 +186,7 @@ def main() -> None:
         ev.append((eid, n, kick, end, ",".join(links), exp, marks))
     pd.DataFrame(ev, columns=["event_id", "name", "start", "end", "links", "expected_factor", "marks"]
                  ).to_csv(OUT / "events.csv", index=False)
+    write_server_room(times, hours)
     print("완료: traffic.csv", len(times) * len(LINKS), "행, 경기", len(MATCHES), "개")
 
 
