@@ -1,0 +1,9 @@
+link,description,capacity_gbps
+OUR-A,우리 센터 백본 A,100
+OUR-B,우리 센터 백본 B,100
+CTR-B1,센터B 백본 1,100
+CTR-B2,센터B 백본 2,100
+CTR-C1,센터C 백본,200
+CTR-D1,센터D 백본,400
+IX-1,국내 연동(IX),100
+INTL-1,해외 연동,100

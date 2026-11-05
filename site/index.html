@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>백본 트래픽 관제 · 이벤트 대비</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <h1>백본 트래픽 관제 · 이벤트 대비</h1>
+  <span class="badge">가상 데이터 · 실제 센터·고객사·수치 아님</span>
+  <nav class="tabs" id="tabs">
+    <button data-tab="monitor" class="on">관제</button>
+    <button data-tab="monthly">월간 자료</button>
+    <button data-tab="event">이벤트 대비</button>
+    <button data-tab="visit">방문 신청</button>
+    <button data-tab="term">장비 터미널</button>
+  </nav>
+</header>
+
+<main>
+<!-- 1. 관제 -->
+<section class="tab on" id="tab-monitor">
+  <div class="toolbar">
+    <label>기준 시각 <input type="datetime-local" id="endTime"></label>
+    <button class="btn" id="prev" title="한 창 뒤로">&lsaquo; 이전</button>
+    <button class="btn" id="next" title="한 창 앞으로">다음 &rsaquo;</button>
+    <label>고객사 <select id="cust"></select></label>
+    <label>창 <select id="win"><option value="12">1시간</option><option value="36">3시간</option><option value="72">6시간</option><option value="288">24시간</option></select></label>
+    <label>Y축 <select id="ymode"><option value="cap">회선 용량</option><option value="auto">자동 확대</option></select></label>
+    <span class="sp"></span>
+    <span class="muted">빠른 이동</span>
+    <button class="btn" data-jump="2026-10-22T21:00">평소 저녁</button>
+    <button class="btn" data-jump="2026-10-29T03:20">새벽 급증</button>
+    <select id="jumpEv"></select>
+    <button class="btn primary" id="csvAll">전체 CSV 내려받기</button>
+  </div>
+  <p class="note">파란 띠 = 경기 시간(킥오프~종료, 점선), 밝은 띠 = 하이드레이션 타임, 회색 띠 = 하프타임. 모든 일정·수치는 가상입니다.</p>
+  <div class="grid" id="grid"></div>
+
+  <div class="cols">
+    <div>
+      <h2>경고 이력 <small>out 사용률 80% 이상, in이 같은 시간대 평소의 3배 이상 (행을 누르면 해당 시각으로 이동)</small></h2>
+      <div class="card" style="padding:0"><table id="alertTbl"></table></div>
+    </div>
+    <div>
+      <h2>내 업무</h2>
+      <div class="card">
+        <table id="taskTbl"></table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 2. 월간 자료 -->
+<section class="tab" id="tab-monthly">
+  <p class="note">월초·월말에 자료를 요청한 고객사에 5분 단위 회선별 트래픽을 보내는 일. 고객사·회선은 모두 가상입니다.</p>
+  <div class="cols">
+    <div class="card">
+      <h3>1. 요청 조건</h3>
+      <div class="form">
+        <span>고객사</span><select id="mCust"></select>
+        <span>기간</span><span><input type="date" id="mFrom"> ~ <input type="date" id="mTo"></span>
+        <span>회선</span><div id="mLinks"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>이번 달 발송 현황</h3>
+      <table id="sendTbl"></table>
+    </div>
+  </div>
+  <h2>2. 요약 <small>최대·최소·평균·95%값 (Gbps)</small></h2>
+  <div class="card" style="padding:0"><table id="mSum"></table></div>
+  <div class="toolbar" style="margin-top:12px">
+    <button class="btn primary" id="mZip">회선별 5분 CSV + 요약을 zip으로 받기</button>
+    <button class="btn" id="mSumCsv">요약만 CSV로</button>
+  </div>
+  <h2>3. 메일 본문 초안</h2>
+  <textarea id="mMail" rows="9"></textarea>
+  <div class="toolbar" style="margin-top:8px"><button class="btn" id="mCopy">본문 복사</button></div>
+</section>
+
+<!-- 3. 이벤트 대비 -->
+<section class="tab" id="tab-event">
+  <div class="toolbar">
+    <label>경기 <select id="evSel"></select></label>
+    <span class="muted" id="evInfo"></span>
+  </div>
+  <h2>월드컵 일정 <small>가상 일정 · 한 경기는 킥오프부터 115분 이내 · 행을 누르면 아래에서 자세히</small></h2>
+  <div class="card" style="padding:0;margin-bottom:14px"><table id="evList"></table></div>
+  <div class="steps"><span>1 사전 계획</span><span>2 분산 제안</span><span>3 고객사 통보</span><span>4 당일 모니터링</span><span>5 사후 정리</span></div>
+
+  <h2>1. 사전 계획 <small>예상 최대 = 경기 없는 날 같은 시간대 최대(중앙값) + 평소 하루 최대 × (배율 − 1)</small></h2>
+  <div class="card" style="padding:0"><table id="evPlan"></table></div>
+
+  <h2>2. 분산 제안</h2>
+  <div class="card" id="evMove"></div>
+
+  <h2>3. 고객사 통보문 초안</h2>
+  <textarea id="evNotice" rows="14"></textarea>
+  <div class="toolbar" style="margin-top:8px"><button class="btn" id="evCopy">통보문 복사</button></div>
+
+  <h2>4. 당일 모니터링</h2>
+  <button class="btn" id="evGo">관제 화면에서 이벤트 시간 보기</button>
+
+  <h2>5. 사후 정리 <small>예상 vs 실제 (분산 조치 전 가상 데이터 기준)</small></h2>
+  <div class="card" style="padding:0"><table id="evPost"></table></div>
+  <p id="evSummary" class="note" style="font-size:13px;color:var(--text)"></p>
+
+  <h2>체크리스트</h2>
+  <div class="card" id="evCheck"></div>
+</section>
+
+<!-- 4. 방문 신청 -->
+<section class="tab" id="tab-visit">
+  <p class="note">방문 신청 메일을 받아 방문 등록(주차, 서버실 키 포함)을 하고 회신하는 일. 이름·메일은 모두 가상입니다. 입력한 내용은 이 브라우저에만 저장됩니다.</p>
+  <div class="steps"><span>1 메일 읽기</span><span>2 방문자 조회 (기존/신규)</span><span>3 방문 등록</span><span>4 회신 메일</span></div>
+  <div class="cols">
+    <div class="card">
+      <h3>1. 받은 메일</h3>
+      <textarea id="vMail" rows="10"></textarea>
+      <div class="toolbar" style="margin-top:8px">
+        <button class="btn" id="vSample">예시 메일 불러오기</button>
+        <button class="btn primary" id="vParse">메일에서 항목 채우기</button>
+      </div>
+    </div>
+    <div class="card">
+      <h3>2~3. 방문 등록</h3>
+      <div class="form">
+        <span>방문자</span><input type="text" id="vName">
+        <span>소속</span><input type="text" id="vOrg">
+        <span>방문예정일시</span><input type="datetime-local" id="vWhen">
+        <span>방문센터</span><input type="text" id="vCenter">
+        <span>방문목적</span><input type="text" id="vPurpose">
+        <span>방문장소</span><input type="text" id="vPlace">
+        <span>주차 등록</span><label class="chk"><input type="checkbox" id="vPark"> 필요</label>
+        <span>서버실 키</span><label class="chk"><input type="checkbox" id="vKey"> 필요</label>
+      </div>
+      <p id="vWho" class="note" style="font-size:13px"></p>
+      <div class="toolbar"><button class="btn primary" id="vReg">방문 등록</button></div>
+    </div>
+  </div>
+  <h2>등록 현황</h2>
+  <div class="card" style="padding:0"><table id="vTbl"></table></div>
+  <h2>4. 회신 메일 초안</h2>
+  <textarea id="vReply" rows="8" placeholder="방문 등록을 하면 회신 초안이 여기에 만들어집니다."></textarea>
+</section>
+
+<!-- 5. 장비 터미널 -->
+<section class="tab" id="tab-term">
+  <p class="note">가상 장비입니다. 실제 장비에는 접속하지 않으며, 출력은 전부 지어낸 값입니다.</p>
+  <div class="cols" style="grid-template-columns:2fr 1fr">
+    <div>
+      <div class="toolbar"><label>장비 <select id="devSel"></select></label><button class="btn" id="termClear">화면 지우기</button></div>
+      <div class="term" id="termOut"></div>
+      <div class="termin"><span class="p" id="termPrompt"></span><input type="text" id="termIn" autocomplete="off" spellcheck="false" placeholder="명령 입력 후 Enter (위/아래 화살표: 이전 명령)"></div>
+    </div>
+    <div class="card">
+      <h3>자주 쓰던 명령</h3>
+      <div class="qcmd" id="qcmd"></div>
+      <p class="note">누르면 입력창에 채워집니다. 장비 종류에 맞는 명령만 동작합니다. <span class="crit-t">xe-0/0/3, Te1/0/2 등 일부 회선에 CRC와 광 수신값 이상이 심어져 있습니다.</span></p>
+    </div>
+  </div>
+</section>
+</main>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
