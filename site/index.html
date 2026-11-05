@@ -121,22 +121,37 @@
 
 <!-- 서버실 -->
 <section class="tab" id="tab-room">
-  <p class="note">서버실 점검 업무: 랙 입구 온도 확인과 육안점검(서버 불빛을 보고 판단). 랙·서버·온도는 모두 가상 데이터이고, 온도 기준(27·30·33°C)은 제가 가정한 값입니다. <b>서버 칸을 누르면</b> 그 서버가 연결된 스위치의 가상 터미널이 새 창으로 열립니다.</p>
+  <p class="note">서버실 점검 업무: 랙 입구 온도 확인과 육안점검(서버 불빛을 보고 판단). 랙·서버·온도는 모두 가상 데이터이고, 온도 기준은 ⚙ 설정에서 바꿀 수 있고, 기본값(27·30·33°C)은 제가 가정한 값입니다. <b>서버 칸을 누르면</b> 그 서버가 연결된 스위치의 가상 터미널이 새 창으로 열립니다.</p>
   <div class="toolbar">
     <label>기준 시각 <input type="datetime-local" id="srTime"></label>
     <button class="btn" id="srPrev">&lsaquo; 이전 1시간</button>
     <button class="btn" id="srNext">다음 1시간 &rsaquo;</button>
+    <button class="btn" id="srPlay">▶ 재생</button>
+    <button class="btn" id="cfgToggle">⚙ 설정</button>
     <span class="sp"></span>
     <span class="muted">빠른 이동</span>
     <button class="btn" data-sr="2026-10-22T21:00">평소 저녁</button>
     <button class="btn" data-sr="2026-10-26T15:55">냉각 이상 (A-03)</button>
     <button class="btn" data-sr="2026-10-26T16:15">서버 꺼짐</button>
   </div>
+  <div class="card" id="cfgPanel" hidden style="margin-bottom:12px">
+    <h3>서버실 화면 설정 <span class="muted">(이 브라우저에 저장됩니다)</span></h3>
+    <div class="cfggrid">
+      <label>온도 주의 <input type="number" id="cfgWarn" step="0.5" min="15" max="45"> °C</label>
+      <label>온도 경고 <input type="number" id="cfgHot" step="0.5" min="15" max="45"> °C</label>
+      <label>온도 위험 <input type="number" id="cfgCrit" step="0.5" min="15" max="45"> °C</label>
+      <label>그래프 범위 <select id="cfgRange"><option value="1">1시간</option><option value="3">3시간</option><option value="6">6시간</option><option value="12">12시간</option></select></label>
+      <label>이전/다음 이동 <select id="cfgStep"><option value="1">5분</option><option value="12">1시간</option><option value="72">6시간</option></select></label>
+      <label>재생 속도 <select id="cfgSpeed"><option value="2000">느리게 (2초에 5분)</option><option value="1000">보통 (1초에 5분)</option><option value="400">빠르게 (0.4초에 5분)</option></select></label>
+    </div>
+    <p class="note" id="cfgMsg" style="margin:8px 0 0;color:var(--crit)"></p>
+    <div class="toolbar" style="margin:8px 0 0"><button class="btn" id="cfgReset">기본값으로</button></div>
+  </div>
   <p class="note">LED(왼쪽부터 전원 · 상태 · 디스크): 초록 = 정상, 주황 = 주의, 빨강 깜박임 = 장애, 꺼짐 = 전원 없음</p>
   <div class="racks" id="racks"></div>
   <div class="cols">
     <div>
-      <h2>온도 경고 이력 <small>30°C 이상 (행을 누르면 그 시각으로 이동)</small></h2>
+      <h2>온도 경고 이력 <small><span id="srHot">30</span>°C 이상 (행을 누르면 그 시각으로 이동)</small></h2>
       <div class="card" style="padding:0"><table id="srAlerts"></table></div>
       <h2>자료 내려받기</h2>
       <div class="card">

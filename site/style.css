@@ -100,6 +100,8 @@ tr.sel td{background:#1d2a36}
 
 .srv[data-server]{cursor:pointer}
 .srv[data-server]:hover,.srv[data-server]:focus-visible{border-color:var(--accent);outline:none}
+.cfggrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
+.cfggrid input[type=number]{width:80px}
 body.popup nav.tabs{display:none}
 body.popup main{padding-top:10px}
 body.popup .term{height:calc(100vh - 215px)}

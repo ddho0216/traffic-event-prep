@@ -75,6 +75,24 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('[data-sr="2026-10-26T16:15"]');
   check('냉각 이상 시 위험 랙 1개', (await page.locator('.rack.hot, .rack.crit').count()) === 1);
 
+  await page.click('#cfgToggle');
+  check('설정 패널이 열림', await page.locator('#cfgPanel').isVisible());
+  await page.click('[data-sr="2026-10-22T21:00"]');
+  const hotBefore = await page.locator('.rack.hot, .rack.crit').count();
+  await page.fill('#cfgWarn', '22'); await page.press('#cfgWarn', 'Tab');
+  await page.fill('#cfgHot', '23'); await page.press('#cfgHot', 'Tab');
+  const hotAfter = await page.locator('.rack.hot, .rack.crit').count();
+  check('경고 온도를 낮추면 평소 화면에서도 경고 랙이 생김', hotBefore === 0 && hotAfter >= 3, `${hotBefore} -> ${hotAfter}`);
+  await page.fill('#cfgWarn', '40'); await page.press('#cfgWarn', 'Tab');
+  check('주의 < 경고 < 위험 순서가 아니면 거절', (await page.locator('#cfgMsg').innerText()).includes('순서'));
+  const t0 = await page.locator('#srTime').inputValue();
+  await page.selectOption('#cfgSpeed', '400');
+  await page.click('#srPlay'); await page.waitForTimeout(1500); await page.click('#srPlay');
+  check('재생하면 기준 시각이 흘러감', (await page.locator('#srTime').inputValue()) !== t0);
+  await page.click('#cfgReset');
+  check('기본값으로 되돌리면 경고 랙이 다시 0', (await page.locator('.rack.hot, .rack.crit').count()) === 0);
+  await page.click('#cfgToggle');
+
   const [pop] = await Promise.all([ctx.waitForEvent('page'), page.click('.srv[data-server="A-03-S2"]')]);
   await pop.waitForLoadState('load');
   check('서버를 누르면 새 창에 해당 스위치 터미널이 열림', pop.url().includes('popup=term') && (await pop.locator('#termTarget').innerText()).includes('A-03-S2 → SW-A-03'), await pop.locator('#termTarget').innerText());

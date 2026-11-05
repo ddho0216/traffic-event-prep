@@ -114,6 +114,7 @@ function showTab(name) {
   $$("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
   $$("section.tab").forEach(s => s.classList.toggle("on", s.id === "tab-" + name));
   if (name === "monitor") { renderAll(); renderTasks(); }
+  if (name !== "room" && typeof stopPlay === "function") stopPlay();
   if (name === "room") renderServerRoom();
   try { history.replaceState(null, "", "#" + name); } catch (e) { /* 무시 */ }
 }
@@ -658,7 +659,9 @@ function openServerTerminal(name) {
 })();
 
 /* ---------- 서버실: 온도 체크 + 육안점검 ---------- */
-const TEMP_WARN = 27, TEMP_HOT = 30, TEMP_CRIT = 33;   // 랙 입구 온도 기준 (제가 가정한 값)
+const ROOM_DEFAULT = { warn: 27, hot: 30, crit: 33, range: 3, step: 12, speed: 1000 };   // 기본 온도 기준은 제가 가정한 값
+const cfg = Object.assign({}, ROOM_DEFAULT, store.get("roomCfg", {}));
+let TEMP_WARN = cfg.warn, TEMP_HOT = cfg.hot, TEMP_CRIT = cfg.crit;
 const RACKS = DATA.racks;
 const sr = { end: idxOf(parseT("2026-10-22T21:00")) };
 const tempCls = t => t >= TEMP_CRIT ? "crit" : t >= TEMP_HOT ? "hot" : t >= TEMP_WARN ? "warn" : "ok";
@@ -668,16 +671,18 @@ function srvState(rack, sv, i) {
   if (down) return { power: false, status: "crit", hdd: "off" };
   return { power: true, status: t >= TEMP_CRIT ? "crit" : t >= TEMP_HOT ? "warn" : "ok", hdd: sv.hddWarn ? "warn" : "ok" };
 }
-const ROOM_ALERTS = (() => {
+let ROOM_ALERTS = [];
+function computeRoomAlerts() {
   const res = [];
   RACKS.forEach(r => runs(r.temp.map(t => t >= TEMP_HOT)).forEach(([a, b]) => {
     let p = a; for (let i = a; i <= b; i++) if (r.temp[i] > r.temp[p]) p = i;
     res.push({ rack: r.id, s: a, e: b, peak: p, max: r.temp[p] });
   }));
-  return res.sort((x, y) => x.s - y.s);
-})();
+  ROOM_ALERTS = res.sort((x, y) => x.s - y.s);
+}
+computeRoomAlerts();
 function spark(arr, s, e) {
-  const w = 160, h = 38, lo = 18, hi = 36, X = i => 2 + (i - s) / Math.max(1, e - s) * (w - 4), Y = v => h - 3 - (clamp(v, lo, hi) - lo) / (hi - lo) * (h - 6);
+  const w = 160, h = 38, lo = 18, hi = Math.max(36, TEMP_CRIT + 3), X = i => 2 + (i - s) / Math.max(1, e - s) * (w - 4), Y = v => h - 3 - (clamp(v, lo, hi) - lo) / (hi - lo) * (h - 6);
   let d = ""; for (let i = s; i <= e; i++) d += (i === s ? "M" : "L") + X(i).toFixed(1) + "," + Y(arr[i]).toFixed(1);
   return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}"><line x1="0" x2="${w}" y1="${Y(TEMP_HOT)}" y2="${Y(TEMP_HOT)}" stroke="#e5604d" stroke-dasharray="3 3" opacity=".7"/><line x1="0" x2="${w}" y1="${Y(TEMP_WARN)}" y2="${Y(TEMP_WARN)}" stroke="#d9b13b" stroke-dasharray="3 3" opacity=".6"/><path d="${d}" fill="none" stroke="#e5a93d" stroke-width="1.6"/></svg>`;
 }
@@ -702,7 +707,7 @@ function renderServerRoom() {
     const t = r.temp[i];
     return `<div class="rack ${tempCls(t)}"><div class="rhd"><b>${r.id}</b><span class="tmp ${tempCls(t)}">${t.toFixed(1)}°C</span></div>` +
       r.servers.map(sv => `<div class="srv" data-server="${sv.name}" role="button" tabindex="0" title="누르면 이 서버가 연결된 스위치 터미널이 새 창으로 열립니다 (가상)">${ledHtml(srvState(r, sv, i))}<span class="sname">${sv.name}</span><span class="role">${sv.role}</span></div>`).join("") +
-      spark(r.temp, Math.max(0, i - 35), i) + `<div class="note" style="margin:2px 0 0">최근 3시간 · 점선 27/30°C</div></div>`;
+      spark(r.temp, Math.max(0, i - (cfg.range * 12 - 1)), i) + `<div class="note" style="margin:2px 0 0">최근 ${cfg.range}시간 · 점선 ${TEMP_WARN}/${TEMP_HOT}°C</div></div>`;
   }).join("");
   $("#srAlerts").innerHTML = `<tr><th>시각</th><th>랙</th><th class="n">최고 온도</th></tr>` + (ROOM_ALERTS.length ? ROOM_ALERTS.map((a, k) =>
     `<tr class="click" data-k="${k}"><td>${md(msOf(a.s))} ~ ${hm(msOf(a.e))}</td><td>${a.rack}</td><td class="n crit-t">${a.max.toFixed(1)}°C</td></tr>`).join("") : `<tr><td colspan="3" class="muted">30°C 이상 기록이 없습니다.</td></tr>`);
@@ -720,8 +725,8 @@ function renderInspections() {
 }
 (function initRoom() {
   $("#srTime").addEventListener("change", e => { if (e.target.value) { sr.end = idxOf(parseT(e.target.value)); renderServerRoom(); } });
-  $("#srPrev").onclick = () => { sr.end -= 12; renderServerRoom(); };
-  $("#srNext").onclick = () => { sr.end += 12; renderServerRoom(); };
+  $("#srPrev").onclick = () => { sr.end -= cfg.step; renderServerRoom(); };
+  $("#srNext").onclick = () => { sr.end += cfg.step; renderServerRoom(); };
   $$("[data-sr]").forEach(b => b.onclick = () => { sr.end = idxOf(parseT(b.dataset.sr)); renderServerRoom(); });
   $("#srAlerts").addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { sr.end = ROOM_ALERTS[+tr.dataset.k].peak; renderServerRoom(); } });
   $("#inRack").addEventListener("change", renderServerRoom);
@@ -750,6 +755,37 @@ function renderInspections() {
     const v = store.get("inspections", []), q = x => `"${String(x).replace(/"/g, '""')}"`;
     downloadCsv("inspection_log.csv", ["screen_time,rack,result,inspector,screen_state,memo"].concat(v.map(r => [r.at, r.rack, r.result, r.who, r.summary, r.memo].map(q).join(","))).join("\n"));
   };
+})();
+
+/* ---------- 서버실 설정 패널 ---------- */
+let playTimer = null;
+function stopPlay() { if (playTimer) { clearInterval(playTimer); playTimer = null; } const b = $("#srPlay"); if (b) b.textContent = "▶ 재생"; }
+function startPlay() {
+  stopPlay(); $("#srPlay").textContent = "⏸ 정지";
+  playTimer = setInterval(() => { if (sr.end >= N - 1) { stopPlay(); return; } sr.end += 1; renderServerRoom(); }, cfg.speed);   // 한 번에 5분씩 흐른다
+}
+const stepLabel = n => ({ 1: "5분", 12: "1시간", 72: "6시간" }[n] || `${n * 5}분`);
+function applyRoomCfg(save) {
+  TEMP_WARN = cfg.warn; TEMP_HOT = cfg.hot; TEMP_CRIT = cfg.crit; computeRoomAlerts();
+  $("#cfgWarn").value = cfg.warn; $("#cfgHot").value = cfg.hot; $("#cfgCrit").value = cfg.crit;
+  $("#cfgRange").value = cfg.range; $("#cfgStep").value = cfg.step; $("#cfgSpeed").value = cfg.speed;
+  $("#srPrev").textContent = `\u2039 이전 ${stepLabel(cfg.step)}`; $("#srNext").textContent = `다음 ${stepLabel(cfg.step)} \u203A`;
+  $("#srHot").textContent = TEMP_HOT;
+  if (save) store.set("roomCfg", cfg);
+  renderServerRoom(); renderTasks();
+}
+(function initRoomCfg() {
+  $("#cfgToggle").onclick = () => { const p = $("#cfgPanel"); p.hidden = !p.hidden; $("#cfgToggle").textContent = p.hidden ? "⚙ 설정" : "⚙ 설정 닫기"; };
+  $("#srPlay").onclick = () => { if (playTimer) stopPlay(); else startPlay(); };
+  ["cfgWarn", "cfgHot", "cfgCrit", "cfgRange", "cfgStep", "cfgSpeed"].forEach(id => $("#" + id).addEventListener("change", () => {
+    const w = +$("#cfgWarn").value, h = +$("#cfgHot").value, c = +$("#cfgCrit").value;
+    if (!(w < h && h < c)) { $("#cfgMsg").textContent = "온도는 주의 < 경고 < 위험 순서로 입력하세요. (반영되지 않았습니다)"; return; }
+    $("#cfgMsg").textContent = "";
+    Object.assign(cfg, { warn: w, hot: h, crit: c, range: +$("#cfgRange").value, step: +$("#cfgStep").value, speed: +$("#cfgSpeed").value });
+    applyRoomCfg(true); if (playTimer) startPlay();
+  }));
+  $("#cfgReset").onclick = () => { Object.assign(cfg, ROOM_DEFAULT); $("#cfgMsg").textContent = ""; applyRoomCfg(true); if (playTimer) startPlay(); };
+  applyRoomCfg(false);
 })();
 
 /* ---------- 시작 ---------- */
