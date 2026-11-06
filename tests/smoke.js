@@ -73,31 +73,45 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   }
   await page.setViewportSize({ width: 1600, height: 900 });
 
-  // 센터 선택 동기화: 같은 센터를 고르면 관제 그래프·서버실 랙·터미널 장비·설계도가 모두 그 센터 소속만 보인다
+  // 탭 순서와 센터 선택: 센터 선택은 관제·서버실에서만 보이고, 두 화면이 같은 센터로 동기화된다
+  check('탭 순서: 관제 / 서버실 / 장비 터미널 / 이벤트 대비 / 월간 자료 / 방문 신청', JSON.stringify(await page.locator('#tabs button').allInnerTexts()) === JSON.stringify(['관제', '서버실', '장비 터미널', '이벤트 대비', '월간 자료', '방문 신청']));
+  const vis = {};
+  for (const tab of ['monitor', 'room', 'term', 'event', 'monthly', 'visit']) { await page.click(`[data-tab=${tab}]`); vis[tab] = await page.locator('#centerBar').isVisible(); }
+  check('센터 선택은 관제·서버실에서만 보이고 나머지 탭에서는 숨겨짐', vis.monitor && vis.room && !vis.term && !vis.event && !vis.monthly && !vis.visit, JSON.stringify(vis));
+  await page.click('[data-tab=monitor]');
+  const barMon = await page.locator('#centerBar').innerText();
+  await page.click('[data-tab=room]');
+  const barRoom = await page.locator('#centerBar').innerText();
+  check('센터 버튼 옆의 숫자: 관제에는 없고 서버실에서만 "랙 · 서버" 수가 보임', !/\d/.test(barMon) && /랙 6 · 서버 24/.test(barRoom) && /랙 20 · 서버 80/.test(barRoom), barRoom.replace(/\n/g, ' '));
   const expectBy = await page.evaluate(() => Object.fromEntries(Object.keys(TOPOLOGY.centers).map(c => [c, {
     panels: DATA.links.filter(l => l.id.split('_')[1] === c).map(l => l.id).sort(),
-    racks: DATA.racks.filter(r => r.id.split('_')[1] === c).map(r => r.id).sort(),
-    devs: TOPOLOGY.devices.filter(d => d.id.split('_')[1] === c).map(d => d.id).sort(),
-    links: TOPOLOGY.links.filter(l => l.link.split('_')[1] === c).map(l => l.link).sort()
+    racks: DATA.racks.filter(r => r.id.split('_')[1] === c).map(r => r.id).sort()
   }])));
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   for (const code of ['B', 'S', 'G', 'A']) {
-    await page.click(`#centerBar [data-center=${code}]`);
     await page.click('[data-tab=monitor]');
+    await page.click(`#centerBar [data-center=${code}]`);
     const panels = (await page.locator('.panel:visible').evaluateAll(els => els.map(e => e.id.replace('p-', '')))).sort();
     await page.click('[data-tab=room]');
     const racks = (await page.locator('#racks .rack').evaluateAll(els => els.map(e => e.dataset.rack))).sort();
     const servers = await page.locator('#racks .srv').evaluateAll(els => els.map(e => e.dataset.server));
-    await page.click('[data-tab=term]');
-    const devs = (await page.locator('#devTbl tr.click').evaluateAll(els => els.map(e => e.dataset.dev))).sort();
-    const lnks = (await page.locator('#linkTbl tr.click td:first-child').allInnerTexts()).sort();
-    const sel = await page.locator('#devSel option').evaluateAll(els => els.map(e => e.value));
     const e = expectBy[code];
-    const allCode = [...panels, ...racks, ...servers.map(s => s.replace(/_S\d$/, '')), ...devs, ...sel].every(id => id.split('_')[1] === code);
-    check(`센터 ${code}: 관제 그래프 ${panels.length}·서버실 랙 ${racks.length}·터미널 장비 ${devs.length}·연결 ${lnks.length}이 모두 이 센터 소속이고 설계도와 일치`,
-      same(panels, e.panels) && same(racks, e.racks) && same(devs, e.devs) && same(lnks, e.links) && allCode && servers.length === racks.length * 4,
-      `그래프 ${same(panels, e.panels)}, 랙 ${same(racks, e.racks)}, 장비 ${same(devs, e.devs)}, 연결 ${same(lnks, e.links)}, 이름 ${allCode}`);
+    const allCode = [...panels, ...racks, ...servers.map(s => s.replace(/_S\d$/, ''))].every(id => id.split('_')[1] === code);
+    check(`센터 ${code}: 관제 그래프 ${panels.length}와 서버실 랙 ${racks.length}(서버 ${servers.length})가 같은 센터 소속이고 설계도·데이터와 일치`,
+      same(panels, e.panels) && same(racks, e.racks) && allCode && servers.length === racks.length * 4,
+      `그래프 ${same(panels, e.panels)}, 랙 ${same(racks, e.racks)}, 이름 ${allCode}`);
   }
+  // 터미널은 센터 선택과 상관없이 전체 장비를 보여 준다
+  await page.click('[data-tab=monitor]'); await page.click('#centerBar [data-center=S]');
+  await page.click('[data-tab=term]');
+  const devCount = await page.locator('#devTbl tr.click').count();
+  check('터미널·설계도는 센터 선택과 상관없이 전체 장비를 보여 줌 (서초를 골라도 36대)', devCount === (await page.evaluate(() => TOPOLOGY.devices.length)) && devCount === 36, String(devCount));
+  // 고객사 13곳, 모든 회선에 고객사가 있고, 제목은 길면 줄여서 보인다
+  const cust = await page.evaluate(() => ({ n: CUSTOMERS.length, keys: new Set(CUSTOMERS.map(c => c.key)).size, bad: CUSTOMERS.flatMap(c => c.links).filter(id => !LINK[id]), none: LINKS.filter(l => custOf(l.id).length === 0).map(l => l.id) }));
+  check('고객사 13곳(가상), 이름·키 중복 없음, 존재하지 않는 회선 없음, 고객사가 없는 회선 없음', cust.n === 13 && cust.keys === 13 && cust.bad.length === 0 && cust.none.length === 0, JSON.stringify(cust));
+  await page.click('[data-tab=monitor]'); await page.click('#centerBar [data-center=ALL]');
+  const titles = await page.locator('.panel .hd b').allInnerTexts();
+  check('그래프 제목에 "공용"이 없고, 고객사가 3곳 이상이면 "외 N곳"으로 줄여 보임', titles.every(t => !t.includes('공용')) && titles.some(t => /외 \d+곳/.test(t)) && titles.every(t => t.split(' · ').length <= 2 || /외 \d+곳/.test(t)), titles.join(' | '));
   // 서초를 보다가 "냉각 이상" 버튼을 누르면 사건이 있는 분당으로 센터가 맞춰진다
   await page.click('#centerBar [data-center=S]');
   await page.click('[data-tab=room]');

@@ -63,10 +63,20 @@ function makeZip(files) {
 }
 
 /* ---------- 가상 고객사·센터 ---------- */
-const CUSTOMERS = [
+const CUSTOMERS = [   // 전부 가상 고객사. 회선은 제가 임의로 나눈 것
   { name: "가상물산", key: "gasang", links: ["IDC_B_FS1_UP1", "IDC_B_FS1_UP2"] },
   { name: "예시미디어", key: "yesi-media", links: ["IDC_B_FS1_UP1", "IDC_A_FS1_UP1", "IDC_B_FS2_IX1"] },
-  { name: "샘플게임즈", key: "sample-games", links: ["IDC_G_FS1_UP1", "IDC_S_FR1_UP1"] }
+  { name: "샘플게임즈", key: "sample-games", links: ["IDC_G_FS1_UP1", "IDC_S_FR1_UP1"] },
+  { name: "테스트클라우드", key: "test-cloud", links: ["IDC_S_FR1_UP1"] },
+  { name: "데모스트리밍", key: "demo-streaming", links: ["IDC_B_FS2_IX1", "IDC_B_FS2_INTL1"] },
+  { name: "모의커머스", key: "mock-commerce", links: ["IDC_B_FS1_UP2", "IDC_A_FR1_UP1"] },
+  { name: "가상은행", key: "gasang-bank", links: ["IDC_B_FS1_UP1", "IDC_B_FS1_UP2"] },
+  { name: "예제교육", key: "yeje-edu", links: ["IDC_G_FS1_UP1"] },
+  { name: "샘플방송", key: "sample-broadcast", links: ["IDC_B_FS2_IX1", "IDC_A_FS1_UP1"] },
+  { name: "시험물류", key: "test-logistics", links: ["IDC_A_FR1_UP1"] },
+  { name: "데모헬스", key: "demo-health", links: ["IDC_S_FR1_UP1", "IDC_G_FS1_UP1"] },
+  { name: "가상모빌리티", key: "gasang-mobility", links: ["IDC_A_FS1_UP1", "IDC_A_FR1_UP1"] },
+  { name: "예시금융", key: "yesi-finance", links: ["IDC_B_FS2_INTL1"] }
 ];
 const CENTER_NAME = TOPOLOGY.centers;   // 이름의 센터 코드: IDC_<코드>_... (센터 목록은 설계도에서)
 const CENTER = id => /_(IX|INTL)\d/.test(id) ? "연동" : (CENTER_NAME[id.split("_")[1]] || "연동");
@@ -80,6 +90,10 @@ const ALERTS = (() => { const r = Lib.detectTraffic(DATA); Object.assign(DROP, r
 function showTab(name) {
   $$("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
   $$("section.tab").forEach(s => s.classList.toggle("on", s.id === "tab-" + name));
+  if (typeof renderCenterBar === "function") {   // 센터 선택은 관제와 서버실에서만 보인다
+    $("#centerBar").hidden = !(name === "monitor" || name === "room");
+    if ($("#centerBar").hidden) syncHdr(); else renderCenterBar();
+  }
   if (name === "monitor") { renderAll(); renderTasks(); }
   if (name !== "room" && typeof stopPlay === "function") stopPlay();
   if (name === "room") renderServerRoom();
@@ -105,10 +119,11 @@ function niceMax(v) {
 }
 
 const endpoints = id => { const t = TOPOLOGY.links.find(x => x.link === id); return t ? `${t.a} ${t.ap} → ${esc(t.b)}${t.bp && t.bp !== "-" ? " " + t.bp : ""}` : ""; };
+const custTitle = id => { const n = custOf(id); return n.length === 0 ? "공용 (고객사 없음)" : n.length <= 2 ? n.join(" · ") : `${n.slice(0, 2).join(" · ")} 외 ${n.length - 2}곳`; };
 function buildGrid() {
   $("#grid").innerHTML = LINKS.map(l => `
     <div class="panel" id="p-${l.id}">
-      <div class="hd"><b>${custOf(l.id).join(" · ") || "공용 (고객사 없음)"}</b><span class="sp"></span><span class="chip">정상</span><button class="btn sm csv" data-link="${l.id}">CSV</button></div>
+      <div class="hd"><b title="${esc(custOf(l.id).join(", ") || "고객사 없음")}">${custTitle(l.id)}</b><span class="sp"></span><span class="chip">정상</span><button class="btn sm csv" data-link="${l.id}">CSV</button></div>
       <div class="sub">${l.id} · ${esc(l.desc)} · ${l.cap}G</div>
       <div class="sub2">${endpoints(l.id)}</div>
       <div class="now"></div><div class="svgbox"></div><div class="tip"></div>
@@ -629,34 +644,32 @@ function termBanner() {
 }
 const VENDORS = [["juniper", "Juniper · FS 계열"], ["cisco", "Cisco · FR 계열"], ["huawei", "Huawei · AS 계열"]];
 function fillVendors(keep) {   // 센터 선택에 맞는 장비 수를 보여 주고, 장비가 없는 제조사는 고를 수 없게 한다
-  const cnt = v => DEVICES.filter(d => d.vendor === v && inView(d.id)).length;
+  const cnt = v => DEVICES.filter(d => d.vendor === v).length;
   $("#vendorSel").innerHTML = VENDORS.map(([v, n]) => `<option value="${v}" ${cnt(v) ? "" : "disabled"}>${n} (${cnt(v)}대)</option>`).join("");
   const pick = keep && cnt(keep) ? keep : (VENDORS.map(x => x[0]).find(v => cnt(v)) || "juniper");
   $("#vendorSel").value = pick; fillDevices(pick);
 }
 function fillDevices(vendor, keep) {   // 고른 제조사·센터의 장비만 목록에 보여 준다
-  const list = DEVICES.filter(d => d.vendor === vendor && inView(d.id));
+  const list = DEVICES.filter(d => d.vendor === vendor);
   $("#devSel").innerHTML = list.map(d => `<option value="${d.id}">${d.id} · ${esc(d.role)}</option>`).join("");
   if (keep && list.some(d => d.id === keep)) $("#devSel").value = keep;
 }
 function selectDevice(devId) {
   const d = DEV[devId]; if (!d) return;
-  if (!inView(devId)) setCenter("ALL", false);
   $("#vendorSel").value = d.vendor; fillDevices(d.vendor, devId); termFocus = null; termBanner();
 }
 // 서버 이름으로 연결: 그 서버가 꽂힌 랙 스위치를 고르고 포트 명령을 채워 둔다
 function termConnect(devId, server) {
   const d = DEV[devId]; if (!d) return;
-  if (!inView(devId)) setCenter("ALL", false);
   $("#vendorSel").value = d.vendor; fillDevices(d.vendor, devId); termFocus = { dev: devId, server }; termBanner();
   const first = $("#qcmd button"); if (first) $("#termIn").value = first.dataset.c;
 }
 function renderDesign() {
   const name = Object.fromEntries(VENDORS);
-  const dv = DEVICES.filter(d => inView(d.id)), lk = TOPOLOGY.links.filter(l => inView(l.link));
-  $("#designSum").textContent = `${viewLabel()} · 장비 ${dv.length}대 (${VENDORS.map(([v, n]) => n.split(" ")[0] + " " + dv.filter(d => d.vendor === v).length).join(", ")}) · 연결 ${lk.length}건`;
+  const dv = DEVICES, lk = TOPOLOGY.links;
+  $("#designSum").textContent = `장비 ${dv.length}대 (${VENDORS.map(([v, n]) => n.split(" ")[0] + " " + dv.filter(d => d.vendor === v).length).join(", ")}) · 연결 ${lk.length}건`;
   $("#devTbl").innerHTML = `<tr><th>제조사</th><th>장비</th><th>역할</th><th>센터</th><th class="n">포트</th></tr>` +
-    VENDORS.map(([v]) => DEVICES.filter(d => d.vendor === v && inView(d.id)).map(d => `<tr class="click" data-dev="${d.id}"><td><span class="tag">${name[v]}</span></td><td>${d.id}</td><td>${esc(d.role)}</td><td>${esc(d.center)}</td><td class="n">${d.ifs.length}</td></tr>`).join("")).join("");
+    VENDORS.map(([v]) => DEVICES.filter(d => d.vendor === v).map(d => `<tr class="click" data-dev="${d.id}"><td><span class="tag">${name[v]}</span></td><td>${d.id}</td><td>${esc(d.role)}</td><td>${esc(d.center)}</td><td class="n">${d.ifs.length}</td></tr>`).join("")).join("");
   $("#linkTbl").innerHTML = `<tr><th>연결</th><th>A 장비 · 포트</th><th>B 장비 · 포트</th><th>종류</th><th class="n">Gbps</th></tr>` +
     lk.map(l => `<tr class="click" data-dev="${l.a}"><td>${l.link}</td><td>${l.a} ${l.ap}</td><td>${esc(l.b)}${l.bp && l.bp !== "-" ? " " + l.bp : ""}</td><td>${esc(l.kind)}</td><td class="n">${l.gbps}</td></tr>`).join("");
 }
@@ -818,16 +831,17 @@ function applyRoomCfg(save) {
 })();
 
 /* ---------- 공통 센터 선택: 모든 화면이 같은 센터로 맞춰진다 ---------- */
+const syncHdr = () => document.documentElement.style.setProperty("--hdr", $("header.top").offsetHeight + "px");   // 안내 막대를 헤더 아래에 붙여 두려고
 function renderCenterBar() {
-  const names = TOPOLOGY.centers, cnt = c => TOPOLOGY.devices.filter(d => c === "ALL" || codeOf(d.id) === c).length;
+  const names = TOPOLOGY.centers, inRoom = $("#tab-room").classList.contains("on");
+  const stat = c => { const rs = RACKS.filter(r => c === "ALL" || codeOf(r.id) === c); return `랙 ${rs.length} · 서버 ${rs.reduce((n, r) => n + r.servers.length, 0)}`; };   // 서버실에서만 보여 준다
   $("#centerBar").innerHTML = `<span class="muted">센터</span>` + ["ALL", ...Object.keys(names)].map(c =>
-    `<button class="cbtn${view.center === c ? " on" : ""}" data-center="${c}" title="${c === "ALL" ? "모든 센터" : names[c]}: 관제 그래프, 서버실 랙, 터미널 장비, 설계도를 이 센터로 맞춥니다">${c === "ALL" ? "전체" : names[c]}<small>장비 ${cnt(c)}</small></button>`).join("");
-  document.documentElement.style.setProperty("--hdr", $("header.top").offsetHeight + "px");
+    `<button class="cbtn${view.center === c ? " on" : ""}" data-center="${c}" title="${c === "ALL" ? "모든 센터" : names[c]}">${c === "ALL" ? "전체" : names[c]}${inRoom ? `<small>${stat(c)}</small>` : ""}</button>`).join("");
+  syncHdr();
 }
 function setCenter(code, persist = true) {
   view.center = code; if (persist) store.set("center", code);
   renderCenterBar(); renderAll(); renderServerRoom();
-  termFocus = null; fillVendors($("#vendorSel").value); termBanner(); renderDesign();
 }
 $("#centerBar").addEventListener("click", e => { const b = e.target.closest("[data-center]"); if (b) setCenter(b.dataset.center); });
 renderCenterBar();
@@ -972,8 +986,7 @@ function startScn(id) {
   $("#scnPause").onclick = () => { if (scn && !scn.finished) { scn.paused = !scn.paused; scnProgress(); } };
   $("#scnSkip").onclick = () => { if (!scn || scn.finished) return; scn.idx = scn.i1; scn.hold = 0; scnShowDue(); scnSetView(); scnFinish(); };
   $("#scnClose").onclick = () => { stopScn(); $("#scnBar").hidden = true; showTab("monitor"); goNow(); window.scrollTo({ top: 0, behavior: "smooth" }); };
-  const setHdr = () => document.documentElement.style.setProperty("--hdr", $("header.top").offsetHeight + "px");   // 안내 막대를 헤더 아래에 붙여 두려고
-  setHdr(); window.addEventListener("resize", setHdr);
+  syncHdr(); window.addEventListener("resize", syncHdr);
 })();
 
 /* ---------- 시작 ---------- */
@@ -983,7 +996,7 @@ $("#homeLink").addEventListener("click", e => {   // 제목을 누르면 관제(
 });
 const qs = new URLSearchParams(location.search), h0 = location.hash.slice(1);
 if (qs.get("popup") === "term") {
-  document.body.classList.add("popup"); setCenter("ALL", false);
+  document.body.classList.add("popup");
   showTab("term"); termConnect(qs.get("dev"), qs.get("server"));
   document.title = `${qs.get("server")} 터미널 (가상)`;
   $("#termIn").focus();
