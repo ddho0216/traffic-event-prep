@@ -6,7 +6,7 @@
  "must_alert": [
   {
    "id": "DROP1",
-   "link": "IX-1",
+   "link": "IDC_B_FS2_IX1",
    "kind_any": [
     "in·out 동시 급감"
    ],
@@ -16,7 +16,7 @@
   },
   {
    "id": "DROP2",
-   "link": "CTR-B1",
+   "link": "IDC_A_FS1_UP1",
    "kind_any": [
     "in·out 동시 급감"
    ],
@@ -26,7 +26,7 @@
   },
   {
    "id": "SPIKE1",
-   "link": "OUR-B",
+   "link": "IDC_B_FS1_UP2",
    "kind_any": [
     "in 급증 의심"
    ],
@@ -52,9 +52,9 @@
    "start": "2026-10-24 22:00",
    "end": "2026-10-24 23:55",
    "links": [
-    "OUR-A",
-    "CTR-B1",
-    "IX-1"
+    "IDC_B_FS1_UP1",
+    "IDC_A_FS1_UP1",
+    "IDC_B_FS2_IX1"
    ]
   },
   {
@@ -63,9 +63,9 @@
    "start": "2026-10-25 02:00",
    "end": "2026-10-25 03:55",
    "links": [
-    "OUR-A",
-    "CTR-B1",
-    "IX-1"
+    "IDC_B_FS1_UP1",
+    "IDC_A_FS1_UP1",
+    "IDC_B_FS2_IX1"
    ]
   },
   {
@@ -74,9 +74,9 @@
    "start": "2026-10-26 20:00",
    "end": "2026-10-26 21:55",
    "links": [
-    "OUR-A",
-    "CTR-B1",
-    "IX-1"
+    "IDC_B_FS1_UP1",
+    "IDC_A_FS1_UP1",
+    "IDC_B_FS2_IX1"
    ]
   },
   {
@@ -85,9 +85,9 @@
    "start": "2026-10-28 22:00",
    "end": "2026-10-28 23:55",
    "links": [
-    "OUR-A",
-    "CTR-B1",
-    "IX-1"
+    "IDC_B_FS1_UP1",
+    "IDC_A_FS1_UP1",
+    "IDC_B_FS2_IX1"
    ]
   },
   {
@@ -96,10 +96,10 @@
    "start": "2026-10-30 20:00",
    "end": "2026-10-30 21:55",
    "links": [
-    "OUR-A",
-    "CTR-B1",
-    "IX-1",
-    "OUR-B"
+    "IDC_B_FS1_UP1",
+    "IDC_A_FS1_UP1",
+    "IDC_B_FS2_IX1",
+    "IDC_B_FS1_UP2"
    ]
   },
   {
@@ -108,10 +108,10 @@
    "start": "2026-10-31 02:00",
    "end": "2026-10-31 03:55",
    "links": [
-    "OUR-A",
-    "CTR-B1",
-    "IX-1",
-    "OUR-B"
+    "IDC_B_FS1_UP1",
+    "IDC_A_FS1_UP1",
+    "IDC_B_FS2_IX1",
+    "IDC_B_FS1_UP2"
    ]
   },
   {
@@ -120,11 +120,11 @@
    "start": "2026-11-01 20:00",
    "end": "2026-11-01 21:55",
    "links": [
-    "OUR-A",
-    "CTR-B1",
-    "IX-1",
-    "OUR-B",
-    "CTR-C1"
+    "IDC_B_FS1_UP1",
+    "IDC_A_FS1_UP1",
+    "IDC_B_FS2_IX1",
+    "IDC_B_FS1_UP2",
+    "IDC_G_FS1_UP1"
    ]
   }
  ],

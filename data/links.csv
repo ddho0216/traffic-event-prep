@@ -1,9 +1,9 @@
 link,description,capacity_gbps
-OUR-A,분당 센터 백본 A,100
-OUR-B,분당 센터 백본 B,100
-CTR-B1,안산 센터 백본 1,100
-CTR-B2,안산 센터 백본 2,100
-CTR-C1,구로 센터 백본,200
-CTR-D1,서초 센터 백본,400
-IX-1,국내 연동(IX),100
-INTL-1,해외 연동,100
+IDC_B_FS1_UP1,분당 → 중앙 백본 (A),100
+IDC_B_FS1_UP2,분당 → 중앙 백본 (B),100
+IDC_A_FS1_UP1,안산 → 중앙 백본 (Juniper),100
+IDC_A_FR1_UP1,안산 → 중앙 백본 (Cisco),100
+IDC_G_FS1_UP1,구로 → 중앙 백본,200
+IDC_S_FR1_UP1,서초 센터 백본 (Cisco),400
+IDC_B_FS2_IX1,국내 연동(IX),100
+IDC_B_FS2_INTL1,해외 연동,100

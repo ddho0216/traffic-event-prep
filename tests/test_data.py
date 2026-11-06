@@ -39,7 +39,7 @@ class TrafficData(unittest.TestCase):
         self.assertTrue((self.t.in_gbps <= self.t.capacity_gbps).all())
 
     def test_five_minute_steps(self):
-        one = self.t[self.t.link == "OUR-A"].sort_values("time")
+        one = self.t[self.t.link == "IDC_B_FS1_UP1"].sort_values("time")
         self.assertTrue((one.time.diff().dropna() == pd.Timedelta(minutes=5)).all())
 
     def test_calm_days_stay_below_60_percent(self):
@@ -63,7 +63,7 @@ class TrafficData(unittest.TestCase):
 
     def test_hydration_break_dips_and_recovers(self):
         r = self.ev.iloc[0]
-        a = self.t[(self.t.link == "OUR-A")].set_index("time").out_gbps
+        a = self.t[(self.t.link == "IDC_B_FS1_UP1")].set_index("time").out_gbps
         before = a[r.start + pd.Timedelta(minutes=20)]
         dip = a[r.start + pd.Timedelta(minutes=25)]
         after = a[r.start + pd.Timedelta(minutes=35)]
@@ -71,7 +71,7 @@ class TrafficData(unittest.TestCase):
         self.assertGreater(after, dip)
 
     def test_unplanned_in_spike_is_big(self):
-        b = self.t[self.t.link == "OUR-B"].set_index("time").in_gbps
+        b = self.t[self.t.link == "IDC_B_FS1_UP2"].set_index("time").in_gbps
         normal = b[pd.Timestamp("2026-10-29 03:20") - pd.Timedelta(days=1)]
         self.assertGreater(b[pd.Timestamp("2026-10-29 03:20")], 3 * normal)
 
@@ -79,14 +79,14 @@ class TrafficData(unittest.TestCase):
         idx = self.t.set_index(["link", "time"])
         out, inn = idx.out_gbps, idx.in_gbps
         ts = pd.Timestamp
-        # IX-1: 저녁 피크 중에 전날 같은 시각의 30%보다 낮다
-        self.assertLess(out[("IX-1", ts("2026-10-23 20:30"))], 0.3 * out[("IX-1", ts("2026-10-22 20:30"))])
-        # 빠진 트래픽의 일부를 INTL-1이 더 받는다
-        self.assertGreater(out[("INTL-1", ts("2026-10-23 20:30"))], 1.15 * out[("INTL-1", ts("2026-10-22 20:30"))])
-        # CTR-B1: in·out이 모두 거의 0 (회선 다운), 끝나면 돌아온다
-        self.assertLess(out[("CTR-B1", ts("2026-10-21 14:30"))], 1.0)
-        self.assertLess(inn[("CTR-B1", ts("2026-10-21 14:30"))], 1.0)
-        self.assertGreater(out[("CTR-B1", ts("2026-10-21 15:00"))], 5)
+        # IDC_B_FS2_IX1: 저녁 피크 중에 전날 같은 시각의 30%보다 낮다
+        self.assertLess(out[("IDC_B_FS2_IX1", ts("2026-10-23 20:30"))], 0.3 * out[("IDC_B_FS2_IX1", ts("2026-10-22 20:30"))])
+        # 빠진 트래픽의 일부를 IDC_B_FS2_INTL1이 더 받는다
+        self.assertGreater(out[("IDC_B_FS2_INTL1", ts("2026-10-23 20:30"))], 1.15 * out[("IDC_B_FS2_INTL1", ts("2026-10-22 20:30"))])
+        # IDC_A_FS1_UP1: in·out이 모두 거의 0 (회선 다운), 끝나면 돌아온다
+        self.assertLess(out[("IDC_A_FS1_UP1", ts("2026-10-21 14:30"))], 1.0)
+        self.assertLess(inn[("IDC_A_FS1_UP1", ts("2026-10-21 14:30"))], 1.0)
+        self.assertGreater(out[("IDC_A_FS1_UP1", ts("2026-10-21 15:00"))], 5)
 
     def test_same_seed_gives_same_data(self):
         def digest():

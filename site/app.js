@@ -64,11 +64,12 @@ function makeZip(files) {
 
 /* ---------- 가상 고객사·센터 ---------- */
 const CUSTOMERS = [
-  { name: "가상물산", key: "gasang", links: ["OUR-A", "OUR-B"] },
-  { name: "예시미디어", key: "yesi-media", links: ["OUR-A", "CTR-B1", "IX-1"] },
-  { name: "샘플게임즈", key: "sample-games", links: ["CTR-C1", "CTR-D1"] }
+  { name: "가상물산", key: "gasang", links: ["IDC_B_FS1_UP1", "IDC_B_FS1_UP2"] },
+  { name: "예시미디어", key: "yesi-media", links: ["IDC_B_FS1_UP1", "IDC_A_FS1_UP1", "IDC_B_FS2_IX1"] },
+  { name: "샘플게임즈", key: "sample-games", links: ["IDC_G_FS1_UP1", "IDC_S_FR1_UP1"] }
 ];
-const CENTER = id => id.startsWith("OUR") ? "분당 센터" : id.startsWith("CTR-B") ? "안산 센터" : id === "CTR-C1" ? "구로 센터" : id === "CTR-D1" ? "서초 센터" : "연동";
+const CENTER_NAME = { B: "분당 센터", S: "서초 센터", G: "구로 센터", A: "안산 센터" };   // 이름의 센터 코드: IDC_<코드>_...
+const CENTER = id => /_(IX|INTL)\d/.test(id) ? "연동" : (CENTER_NAME[id.split("_")[1]] || "연동");
 
 /* ---------- 경고 탐지: 규칙은 lib.js에 있다 (터미널에서도 시험할 수 있게 분리) ---------- */
 const { runs, median } = Lib;
@@ -412,7 +413,7 @@ function evCalc(ev) {
   });
   const moves = rows.filter(r => r.level === "crit").map(r => {
     const need = r.exp - TARGET * r.l.cap;
-    const cands = rows.filter(c => c.l.id !== r.l.id && c.level !== "crit" && !/^(IX|INTL)/.test(c.l.id))
+    const cands = rows.filter(c => c.l.id !== r.l.id && c.level !== "crit" && !/_(IX|INTL)\d/.test(c.l.id))
       .map(c => ({ c, spare: 0.70 * c.l.cap - c.exp, same: CENTER(c.l.id) === CENTER(r.l.id) }))
       .filter(x => x.spare > 0).sort((a, b) => (b.same - a.same) || (b.spare - a.spare));
     const best = cands[0];
@@ -546,7 +547,7 @@ const addPort = (dev, port, peer, link) => {
 TOPOLOGY.links.forEach(l => { addPort(l.a, l.ap, l.b, l); if (DEV[l.b]) addPort(l.b, l.bp, l.a, l); });
 // 랙 서버: 랙 스위치 포트 하나에 서버 한 대 (A 랙은 Juniper, B 랙은 Huawei)
 DATA.racks.forEach((r, ri) => {
-  const tor = DEV["SW-" + r.id]; if (!tor) return;
+  const tor = DEVICES.find(d => d.rack === r.id); if (!tor) return;
   r.servers.forEach(sv => {
     const port = tor.vendor === "juniper" ? `xe-0/0/${sv.slot - 1}` : `XGigabitEthernet0/1/${sv.slot}`;
     let crc = 0, rx = -3 - ((sv.slot + ri) % 4) * 0.15;
@@ -600,7 +601,7 @@ function quickCmds() {
     cisco: [`show interface ${bad[0]} | include CRC`, `show interface ${ok[0]} | include CRC`],
     huawei: [`display transceiver interface ${bad[0].replace("XGigabitEthernet", "XGigabitEthernet ")} verbose`, `display interface ${bad[0].replace("XGigabitEthernet", "XGigabitEthernet ")} | include CRC`]
   }[d.vendor];
-  $("#qcmd").innerHTML = list.map(c => `<button data-c="${esc(c)}">${esc(c)}</button>`).join("");
+  $("#qcmd").innerHTML = [...new Set(list)].map(c => `<button data-c="${esc(c)}">${esc(c)}</button>`).join("");   // 포트가 하나뿐인 장비는 같은 명령이 두 번 나오지 않게
 }
 let termFocus = null;
 const termHist = []; let hp = 0;
@@ -612,7 +613,7 @@ function termBanner() {
   $("#termTarget").textContent = f ? `${termFocus.server} → ${d.id} · 포트 ${f[0]}` : "";
   quickCmds();
 }
-const VENDORS = [["juniper", "Juniper"], ["cisco", "Cisco"], ["huawei", "Huawei"]];
+const VENDORS = [["juniper", "Juniper · FS 계열"], ["cisco", "Cisco · FR 계열"], ["huawei", "Huawei · AS 계열"]];
 function fillDevices(vendor, keep) {   // 고른 제조사의 장비만 목록에 보여 준다
   const list = DEVICES.filter(d => d.vendor === vendor);
   $("#devSel").innerHTML = list.map(d => `<option value="${d.id}">${d.id} · ${esc(d.role)}</option>`).join("");
@@ -637,7 +638,8 @@ function renderDesign() {
 }
 function openServerTerminal(name) {
   const rack = DATA.racks.find(r => r.servers.some(x => x.name === name)); if (!rack) return;
-  const devId = "SW-" + rack.id;
+  const tor = DEVICES.find(d => d.rack === rack.id); if (!tor) return;
+  const devId = tor.id;
   const q = new URLSearchParams({ popup: "term", dev: devId, server: name });
   const w = window.open(location.pathname + "?" + q.toString(), "term-" + name, "width=880,height=660");
   if (w) { try { w.focus(); } catch (e) { /* 무시 */ } return; }
@@ -804,6 +806,8 @@ const runOn = (devId, cmd) => `${DEV[devId].prompt} ${cmd}\n${runCmd(cmd, DEV[de
 // 숫자는 전부 데이터에서 읽어 문장을 만든다 (고정 문구 아님)
 function buildScenarios() {
   const TD = Lib.TEMP_DEFAULTS;
+  const OA = "IDC_B_FS1_UP1", OB = "IDC_B_FS1_UP2", IX = "IDC_B_FS2_IX1", INTL = "IDC_B_FS2_INTL1", EDGE = "IDC_B_FS2";   // 아래에서 새 이름으로 바뀐다
+  const torOf = rack => DEVICES.find(d => d.rack === rack);
 
   // 1) 평일 오후 7시: 평소 점검
   const calmFrom = "2026-10-22T18:30", c2 = "2026-10-22T18:45", c3 = "2026-10-22T19:00", c4 = "2026-10-22T19:30";
@@ -814,57 +818,57 @@ function buildScenarios() {
   const calm = { name: "평일 오후 7시", tab: "monitor", win: 12, from: calmFrom, to: "2026-10-22T19:40", steps: [
     { at: calmFrom, kind: "확인", title: `그래프 8개 확인: 가장 높은 사용률 ${maxU(calmFrom).toFixed(0)}% (경고선 80% 아래)`, focus: LINKS.map(l => l.id) },
     { at: c2, kind: "확인", title: `서버실 확인: 랙 입구 온도 최고 ${g1(maxT(c2))}°C (주의 기준 ${TD.warn}°C 아래), LED 정상${hdd.length ? `, 디스크 주의 ${hdd.join(", ")}(교체 대기)` : ""}` },
-    { at: c3, kind: "확인", title: `저녁 피크로 올라가는 중: OUR-A out ${g1(outAt("OUR-A", calmFrom))}G → ${g1(outAt("OUR-A", c3))}G, 평소 범위`, focus: ["OUR-A"] },
+    { at: c3, kind: "확인", title: `저녁 피크로 올라가는 중: ${OA} out ${g1(outAt(OA, calmFrom))}G → ${g1(outAt(OA, c3))}G, 평소 범위`, focus: [OA] },
     { at: c4, kind: "결과", title: `이상 없음: 이 시각 전후 새 경고 ${near}건. 점검 기록을 남기고 다음 점검으로`, focus: [] }
   ] };
 
-  // 2) 트래픽 급감: IX-1
-  const dropA = ALERTS.find(a => a.link === "IX-1" && a.kind.includes("급감"));
+  // 2) 트래픽 급감: 국내 연동(IX)
+  const dropA = ALERTS.find(a => a.link === IX && a.kind.includes("급감"));
   const dt = m => isoLocal(msOf(dropA.s) + m * 60000);   // 급감이 시작된 시각 기준 분
-  const pct = (outAt("IX-1", dt(0)) / outAt("IX-1", prevDay(dt(0))) * 100).toFixed(0);
-  const ixCust = CUSTOMERS.find(c => c.links.includes("IX-1")).name;
-  const dropMail = `제목: [안내] 국내 연동(IX-1) 트래픽 감소 확인 중\n\n${ixCust} 담당자님, 안녕하세요.\n${hhmm(dropA.s)}부터 국내 연동(IX-1) 트래픽이 평소의 ${pct}% 수준으로 줄어든 것을 확인했습니다.\n현재 일부 트래픽은 해외 연동(INTL-1)으로 우회되어 서비스는 유지되고 있습니다.\n상대 사업자에 확인을 요청했고, 진행 상황은 다시 안내드리겠습니다. (가상 메일)`;
+  const pct = (outAt(IX, dt(0)) / outAt(IX, prevDay(dt(0))) * 100).toFixed(0);
+  const ixCust = CUSTOMERS.find(c => c.links.includes(IX)).name;
+  const dropMail = `제목: [안내] 국내 연동(IX) 트래픽 감소 확인 중\n\n${ixCust} 담당자님, 안녕하세요.\n${hhmm(dropA.s)}부터 국내 연동(IX) 트래픽이 평소의 ${pct}% 수준으로 줄어든 것을 확인했습니다.\n현재 일부 트래픽은 해외 연동으로 우회되어 서비스는 유지되고 있습니다.\n상대 사업자에 확인을 요청했고, 진행 상황은 다시 안내드리겠습니다. (가상 메일)`;
   const drop = { name: "트래픽 급감", tab: "monitor", win: 12, from: dt(-20), to: dt(60), steps: [
-    { at: dt(0), kind: "감지", title: `IX-1 out이 전날 같은 시각 ${g1(outAt("IX-1", prevDay(dt(0))))}G에서 ${g1(outAt("IX-1", dt(0)))}G로 급감 (평소의 ${pct}%). 종 알림에 '확인 필요'로 등록`, focus: ["IX-1"] },
-    { at: dt(5), kind: "확인", title: `같은 시각 INTL-1 out ${g1(outAt("INTL-1", dt(-5)))}G → ${g1(outAt("INTL-1", dt(5)))}G로 증가: 빠진 트래픽 일부가 해외 회선으로 우회 중으로 보임`, focus: ["IX-1", "INTL-1"] },
-    { at: dt(10), kind: "조치", title: "BB-EDGE에서 IX-1 포트(xe-0/0/2) 광값 확인", detail: runOn("BB-EDGE", "show interfaces diagnostics optics xe-0/0/2") + "\n\n→ 광 수신값이 정상 범위. 우리 쪽 광 문제는 아님", sum: `광 수신 ${DEV["BB-EDGE"].ifs.find(x => x[0] === "xe-0/0/2")[3].toFixed(2)} dBm, 알람 없음 → 정상. 우리 쪽 광 문제는 아님`, detailLabel: "터미널 출력 보기", focus: ["IX-1"] },
+    { at: dt(0), kind: "감지", title: `${IX}(국내 연동) out이 전날 같은 시각 ${g1(outAt(IX, prevDay(dt(0))))}G에서 ${g1(outAt(IX, dt(0)))}G로 급감 (평소의 ${pct}%). 종 알림에 '확인 필요'로 등록`, focus: [IX] },
+    { at: dt(5), kind: "확인", title: `같은 시각 ${INTL}(해외 연동) out ${g1(outAt(INTL, dt(-5)))}G → ${g1(outAt(INTL, dt(5)))}G로 증가: 빠진 트래픽 일부가 해외 회선으로 우회 중으로 보임`, focus: [IX, INTL] },
+    { at: dt(10), kind: "조치", title: `${EDGE}에서 ${IX} 포트(xe-0/0/2) 광값 확인`, detail: runOn(EDGE, "show interfaces diagnostics optics xe-0/0/2") + "\n\n→ 광 수신값이 정상 범위. 우리 쪽 광 문제는 아님", sum: `광 수신 ${DEV[EDGE].ifs.find(x => x[0] === "xe-0/0/2")[3].toFixed(2)} dBm, 알람 없음 → 정상. 우리 쪽 광 문제는 아님`, detailLabel: "터미널 출력 보기", focus: [IX] },
     { at: dt(15), kind: "조치", title: `상대 IX 사업자에 확인 요청, 영향 고객사(${ixCust})에 상황 안내`, detail: dropMail, detailLabel: "고객사 안내 메일 보기" },
-    { at: dt(50), kind: "결과", title: `IX-1 회복: out ${g1(outAt("IX-1", dt(50)))}G (전날 같은 시각 ${g1(outAt("IX-1", prevDay(dt(50))))}G). 급감 구간 ${hhmm(dropA.s)}~${hhmm(dropA.e)} (${(dropA.e - dropA.s + 1) * 5}분)`, focus: ["IX-1", "INTL-1"] },
-    { at: dt(55), kind: "결과", title: "복구 안내 메일 발송, 경고 이력에 기록하고 마무리", focus: ["IX-1"] }
+    { at: dt(50), kind: "결과", title: `${IX} 회복: out ${g1(outAt(IX, dt(50)))}G (전날 같은 시각 ${g1(outAt(IX, prevDay(dt(50))))}G). 급감 구간 ${hhmm(dropA.s)}~${hhmm(dropA.e)} (${(dropA.e - dropA.s + 1) * 5}분)`, focus: [IX, INTL] },
+    { at: dt(55), kind: "결과", title: "복구 안내 메일 발송, 경고 이력에 기록하고 마무리", focus: [IX] }
   ] };
 
   // 3) 트래픽 폭주: 월드컵 8강
   const ev = DATA.events.find(e => e.name.includes("8강")), cc = evCalc(ev);
   const kt = m => isoLocal(parseT(ev.start) + m * 60000);   // 킥오프 기준 분
-  const A = cc.rows.find(r => r.l.id === "OUR-A"), mv = cc.moves.find(m => m.r.l.id === "OUR-A");
-  let pk = cc.s; for (let i = cc.s; i <= cc.e; i++) if (LINK["OUR-A"].out[i] > LINK["OUR-A"].out[pk]) pk = i;
+  const A = cc.rows.find(r => r.l.id === OA), mv = cc.moves.find(m => m.r.l.id === OA);
+  let pk = cc.s; for (let i = cc.s; i <= cc.e; i++) if (LINK[OA].out[i] > LINK[OA].out[pk]) pk = i;
   const surge = { name: "트래픽 폭주", tab: "monitor", win: 36, from: kt(-30), to: kt(130), steps: [
     { at: kt(-30), kind: "조치", title: `사전 연락(전날 발송)한 통보문대로 고객사에 '이쪽으로 보내겠습니다' 안내 완료 (${ev.name})`, detail: evNoticeText(ev, cc), detailLabel: "고객사 통보문 보기", focus: ev.links },
-    { at: kt(-15), kind: "조치", title: mv ? `분산 시작: OUR-A 예상 ${A.exp.toFixed(0)}G(${(A.util * 100).toFixed(0)}%) → 약 ${Math.max(1, Math.ceil(mv.need))}G를 ${mv.best ? mv.best.c.l.id : "여유 회선"}로 보냄` : "분산이 필요한 링크 없음, 모니터링만", focus: ["OUR-A", "OUR-B"] },
-    { at: kt(0), kind: "확인", title: `킥오프: OUR-A ${utilAt("OUR-A", kt(0)).toFixed(0)}%에서 올라가는 중`, focus: ev.links },
-    { at: kt(25), kind: "확인", title: `하이드레이션 타임: OUR-A ${g1(outAt("OUR-A", kt(20)))}G → ${g1(outAt("OUR-A", kt(25)))}G로 잠깐 감소. 급감이 아니라 경기 일정으로 설명되는 하락`, focus: ["OUR-A"] },
-    { at: isoLocal(msOf(pk)), kind: "감지", title: `OUR-A 최고 ${(LINK["OUR-A"].out[pk] / LINK["OUR-A"].cap * 100).toFixed(0)}% (${g1(LINK["OUR-A"].out[pk])}G): 경고선 80% 도달. 분산 상태와 고객사 영향을 집중 확인`, focus: ["OUR-A"] },
-    { at: kt(115), kind: "확인", title: `경기 종료: 트래픽이 급락하는 것은 정상 (${g1(outAt("OUR-A", kt(110)))}G → ${g1(outAt("OUR-A", kt(120)))}G)`, focus: ["OUR-A"] },
-    { at: kt(125), kind: "결과", title: `사후 정리: OUR-A 예상 ${A.exp.toFixed(0)}G, 실제 최대 ${A.act.toFixed(0)}G (${((A.act / A.exp - 1) * 100).toFixed(0)}%). 다음에는 배율을 ×${(1 + (A.act - A.base) / refPeak(A.l)).toFixed(1)}로`, focus: [] }
+    { at: kt(-15), kind: "조치", title: mv ? `분산 시작: ${OA} 예상 ${A.exp.toFixed(0)}G(${(A.util * 100).toFixed(0)}%) → 약 ${Math.max(1, Math.ceil(mv.need))}G를 ${mv.best ? mv.best.c.l.id : "여유 회선"}로 보냄` : "분산이 필요한 링크 없음, 모니터링만", focus: [OA, OB] },
+    { at: kt(0), kind: "확인", title: `킥오프: ${OA} ${utilAt(OA, kt(0)).toFixed(0)}%에서 올라가는 중`, focus: ev.links },
+    { at: kt(25), kind: "확인", title: `하이드레이션 타임: ${OA} ${g1(outAt(OA, kt(20)))}G → ${g1(outAt(OA, kt(25)))}G로 잠깐 감소. 급감이 아니라 경기 일정으로 설명되는 하락`, focus: [OA] },
+    { at: isoLocal(msOf(pk)), kind: "감지", title: `${OA} 최고 ${(LINK[OA].out[pk] / LINK[OA].cap * 100).toFixed(0)}% (${g1(LINK[OA].out[pk])}G): 경고선 80% 도달. 분산 상태와 고객사 영향을 집중 확인`, focus: [OA] },
+    { at: kt(115), kind: "확인", title: `경기 종료: 트래픽이 급락하는 것은 정상 (${g1(outAt(OA, kt(110)))}G → ${g1(outAt(OA, kt(120)))}G)`, focus: [OA] },
+    { at: kt(125), kind: "결과", title: `사후 정리: ${OA} 예상 ${A.exp.toFixed(0)}G, 실제 최대 ${A.act.toFixed(0)}G (${((A.act / A.exp - 1) * 100).toFixed(0)}%). 다음에는 배율을 ×${(1 + (A.act - A.base) / refPeak(A.l)).toFixed(1)}로`, focus: [] }
   ] };
 
   // 4) 서버 온도 변화: A-03 냉각 이상
   const R3 = RACKS.find(r => r.id === "A-03"), al = Lib.detectRoom(RACKS, TD).find(a => a.rack === "A-03");
   const fc = R3.temp.findIndex((t, i) => i >= al.s && t >= TD.crit), sv = R3.servers.find(x => x.downStart);
-  const dMs = parseT(sv.downStart), tAt = i => g1(R3.temp[i]);
+  const dMs = parseT(sv.downStart), tAt = i => g1(R3.temp[i]), tor = torOf("A-03");
   const temp = { name: "서버 온도 변화", tab: "room", from: "2026-10-26T14:30", to: "2026-10-26T17:20", steps: [
     { at: isoLocal(msOf(al.s)), kind: "감지", title: `A-03 입구 온도 ${TD.hot}°C 이상 (${tAt(al.s)}°C): 온도 경고 등록`, focus: ["A-03"] },
     { at: isoLocal(msOf(fc)), kind: "감지", title: `${TD.crit}°C 이상 (${tAt(fc)}°C): 서버 LED 상태가 빨강 깜박임`, focus: ["A-03"] },
     { at: isoLocal(msOf(fc) + 15 * 60000), kind: "조치", title: "냉각기 점검 요청(티켓)과 육안점검 요청", focus: ["A-03"] },
     { at: isoLocal(dMs), kind: "감지", title: `${sv.name} 과열로 꺼짐 (전원 LED 꺼짐)`, focus: ["A-03"] },
-    { at: isoLocal(dMs + 10 * 60000), kind: "조치", title: `터미널로 ${sv.name}이 연결된 스위치 포트 확인: 빛이 안 들어와서 서버가 꺼진 것으로 확인`, detail: runOn("SW-A-03", `show interfaces diagnostics optics xe-0/0/${sv.slot - 1}`), sum: `광 수신 ${DEV["SW-A-03"].ifs.find(x => x[1] === sv.name)[3].toFixed(2)} dBm, 수신 낮음 알람 켜짐 → 빛이 안 들어옴`, detailLabel: "터미널 출력 보기", focus: ["A-03"] },
+    { at: isoLocal(dMs + 10 * 60000), kind: "조치", title: `터미널로 ${sv.name}이 연결된 스위치(${tor.id}) 포트 확인: 빛이 안 들어와서 서버가 꺼진 것으로 확인`, detail: runOn(tor.id, `show interfaces diagnostics optics xe-0/0/${sv.slot - 1}`), sum: `광 수신 ${DEV[tor.id].ifs.find(x => x[1] === sv.name)[3].toFixed(2)} dBm, 수신 낮음 알람 켜짐 → 빛이 안 들어옴`, detailLabel: "터미널 출력 보기", focus: ["A-03"] },
     { at: isoLocal(msOf(al.e) + 5 * 60000), kind: "확인", title: `냉각 복구: ${TD.hot}°C 아래로 내려옴 (${tAt(al.e + 1)}°C)`, focus: ["A-03"] },
     { at: "2026-10-26T17:15", kind: "결과", title: `복구 완료 (${tAt(isoIdx("2026-10-26T17:15"))}°C). 육안점검 기록 남김: A-03 이상 있음 → 정상 복귀`, focus: ["A-03"] }
   ] };
 
   return { calm, drop, surge, temp };
 }
-const SCN_LIST = [["calm", "평일 오후 7시", "저녁 피크 전 평소 점검 (이상 없음)"], ["drop", "트래픽 급감", "IX-1이 갑자기 빠짐: 원인 확인과 조치"], ["surge", "트래픽 폭주", "월드컵 8강: 사전 연락·분산·모니터링"], ["temp", "서버 온도 변화", "A-03 냉각 이상: 육안점검·터미널 확인·복구"]];
+const SCN_LIST = [["calm", "평일 오후 7시", "저녁 피크 전 평소 점검 (이상 없음)"], ["drop", "트래픽 급감", "국내 연동(IX)이 갑자기 빠짐: 원인 확인과 조치"], ["surge", "트래픽 폭주", "월드컵 8강: 사전 연락·분산·모니터링"], ["temp", "서버 온도 변화", "A-03 냉각 이상: 육안점검·터미널 확인·복구"]];
 let scn = null;
 function stopScn() { if (scn && scn.timer) clearInterval(scn.timer); scn = null; HL.clear(); }
 function scnSetView() {

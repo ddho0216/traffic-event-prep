@@ -1,8 +1,8 @@
 event_id,name,start,end,links,expected_factor,marks
-EV1,월드컵 조별 1경기,2026-10-24 22:00,2026-10-24 23:55,"OUR-A,CTR-B1,IX-1",1.5,hydration:25-28;halftime:47-62;hydration:87-90
-EV2,월드컵 조별 2경기,2026-10-25 02:00,2026-10-25 03:55,"OUR-A,CTR-B1,IX-1",1.5,hydration:25-28;halftime:47-62;hydration:87-90
-EV3,월드컵 조별 3경기,2026-10-26 20:00,2026-10-26 21:55,"OUR-A,CTR-B1,IX-1",1.5,hydration:25-28;halftime:47-62;hydration:87-90
-EV4,월드컵 16강,2026-10-28 22:00,2026-10-28 23:55,"OUR-A,CTR-B1,IX-1",1.6,hydration:25-28;halftime:47-62;hydration:87-90
-EV5,월드컵 8강,2026-10-30 20:00,2026-10-30 21:55,"OUR-A,CTR-B1,IX-1,OUR-B",1.7,hydration:25-28;halftime:47-62;hydration:87-90
-EV6,월드컵 4강,2026-10-31 02:00,2026-10-31 03:55,"OUR-A,CTR-B1,IX-1,OUR-B",1.7,hydration:25-28;halftime:47-62;hydration:87-90
-EV7,월드컵 결승,2026-11-01 20:00,2026-11-01 21:55,"OUR-A,CTR-B1,IX-1,OUR-B,CTR-C1",1.8,hydration:25-28;halftime:47-62;hydration:87-90
+EV1,월드컵 조별 1경기,2026-10-24 22:00,2026-10-24 23:55,"IDC_B_FS1_UP1,IDC_A_FS1_UP1,IDC_B_FS2_IX1",1.5,hydration:25-28;halftime:47-62;hydration:87-90
+EV2,월드컵 조별 2경기,2026-10-25 02:00,2026-10-25 03:55,"IDC_B_FS1_UP1,IDC_A_FS1_UP1,IDC_B_FS2_IX1",1.5,hydration:25-28;halftime:47-62;hydration:87-90
+EV3,월드컵 조별 3경기,2026-10-26 20:00,2026-10-26 21:55,"IDC_B_FS1_UP1,IDC_A_FS1_UP1,IDC_B_FS2_IX1",1.5,hydration:25-28;halftime:47-62;hydration:87-90
+EV4,월드컵 16강,2026-10-28 22:00,2026-10-28 23:55,"IDC_B_FS1_UP1,IDC_A_FS1_UP1,IDC_B_FS2_IX1",1.6,hydration:25-28;halftime:47-62;hydration:87-90
+EV5,월드컵 8강,2026-10-30 20:00,2026-10-30 21:55,"IDC_B_FS1_UP1,IDC_A_FS1_UP1,IDC_B_FS2_IX1,IDC_B_FS1_UP2",1.7,hydration:25-28;halftime:47-62;hydration:87-90
+EV6,월드컵 4강,2026-10-31 02:00,2026-10-31 03:55,"IDC_B_FS1_UP1,IDC_A_FS1_UP1,IDC_B_FS2_IX1,IDC_B_FS1_UP2",1.7,hydration:25-28;halftime:47-62;hydration:87-90
+EV7,월드컵 결승,2026-11-01 20:00,2026-11-01 21:55,"IDC_B_FS1_UP1,IDC_A_FS1_UP1,IDC_B_FS2_IX1,IDC_B_FS1_UP2,IDC_G_FS1_UP1",1.8,hydration:25-28;halftime:47-62;hydration:87-90

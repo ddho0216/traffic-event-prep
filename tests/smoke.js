@@ -22,10 +22,10 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('그래프 패널 8개', (await page.locator('.panel').count()) === 8);
   check('가상 데이터 표시가 맨 위에 있음', (await page.locator('.badge').innerText()).includes('가상 데이터'));
 
-  const box = await page.locator('#p-OUR-A svg').boundingBox();
+  const box = await page.locator('#p-IDC_B_FS1_UP1 svg').boundingBox();
   await page.mouse.move(box.x + box.width * 0.6, box.y + 60);
   await page.waitForTimeout(150);
-  const tip = await page.locator('#p-OUR-A .tip').innerText();
+  const tip = await page.locator('#p-IDC_B_FS1_UP1 .tip').innerText();
   check('hover하면 in/out 값이 뜸', /IN/.test(tip) && /OUT/.test(tip), tip.replace(/\n/g, ' | '));
 
   const [csv] = await Promise.all([page.waitForEvent('download'), page.click('#csvAll')]);
@@ -53,13 +53,13 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.locator('#alertTbl tr.click').first().click();
   check('알림 행을 누르면 닫히고 관제의 그 시각으로 이동 (10/21)', !(await page.locator('#notif').isVisible()) && (await page.locator('#tab-monitor').isVisible()) && (await page.locator('#endTime').inputValue()).startsWith('2026-10-21'));
   await goTo('2026-10-23T20:35');
-  check('급감 구간에서 IX-1 패널에 급감 표시', (await page.locator('#p-IX-1 .chip').innerText()) === '급감');
+  check('급감 구간에서 IDC_B_FS2_IX1 패널에 급감 표시', (await page.locator('#p-IDC_B_FS2_IX1 .chip').innerText()) === '급감');
   await goTo('2026-10-21T14:35');
-  check('회선 다운 구간에서 CTR-B1 패널에 급감 표시', (await page.locator('#p-CTR-B1 .chip').innerText()) === '급감');
+  check('회선 다운 구간에서 IDC_A_FS1_UP1 패널에 급감 표시', (await page.locator('#p-IDC_A_FS1_UP1 .chip').innerText()) === '급감');
 
   await goTo('2026-10-30T22:05', 36);
-  const marks = await page.locator('#p-OUR-A svg text', { hasText: '하프타임' }).count()
-    + await page.locator('#p-OUR-A svg text', { hasText: '하이드레이션' }).count();
+  const marks = await page.locator('#p-IDC_B_FS1_UP1 svg text', { hasText: '하프타임' }).count()
+    + await page.locator('#p-IDC_B_FS1_UP1 svg text', { hasText: '하이드레이션' }).count();
   check('경기 시간대에서 하이드레이션·하프타임 표시', marks >= 2, String(marks));
 
   // 빠른 이동 버튼은 없고, "현재로" 버튼 하나로 돌아온다
@@ -74,7 +74,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.setViewportSize({ width: 1600, height: 900 });
 
   // 시나리오 4가지: 시간이 흘러가고, 단계(감지·확인·조치·결과)가 나오고, 닫으면 현재로 돌아온다
-  const scenarios = [['calm', '평일 오후 7시', 4, ['그래프 8개 확인', '서버실 확인', '이상 없음']], ['drop', '트래픽 급감', 6, ['급감', 'INTL-1', '광값', '예시미디어', '회복']],
+  const scenarios = [['calm', '평일 오후 7시', 4, ['그래프 8개 확인', '서버실 확인', '이상 없음']], ['drop', '트래픽 급감', 6, ['급감', 'IDC_B_FS2_INTL1', '광값', '예시미디어', '회복']],
     ['surge', '트래픽 폭주', 7, ['사전 연락', '분산', '하이드레이션', '경고선 80%', '사후 정리', '[사전 안내]']], ['temp', '서버 온도 변화', 7, ['온도 경고', '빨강 깜박임', '터미널', '냉각 복구', '-40.00 dBm']]];
   for (const [id, name, n, words] of scenarios) {
     await page.click('[data-tab=monitor]');
@@ -88,10 +88,10 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
     const cnt = await page.locator('#scnSteps li').count();
     check(`시나리오 "${name}": 단계 ${n}개와 핵심 내용이 나옴`, cnt === n && words.every(w => txt.includes(w)), `단계 ${cnt}/${n}, 빠진 말: ${words.filter(w => !txt.includes(w)).join(',') || '없음'}`);
     if (id === 'drop') {
-      check('급감 시나리오: IX-1 패널이 강조 표시됨', (await page.locator('#p-IX-1.hl').count()) === 1);
+      check('급감 시나리오: IDC_B_FS2_IX1 패널이 강조 표시됨', (await page.locator('#p-IDC_B_FS2_IX1.hl').count()) === 1);
       await page.waitForTimeout(1200);   // 자동 스크롤이 끝나길 기다림
-      const vis = await page.evaluate(() => { const r = document.querySelector('#p-IX-1').getBoundingClientRect(), bar = document.querySelector('#scnBar').getBoundingClientRect(); return { top: r.top, bottom: r.bottom, barBottom: bar.bottom, h: innerHeight }; });
-      check('급감 시나리오: 강조된 IX-1 패널이 안내 막대에 가리지 않고 화면 안에 보임', vis.top >= vis.barBottom - 2 && vis.bottom <= vis.h + 2, JSON.stringify(vis));
+      const vis = await page.evaluate(() => { const r = document.querySelector('#p-IDC_B_FS2_IX1').getBoundingClientRect(), bar = document.querySelector('#scnBar').getBoundingClientRect(); return { top: r.top, bottom: r.bottom, barBottom: bar.bottom, h: innerHeight }; });
+      check('급감 시나리오: 강조된 IDC_B_FS2_IX1 패널이 안내 막대에 가리지 않고 화면 안에 보임', vis.top >= vis.barBottom - 2 && vis.bottom <= vis.h + 2, JSON.stringify(vis));
       check('안내 막대 높이가 화면의 30% 이하 (그래프를 가리지 않음)', vis.barBottom <= vis.h * 0.30, `막대 아래 ${vis.barBottom.toFixed(0)}px / 화면 ${vis.h}px`);
     }
     if (id === 'temp') check('온도 시나리오: 서버실 탭으로 이동하고 A-03 랙이 강조 표시됨', (await page.locator('#tab-room').isVisible()) && (await page.locator('.rack.hl[data-rack="A-03"]').count()) === 1);
@@ -101,7 +101,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
 
   await page.click('[data-tab=event]');
   const planText = await page.locator('#evPlan').innerText();
-  check('센터 이름이 지명(분당·안산·구로·서초)으로 나옴', ['분당 센터 백본 A', '안산 센터 백본 1', '구로 센터 백본', '서초 센터 백본'].every(w => planText.includes(w)) && !/우리 센터|센터B|센터C|센터D/.test(planText), planText.split('\n').slice(0, 3).join(' | '));
+  check('센터 이름이 지명(분당·안산·구로·서초)으로 나옴', ['분당 → 중앙 백본 (A)', '안산 → 중앙 백본 (Juniper)', '구로 → 중앙 백본', '서초 센터 백본 (Cisco)'].every(w => planText.includes(w)) && !/우리 센터|센터B|센터C|센터D/.test(planText), planText.split('\n').slice(0, 3).join(' | '));
   for (const t of ['monthly', 'event', 'room', 'visit', 'term']) {
     await page.click(`[data-tab=${t}]`);
     await page.waitForTimeout(150);
@@ -130,7 +130,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const z6buf = require('fs').readFileSync(await z6.path());
   check('긴 기간(5/1~10/31) zip: 크기가 크고(>3MB) 파일 이름에 기간이 들어감', z6buf.length > 3e6 && /2026-05-01_2026-10-31/.test(z6.suggestedFilename()), (z6buf.length / 1e6).toFixed(1) + 'MB ' + z6.suggestedFilename());
   const ratio = await page.evaluate(() => {
-    const l = LINK['OUR-A'], f = d => Math.max(...seriesFor(l, parseT(d + 'T00:00'), parseT(d + 'T23:55')).out);
+    const l = LINK['IDC_B_FS1_UP1'], f = d => Math.max(...seriesFor(l, parseT(d + 'T00:00'), parseT(d + 'T23:55')).out);
     return f('2026-10-12') / f('2026-10-19');
   });
   check('10/19 이전 가상 구간이 이후 실제 구간과 비슷한 크기(±10%)', Math.abs(ratio - 1) < 0.10, ratio.toFixed(3));
@@ -163,7 +163,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
 
   const [pop] = await Promise.all([ctx.waitForEvent('page'), page.click('.srv[data-server="A-03-S2"]')]);
   await pop.waitForLoadState('load');
-  check('서버를 누르면 새 창에 해당 스위치 터미널이 열림', pop.url().includes('popup=term') && (await pop.locator('#termTarget').innerText()).includes('A-03-S2 → SW-A-03'), await pop.locator('#termTarget').innerText());
+  check('서버를 누르면 새 창에 해당 스위치 터미널이 열림', pop.url().includes('popup=term') && (await pop.locator('#termTarget').innerText()).includes('A-03-S2 → IDC_B_FS6'), await pop.locator('#termTarget').innerText());
   check('새 창에는 터미널만 보임', (await pop.locator('#tab-term').isVisible()) && !(await pop.locator('#tab-monitor').isVisible()));
   await pop.press('#termIn', 'Enter');
   check('연결된 포트 명령 출력(빛 없음)', (await pop.locator('#termOut').innerText()).includes('-40.00 dBm'));
@@ -180,11 +180,13 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
 
   await page.click('[data-tab=term]');
   const opts = async () => (await page.locator('#devSel option').allInnerTexts()).map(o => o.split(' · ')[0]);
-  check('제조사 기본값은 Juniper이고 Juniper 장비만 나옴', (await page.locator('#vendorSel').inputValue()) === 'juniper' && (await opts()).length === 10 && (await opts()).includes('BB-OUR') && (await opts()).includes('CORE-1'));
+  check('제조사 기본값은 Juniper이고 Juniper 장비만 나옴', (await page.locator('#vendorSel').inputValue()) === 'juniper' && (await opts()).length === 10 && (await opts()).includes('IDC_B_FS1') && (await opts()).includes('IDC_S_FS1'));
   await page.selectOption('#vendorSel', 'cisco');
-  check('Cisco를 고르면 Cisco 장비만 나옴 (백본 2대)', JSON.stringify(await opts()) === JSON.stringify(['BB-B2', 'BB-D1']));
+  check('Cisco를 고르면 Cisco 장비만 나옴 (백본 4대)', JSON.stringify(await opts()) === JSON.stringify(['IDC_B_FR1', 'IDC_B_FR2', 'IDC_A_FR1', 'IDC_S_FR1']));
+  const qcmds = await page.locator('#qcmd button').allInnerTexts();
+  check('자주 쓰던 명령에 같은 명령이 두 번 나오지 않음 (Cisco 장비)', qcmds.length > 0 && new Set(qcmds).size === qcmds.length, qcmds.join(' | '));
   await page.selectOption('#vendorSel', 'huawei');
-  check('Huawei를 고르면 Huawei 장비만 나옴 (소규모 장비 8대)', (await opts()).length === 8 && (await opts()).includes('AS-1'));
+  check('Huawei를 고르면 Huawei 장비만 나옴 (소규모 장비 8대)', (await opts()).length === 8 && (await opts()).includes('IDC_B_AS1'));
   await page.selectOption('#vendorSel', 'juniper');
   await page.click('#qcmd button');
   await page.press('#termIn', 'Enter');
