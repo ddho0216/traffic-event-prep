@@ -38,7 +38,7 @@
  "must_alert_room": [
   {
    "id": "COOL1",
-   "rack": "A-03",
+   "rack": "IDC_B_R03",
    "start": "2026-10-26 14:30",
    "end": "2026-10-26 17:15",
    "min_peak_c": 33,
@@ -130,13 +130,13 @@
  ],
  "info": {
   "server_down": {
-   "server": "A-03-S2",
+   "server": "IDC_B_R03_S2",
    "start": "2026-10-26 16:05",
    "end": "2026-10-26 16:25",
    "why": "과열로 서버 한 대가 꺼짐 (LED로 확인)"
   },
   "hdd_warn": {
-   "server": "A-02-S3",
+   "server": "IDC_B_R02_S3",
    "why": "디스크 경고가 계속 켜져 있음 (교체 대기 가정)"
   }
  },

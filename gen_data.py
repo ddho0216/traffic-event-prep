@@ -62,15 +62,18 @@ DROPS = [
 # IDC_B_FS2_IX1에서 빠진 트래픽의 60%가 IDC_B_FS2_INTL1로 돌아간다 (한쪽이 빠지면 다른 쪽이 튄다)
 SHIFT = ("IDC_B_FS2_IX1", "IDC_B_FS2_INTL1", 0.6)
 
-# 서버실: 랙 6개 x 서버 4대. 랙 입구 온도(inlet)를 5분 간격으로 만든다. 전부 가상.
-RACKS = ["A-01", "A-02", "A-03", "B-01", "B-02", "B-03"]
+# 서버실: 센터마다 랙이 있고, 랙 하나에 서버 4대. 랙 입구 온도(inlet)를 5분 간격으로 만든다. 전부 가상.
+# 이름 규칙: 랙 = IDC_<센터 코드>_R<번호>, 서버 = <랙 이름>_S<번호>. 센터 코드 B 분당, S 서초, G 구로, A 안산.
+CENTER_RACKS = [("B", 6), ("S", 6), ("G", 4), ("A", 4)]   # (센터 코드, 랙 수): 분당 6, 서초 6, 구로 4, 안산 4
+RACKS = [f"IDC_{c}_R{n:02d}" for c, k in CENTER_RACKS for n in range(1, k + 1)]
+CENTER_TEMP_OFFSET = {"B": 0.0, "S": 0.4, "G": -0.2, "A": 0.1}   # 센터마다 평소 온도가 조금씩 다르다
 ROLES = ["웹", "DB", "캐시", "스토리지"]
-# 냉각 이상: A-03 랙, 14:30에 오르기 시작 -> 15:30 최고 -> 16:30까지 유지 -> 17:15에 복구
-COOLING = ("A-03", "2026-10-26 14:30", "2026-10-26 15:30", "2026-10-26 16:30", "2026-10-26 17:15", 11.5)
-# 과열로 서버 한 대가 꺼짐: A-03의 2번 서버, 16:05~16:25
-SERVER_DOWN = ("A-03", 2, "2026-10-26 16:05", "2026-10-26 16:25")
-# 디스크 경고가 계속 켜져 있는 서버(교체 대기): A-02의 3번 서버
-HDD_WARN = ("A-02", 3)
+# 냉각 이상: 분당 IDC_B_R03 랙, 14:30에 오르기 시작 -> 15:30 최고 -> 16:30까지 유지 -> 17:15에 복구
+COOLING = ("IDC_B_R03", "2026-10-26 14:30", "2026-10-26 15:30", "2026-10-26 16:30", "2026-10-26 17:15", 11.5)
+# 과열로 서버 한 대가 꺼짐: IDC_B_R03의 2번 서버, 16:05~16:25
+SERVER_DOWN = ("IDC_B_R03", 2, "2026-10-26 16:05", "2026-10-26 16:25")
+# 디스크 경고가 계속 켜져 있는 서버(교체 대기): IDC_B_R02의 3번 서버
+HDD_WARN = ("IDC_B_R02", 3)
 
 
 def daily_shape(hours: np.ndarray, weekend: bool) -> np.ndarray:
@@ -118,8 +121,9 @@ def write_server_room(times: pd.DatetimeIndex, hours: np.ndarray) -> None:
     tm = np.asarray((times - times[0]) / pd.Timedelta(minutes=1))
     mins = lambda ts: (pd.Timestamp(ts) - times[0]) / pd.Timedelta(minutes=1)
     rows = []
-    for i, rack in enumerate(RACKS):
-        temp = 21.5 + 0.3 * i + 1.5 * shape + rng.normal(0, 0.12, len(times))
+    for rack in RACKS:
+        code, local = rack.split("_")[1], int(rack.split("_R")[1]) - 1   # 센터 코드, 센터 안 번호(0부터)
+        temp = 21.5 + 0.3 * local + CENTER_TEMP_OFFSET[code] + 1.5 * shape + rng.normal(0, 0.12, len(times))
         if rack == COOLING[0]:
             _r, a, pk, hold, end, add = COOLING
             a, pk, hold, end = mins(a), mins(pk), mins(hold), mins(end)
@@ -137,7 +141,7 @@ def write_server_room(times: pd.DatetimeIndex, hours: np.ndarray) -> None:
     for rack in RACKS:
         for slot in range(1, 5):
             down = SERVER_DOWN if (rack, slot) == SERVER_DOWN[:2] else None
-            srv.append((rack, slot, f"{rack}-S{slot}", ROLES[slot - 1],
+            srv.append((rack, slot, f"{rack}_S{slot}", ROLES[slot - 1],
                         int((rack, slot) == HDD_WARN),
                         down[2] if down else "", down[3] if down else ""))
     pd.DataFrame(srv, columns=["rack", "slot", "name", "role", "hdd_warn", "down_start", "down_end"]

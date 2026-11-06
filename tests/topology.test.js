@@ -116,3 +116,47 @@ test('심어 둔 포트 이상이 실제 포트에 있다', () => {
   for (const l of T.links) { used.add(`${l.a}|${l.ap}`); used.add(`${l.b}|${l.bp}`); }
   for (const k of Object.keys(T.faults)) assert.ok(used.has(k), `${k} 포트가 연결표에 없음`);
 });
+
+// ---------- 동기화: 센터·장비·랙·회선이 한 곳의 정보에서 나오는가 ----------
+test('센터 이름 목록(centers)이 장비의 센터와 맞다', () => {
+  assert.deepEqual(Object.values(T.centers).sort(), [...new Set(T.devices.map(d => d.center))].sort());
+});
+
+test('동기화: 센터마다 데이터의 랙 = 설계도의 랙 스위치가 맡은 랙 (이름·센터 일치)', () => {
+  for (const code of Object.keys(T.centers)) {
+    const racks = data.racks.filter(r => r.id.split('_')[1] === code).map(r => r.id).sort();
+    const tors = T.devices.filter(d => d.rack && d.id.split('_')[1] === code).map(d => d.rack).sort();
+    assert.deepEqual(tors, racks, `${code}: 서버실의 랙과 설계도의 랙 스위치가 다름`);
+  }
+  for (const d of T.devices.filter(x => x.rack)) assert.equal(d.rack.split('_')[1], d.id.split('_')[1], `${d.id}: 맡은 랙(${d.rack})과 센터 코드가 다름`);
+});
+
+test('동기화: 센터마다 랙이 있다 (분당 6, 서초 6, 구로 4, 안산 4)', () => {
+  const n = c => data.racks.filter(r => r.id.split('_')[1] === c).length;
+  assert.deepEqual([n('B'), n('S'), n('G'), n('A')], [6, 6, 4, 4]);
+});
+
+test('동기화: 서버 이름은 <랙 이름>_S<번호>이고 서버마다 랙 스위치 포트가 하나 필요하다 (랙 스위치는 서버 4대를 받는다)', () => {
+  for (const r of data.racks) {
+    assert.equal(r.servers.length, 4, r.id);
+    for (const sv of r.servers) assert.equal(sv.name, `${r.id}_S${sv.slot}`);
+  }
+});
+
+test('동기화: 그래프 회선의 센터 코드가 설계도 A장비의 센터와 같다', () => {
+  for (const l of data.links) {
+    const tl = T.links.find(x => x.link === l.id);
+    assert.equal(l.id.split('_')[1], tl.a.split('_')[1], l.id);
+  }
+});
+
+test('동기화: 랙 스위치는 같은 센터의 백본에 올라간다', () => {
+  for (const d of T.devices.filter(x => x.rack)) {
+    const up = T.links.find(l => l.b === d.id && dev[l.a] && dev[l.a].center === d.center);
+    assert.ok(up, `${d.id}: 같은 센터 백본으로 가는 업링크가 없음`);
+  }
+});
+
+test('동기화: 모든 연결의 A장비는 연결 이름의 센터 코드와 같은 센터다', () => {
+  for (const l of T.links) assert.equal(l.link.split('_')[1], l.a.split('_')[1], l.link);
+});

@@ -38,9 +38,9 @@ def build() -> dict:
         noise.append({"id": eid, "name": name, "start": fmt(kick), "end": fmt(end), "links": links})
 
     info = {
-        "server_down": {"server": f"{g.SERVER_DOWN[0]}-S{g.SERVER_DOWN[1]}", "start": fmt(g.SERVER_DOWN[2]), "end": fmt(g.SERVER_DOWN[3]),
+        "server_down": {"server": f"{g.SERVER_DOWN[0]}_S{g.SERVER_DOWN[1]}", "start": fmt(g.SERVER_DOWN[2]), "end": fmt(g.SERVER_DOWN[3]),
                         "why": "과열로 서버 한 대가 꺼짐 (LED로 확인)"},
-        "hdd_warn": {"server": f"{g.HDD_WARN[0]}-S{g.HDD_WARN[1]}", "why": "디스크 경고가 계속 켜져 있음 (교체 대기 가정)"},
+        "hdd_warn": {"server": f"{g.HDD_WARN[0]}_S{g.HDD_WARN[1]}", "why": "디스크 경고가 계속 켜져 있음 (교체 대기 가정)"},
     }
     return {
         "version": 1,

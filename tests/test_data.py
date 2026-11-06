@@ -103,15 +103,24 @@ class ServerRoomData(unittest.TestCase):
         cls.servers = pd.read_csv(DATA / "servers.csv")
 
     def test_counts(self):
-        self.assertEqual(self.temps.rack.nunique(), 6)
-        self.assertEqual(len(self.servers), 24)
+        self.assertEqual(self.temps.rack.nunique(), 20)
+        self.assertEqual(len(self.servers), 80)
+
+    def test_racks_per_center_and_naming(self):
+        racks = sorted(self.temps.rack.unique())
+        for code, n in {"B": 6, "S": 6, "G": 4, "A": 4}.items():
+            mine = [r for r in racks if r.startswith(f"IDC_{code}_R")]
+            self.assertEqual(len(mine), n, code)
+        self.assertTrue(all(__import__("re").fullmatch(r"IDC_[BSGA]_R\d\d", r) for r in racks))
+        for row in self.servers.itertuples():
+            self.assertEqual(row.name, f"{row.rack}_S{row.slot}")
 
     def test_normal_racks_stay_below_27(self):
-        normal = self.temps[self.temps.rack != "A-03"]
+        normal = self.temps[self.temps.rack != "IDC_B_R03"]
         self.assertLess(normal.inlet_c.max(), 27)
 
     def test_cooling_incident_only_in_a03(self):
-        a03 = self.temps[self.temps.rack == "A-03"].set_index("time").inlet_c
+        a03 = self.temps[self.temps.rack == "IDC_B_R03"].set_index("time").inlet_c
         self.assertGreaterEqual(a03["2026-10-26 15:55"], 33)
         self.assertLess(a03["2026-10-27 12:00"], 27)
 

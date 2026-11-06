@@ -68,7 +68,7 @@ const CUSTOMERS = [
   { name: "예시미디어", key: "yesi-media", links: ["IDC_B_FS1_UP1", "IDC_A_FS1_UP1", "IDC_B_FS2_IX1"] },
   { name: "샘플게임즈", key: "sample-games", links: ["IDC_G_FS1_UP1", "IDC_S_FR1_UP1"] }
 ];
-const CENTER_NAME = { B: "분당 센터", S: "서초 센터", G: "구로 센터", A: "안산 센터" };   // 이름의 센터 코드: IDC_<코드>_...
+const CENTER_NAME = TOPOLOGY.centers;   // 이름의 센터 코드: IDC_<코드>_... (센터 목록은 설계도에서)
 const CENTER = id => /_(IX|INTL)\d/.test(id) ? "연동" : (CENTER_NAME[id.split("_")[1]] || "연동");
 
 /* ---------- 경고 탐지: 규칙은 lib.js에 있다 (터미널에서도 시험할 수 있게 분리) ---------- */
@@ -91,6 +91,12 @@ $("#tabs").addEventListener("click", e => { const b = e.target.closest("button")
 const NOW_IDX = idxOf(parseT("2026-10-22T21:00"));   // 가상 "현재" 시각: 평소 저녁
 const HL = new Set();   // 시나리오가 강조 표시하는 링크·랙
 const state = { end: NOW_IDX, win: 12, ymode: "cap", cust: "all" };
+// 공통 센터 선택: 관제 그래프·서버실 랙·터미널 장비·설계도가 모두 이 선택에 맞춰 보인다. "ALL" 또는 센터 코드(B/S/G/A).
+// 회선·랙·장비 이름이 모두 IDC_<센터 코드>_... 라서 이름의 두 번째 칸으로 센터를 알 수 있다.
+const codeOf = id => id.split("_")[1];
+const view = { center: ["ALL", ...Object.keys(TOPOLOGY.centers)].includes(store.get("center", "ALL")) ? store.get("center", "ALL") : "ALL" };
+const inView = id => view.center === "ALL" || codeOf(id) === view.center;
+const viewLabel = () => view.center === "ALL" ? "전체 센터" : TOPOLOGY.centers[view.center];
 const custOf = id => CUSTOMERS.filter(c => c.links.includes(id)).map(c => c.name);
 
 function niceMax(v) {
@@ -98,11 +104,13 @@ function niceMax(v) {
   return ([1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find(x => x >= m) || 10) * p;
 }
 
+const endpoints = id => { const t = TOPOLOGY.links.find(x => x.link === id); return t ? `${t.a} ${t.ap} → ${esc(t.b)}${t.bp && t.bp !== "-" ? " " + t.bp : ""}` : ""; };
 function buildGrid() {
   $("#grid").innerHTML = LINKS.map(l => `
     <div class="panel" id="p-${l.id}">
       <div class="hd"><b>${custOf(l.id).join(" · ") || "공용 (고객사 없음)"}</b><span class="sp"></span><span class="chip">정상</span><button class="btn sm csv" data-link="${l.id}">CSV</button></div>
       <div class="sub">${l.id} · ${esc(l.desc)} · ${l.cap}G</div>
+      <div class="sub2">${endpoints(l.id)}</div>
       <div class="now"></div><div class="svgbox"></div><div class="tip"></div>
     </div>`).join("");
 }
@@ -172,12 +180,18 @@ function renderPanel(l) {
   $(".chip", root).textContent = wutil >= 0.8 ? "경고" : dropped ? "급감" : wutil >= 0.7 ? "주의" : "정상";
   $(".now", root).innerHTML = `<span class="o">OUT ${l.out[e].toFixed(1)}G</span><span class="i">IN ${l.in[e].toFixed(1)}G</span><span class="muted">${(util * 100).toFixed(0)}% · 창 최대 out ${wmax.toFixed(1)}G</span>`;
 }
-function renderAll() {
+function renderMonSum() {   // 지금 보이는 회선과 그 회선에 연결된 장비 (설계도 기준)
+  const links = LINKS.filter(l => $("#p-" + l.id) && $("#p-" + l.id).style.display !== "none").map(l => TOPOLOGY.links.find(t => t.link === l.id)).filter(Boolean);
+  const devs = [...new Set(links.flatMap(t => [t.a, t.b]).filter(d => DEV[d]))];
+  $("#monSum").textContent = `${viewLabel()} · 회선 ${links.length}개 · 연결된 장비 ${devs.length}대${devs.length <= 8 ? " (" + devs.join(", ") + ")" : ""}`;
+}
+function renderAll() { renderAllPanels(); renderMonSum(); }
+function renderAllPanels() {
   if (!$("#tab-monitor").classList.contains("on")) return;
   state.end = clamp(state.end, 0, N - 1);
   $("#endTime").value = isoLocal(msOf(state.end));
   LINKS.forEach(l => {
-    const show = state.cust === "all" || (state.cust === "none" ? !custOf(l.id).length : custOf(l.id).includes(state.cust));
+    const show = inView(l.id) && (state.cust === "all" || (state.cust === "none" ? !custOf(l.id).length : custOf(l.id).includes(state.cust)));
     $("#p-" + l.id).style.display = show ? "" : "none";
     if (show) renderPanel(l);
   });
@@ -255,8 +269,8 @@ function closeNotif() { $("#notif").hidden = true; $("#bell").setAttribute("aria
   $("#alertTbl").addEventListener("click", ev => {
     const tr = ev.target.closest("tr.click"); if (!tr) return;
     closeNotif();
-    if (tr.dataset.k !== undefined) { showTab("monitor"); state.end = Math.min(N - 1, ALERTS[+tr.dataset.k].peak + 6); renderAll(); window.scrollTo({ top: 0, behavior: "smooth" }); }
-    else { sr.end = ROOM_ALERTS[+tr.dataset.r].peak; showTab("room"); }
+    if (tr.dataset.k !== undefined) { const al = ALERTS[+tr.dataset.k]; if (!inView(al.link)) setCenter(codeOf(al.link)); showTab("monitor"); state.end = Math.min(N - 1, al.peak + 6); renderAll(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+    else { const ra = ROOM_ALERTS[+tr.dataset.r]; if (!inView(ra.rack)) setCenter(codeOf(ra.rack)); sr.end = ra.peak; showTab("room"); }
   });
 })();
 
@@ -551,8 +565,8 @@ DATA.racks.forEach((r, ri) => {
   r.servers.forEach(sv => {
     const port = tor.vendor === "juniper" ? `xe-0/0/${sv.slot - 1}` : `XGigabitEthernet0/1/${sv.slot}`;
     let crc = 0, rx = -3 - ((sv.slot + ri) % 4) * 0.15;
-    if (sv.name === "A-03-S2") rx = -40;                 // 꺼진 서버: 빛이 안 들어옴
-    if (sv.name === "A-02-S3") { crc = 12; rx = -9.8; }  // 디스크 경고 서버: 작은 CRC 오류와 약한 광 수신
+    if (sv.name === "IDC_B_R03_S2") rx = -40;                 // 꺼진 서버: 빛이 안 들어옴
+    if (sv.name === "IDC_B_R02_S3") { crc = 12; rx = -9.8; }  // 디스크 경고 서버: 작은 CRC 오류와 약한 광 수신
     tor.ifs.push([port, sv.name, crc, rx, null]);
   });
 });
@@ -614,27 +628,37 @@ function termBanner() {
   quickCmds();
 }
 const VENDORS = [["juniper", "Juniper · FS 계열"], ["cisco", "Cisco · FR 계열"], ["huawei", "Huawei · AS 계열"]];
-function fillDevices(vendor, keep) {   // 고른 제조사의 장비만 목록에 보여 준다
-  const list = DEVICES.filter(d => d.vendor === vendor);
+function fillVendors(keep) {   // 센터 선택에 맞는 장비 수를 보여 주고, 장비가 없는 제조사는 고를 수 없게 한다
+  const cnt = v => DEVICES.filter(d => d.vendor === v && inView(d.id)).length;
+  $("#vendorSel").innerHTML = VENDORS.map(([v, n]) => `<option value="${v}" ${cnt(v) ? "" : "disabled"}>${n} (${cnt(v)}대)</option>`).join("");
+  const pick = keep && cnt(keep) ? keep : (VENDORS.map(x => x[0]).find(v => cnt(v)) || "juniper");
+  $("#vendorSel").value = pick; fillDevices(pick);
+}
+function fillDevices(vendor, keep) {   // 고른 제조사·센터의 장비만 목록에 보여 준다
+  const list = DEVICES.filter(d => d.vendor === vendor && inView(d.id));
   $("#devSel").innerHTML = list.map(d => `<option value="${d.id}">${d.id} · ${esc(d.role)}</option>`).join("");
   if (keep && list.some(d => d.id === keep)) $("#devSel").value = keep;
 }
 function selectDevice(devId) {
   const d = DEV[devId]; if (!d) return;
+  if (!inView(devId)) setCenter("ALL", false);
   $("#vendorSel").value = d.vendor; fillDevices(d.vendor, devId); termFocus = null; termBanner();
 }
 // 서버 이름으로 연결: 그 서버가 꽂힌 랙 스위치를 고르고 포트 명령을 채워 둔다
 function termConnect(devId, server) {
   const d = DEV[devId]; if (!d) return;
+  if (!inView(devId)) setCenter("ALL", false);
   $("#vendorSel").value = d.vendor; fillDevices(d.vendor, devId); termFocus = { dev: devId, server }; termBanner();
   const first = $("#qcmd button"); if (first) $("#termIn").value = first.dataset.c;
 }
 function renderDesign() {
   const name = Object.fromEntries(VENDORS);
+  const dv = DEVICES.filter(d => inView(d.id)), lk = TOPOLOGY.links.filter(l => inView(l.link));
+  $("#designSum").textContent = `${viewLabel()} · 장비 ${dv.length}대 (${VENDORS.map(([v, n]) => n.split(" ")[0] + " " + dv.filter(d => d.vendor === v).length).join(", ")}) · 연결 ${lk.length}건`;
   $("#devTbl").innerHTML = `<tr><th>제조사</th><th>장비</th><th>역할</th><th>센터</th><th class="n">포트</th></tr>` +
-    VENDORS.map(([v]) => DEVICES.filter(d => d.vendor === v).map(d => `<tr class="click" data-dev="${d.id}"><td><span class="tag">${name[v]}</span></td><td>${d.id}</td><td>${esc(d.role)}</td><td>${esc(d.center)}</td><td class="n">${d.ifs.length}</td></tr>`).join("")).join("");
+    VENDORS.map(([v]) => DEVICES.filter(d => d.vendor === v && inView(d.id)).map(d => `<tr class="click" data-dev="${d.id}"><td><span class="tag">${name[v]}</span></td><td>${d.id}</td><td>${esc(d.role)}</td><td>${esc(d.center)}</td><td class="n">${d.ifs.length}</td></tr>`).join("")).join("");
   $("#linkTbl").innerHTML = `<tr><th>연결</th><th>A 장비 · 포트</th><th>B 장비 · 포트</th><th>종류</th><th class="n">Gbps</th></tr>` +
-    TOPOLOGY.links.map(l => `<tr class="click" data-dev="${l.a}"><td>${l.link}</td><td>${l.a} ${l.ap}</td><td>${esc(l.b)}${l.bp && l.bp !== "-" ? " " + l.bp : ""}</td><td>${esc(l.kind)}</td><td class="n">${l.gbps}</td></tr>`).join("");
+    lk.map(l => `<tr class="click" data-dev="${l.a}"><td>${l.link}</td><td>${l.a} ${l.ap}</td><td>${esc(l.b)}${l.bp && l.bp !== "-" ? " " + l.bp : ""}</td><td>${esc(l.kind)}</td><td class="n">${l.gbps}</td></tr>`).join("");
 }
 function openServerTerminal(name) {
   const rack = DATA.racks.find(r => r.servers.some(x => x.name === name)); if (!rack) return;
@@ -647,8 +671,7 @@ function openServerTerminal(name) {
   $("#termTarget").textContent += "  (팝업이 막혀서 이 화면에서 열었습니다)";
 }
 (function initTerm() {
-  $("#vendorSel").innerHTML = VENDORS.map(([v, n]) => `<option value="${v}">${n} (${DEVICES.filter(d => d.vendor === v).length}대)</option>`).join("");
-  fillDevices("juniper");   // 가장 많이 쓰는 Juniper가 기본
+  fillVendors("juniper");   // 가장 많이 쓰는 Juniper가 기본
   $("#vendorSel").onchange = () => { termFocus = null; fillDevices($("#vendorSel").value); termBanner(); };
   $("#devSel").onchange = () => { termFocus = null; termBanner(); };
   ["devTbl", "linkTbl"].forEach(id => $("#" + id).addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { selectDevice(tr.dataset.dev); $("#termIn").focus(); window.scrollTo({ top: 0, behavior: "smooth" }); } }));
@@ -672,6 +695,7 @@ const ROOM_DEFAULT = { warn: 27, hot: 30, crit: 33, range: 3, step: 12, speed: 1
 const cfg = Object.assign({}, ROOM_DEFAULT, store.get("roomCfg", {}));
 let TEMP_WARN = cfg.warn, TEMP_HOT = cfg.hot, TEMP_CRIT = cfg.crit;
 const RACKS = DATA.racks;
+const visibleRacks = () => RACKS.filter(r => inView(r.id));   // 센터 선택에 맞는 랙
 const sr = { end: idxOf(parseT("2026-10-22T21:00")) };
 const thNow = () => ({ warn: TEMP_WARN, hot: TEMP_HOT, crit: TEMP_CRIT });
 const tempCls = t => Lib.tempLevel(t, thNow());
@@ -701,16 +725,19 @@ function renderServerRoom() {
   if (!$("#tab-room").classList.contains("on")) return;
   const i = clamp(sr.end, 0, N - 1);
   $("#srTime").value = isoLocal(msOf(i));
-  $("#racks").innerHTML = RACKS.map(r => {
+  const vr = visibleRacks();
+  $("#roomSum").textContent = `${viewLabel()} 서버실 · 랙 ${vr.length}개 · 서버 ${vr.reduce((n, r) => n + r.servers.length, 0)}대 · 랙 스위치 ${DEVICES.filter(d => d.rack && inView(d.id)).length}대`;
+  $("#racks").innerHTML = vr.map(r => {
     const t = r.temp[i];
     return `<div class="rack ${tempCls(t)}${HL.has(r.id) ? " hl" : ""}" data-rack="${r.id}"><div class="rhd"><b>${r.id}</b><span class="tmp ${tempCls(t)}">${t.toFixed(1)}°C</span></div>` +
       r.servers.map(sv => `<div class="srv" data-server="${sv.name}" role="button" tabindex="0" title="누르면 이 서버가 연결된 스위치 터미널이 새 창으로 열립니다 (가상)">${ledHtml(srvState(r, sv, i))}<span class="sname">${sv.name}</span><span class="role">${sv.role}</span></div>`).join("") +
       spark(r.temp, Math.max(0, i - (cfg.range * 12 - 1)), i) + `<div class="note" style="margin:2px 0 0">최근 ${cfg.range}시간 · 점선 ${TEMP_WARN}/${TEMP_HOT}°C</div></div>`;
   }).join("");
-  $("#srAlerts").innerHTML = `<tr><th>시각</th><th>랙</th><th class="n">최고 온도</th></tr>` + (ROOM_ALERTS.length ? ROOM_ALERTS.map((a, k) =>
-    `<tr class="click" data-k="${k}"><td>${md(msOf(a.s))} ~ ${hm(msOf(a.e))}</td><td>${a.rack}</td><td class="n crit-t">${a.max.toFixed(1)}°C</td></tr>`).join("") : `<tr><td colspan="3" class="muted">30°C 이상 기록이 없습니다.</td></tr>`);
-  const sel = $("#inRack").value || RACKS[0].id;
-  $("#inRack").innerHTML = RACKS.map(r => `<option ${r.id === sel ? "selected" : ""}>${r.id}</option>`).join("");
+  const visAlerts = ROOM_ALERTS.map((a, k) => ({ a, k })).filter(x => inView(x.a.rack));
+  $("#srAlerts").innerHTML = `<tr><th>시각</th><th>랙</th><th class="n">최고 온도</th></tr>` + (visAlerts.length ? visAlerts.map(({ a, k }) =>
+    `<tr class="click" data-k="${k}"><td>${md(msOf(a.s))} ~ ${hm(msOf(a.e))}</td><td>${a.rack}</td><td class="n crit-t">${a.max.toFixed(1)}°C</td></tr>`).join("") : `<tr><td colspan="3" class="muted">${viewLabel()}에는 ${TEMP_HOT}°C 이상 기록이 없습니다.</td></tr>`);
+  const sel = vr.some(r => r.id === $("#inRack").value) ? $("#inRack").value : vr[0].id;
+  $("#inRack").innerHTML = vr.map(r => `<option ${r.id === sel ? "selected" : ""}>${r.id}</option>`).join("");
   const rk = RACKS.find(r => r.id === $("#inRack").value);
   $("#inHint").textContent = `지금 화면 기준: ${inspSummary(rk, i)}`;
   renderInspections();
@@ -725,7 +752,11 @@ function renderInspections() {
   $("#srTime").addEventListener("change", e => { if (e.target.value) { sr.end = idxOf(parseT(e.target.value)); renderServerRoom(); } });
   $("#srPrev").onclick = () => { sr.end -= cfg.step; renderServerRoom(); };
   $("#srNext").onclick = () => { sr.end += cfg.step; renderServerRoom(); };
-  $$("[data-sr]").forEach(b => b.onclick = () => { sr.end = idxOf(parseT(b.dataset.sr)); renderServerRoom(); });
+  $$("[data-sr]").forEach(b => b.onclick = () => {
+    sr.end = idxOf(parseT(b.dataset.sr));
+    if (b.dataset.center && view.center !== "ALL" && view.center !== b.dataset.center) setCenter(b.dataset.center);   // 그 사건이 있는 센터가 안 보이면 센터를 맞춘다
+    renderServerRoom();
+  });
   $("#srAlerts").addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { sr.end = ROOM_ALERTS[+tr.dataset.k].peak; renderServerRoom(); } });
   $("#inRack").addEventListener("change", renderServerRoom);
   $("#racks").addEventListener("click", ev => { const el = ev.target.closest(".srv"); if (el) openServerTerminal(el.dataset.server); });
@@ -735,14 +766,14 @@ function renderInspections() {
   $("#srTempCsv").onclick = () => {
     const a = clamp(idxOf(parseT($("#srFrom").value + "T00:00")), 0, N - 1), b = clamp(idxOf(parseT($("#srTo").value + "T23:55")), a, N - 1);
     const rows = ["time,rack,inlet_c"];
-    for (let i = a; i <= b; i++) RACKS.forEach(r => rows.push(`${ymdhm(msOf(i))},${r.id},${r.temp[i]}`));
-    downloadCsv(`rack_temps_${$("#srFrom").value}_${$("#srTo").value}.csv`, rows.join("\n"));
+    for (let i = a; i <= b; i++) visibleRacks().forEach(r => rows.push(`${ymdhm(msOf(i))},${r.id},${r.temp[i]}`));
+    downloadCsv(`rack_temps_${view.center}_${$("#srFrom").value}_${$("#srTo").value}.csv`, rows.join("\n"));
   };
   $("#srSheetCsv").onclick = () => {
     const i = clamp(sr.end, 0, N - 1), rows = ["time,rack,server,role,inlet_c,power,status,disk"];
     const lab = { ok: "정상", warn: "주의", crit: "장애", off: "꺼짐" };
-    RACKS.forEach(r => r.servers.forEach(sv => { const st = srvState(r, sv, i); rows.push(`${ymdhm(msOf(i))},${r.id},${sv.name},${sv.role},${r.temp[i]},${st.power ? "켜짐" : "꺼짐"},${lab[st.status]},${lab[st.hdd]}`); }));
-    downloadCsv(`inspection_sheet_${fileStamp(msOf(i))}.csv`, rows.join("\n"));
+    visibleRacks().forEach(r => r.servers.forEach(sv => { const st = srvState(r, sv, i); rows.push(`${ymdhm(msOf(i))},${r.id},${sv.name},${sv.role},${r.temp[i]},${st.power ? "켜짐" : "꺼짐"},${lab[st.status]},${lab[st.hdd]}`); }));
+    downloadCsv(`inspection_sheet_${view.center}_${fileStamp(msOf(i))}.csv`, rows.join("\n"));
   };
   $("#inAdd").onclick = () => {
     const i = clamp(sr.end, 0, N - 1), rack = $("#inRack").value, rk = RACKS.find(r => r.id === rack);
@@ -786,12 +817,27 @@ function applyRoomCfg(save) {
   applyRoomCfg(false);
 })();
 
+/* ---------- 공통 센터 선택: 모든 화면이 같은 센터로 맞춰진다 ---------- */
+function renderCenterBar() {
+  const names = TOPOLOGY.centers, cnt = c => TOPOLOGY.devices.filter(d => c === "ALL" || codeOf(d.id) === c).length;
+  $("#centerBar").innerHTML = `<span class="muted">센터</span>` + ["ALL", ...Object.keys(names)].map(c =>
+    `<button class="cbtn${view.center === c ? " on" : ""}" data-center="${c}" title="${c === "ALL" ? "모든 센터" : names[c]}: 관제 그래프, 서버실 랙, 터미널 장비, 설계도를 이 센터로 맞춥니다">${c === "ALL" ? "전체" : names[c]}<small>장비 ${cnt(c)}</small></button>`).join("");
+  document.documentElement.style.setProperty("--hdr", $("header.top").offsetHeight + "px");
+}
+function setCenter(code, persist = true) {
+  view.center = code; if (persist) store.set("center", code);
+  renderCenterBar(); renderAll(); renderServerRoom();
+  termFocus = null; fillVendors($("#vendorSel").value); termBanner(); renderDesign();
+}
+$("#centerBar").addEventListener("click", e => { const b = e.target.closest("[data-center]"); if (b) setCenter(b.dataset.center); });
+renderCenterBar();
+
 /* ---------- 시나리오: 몇 초 안에 상황이 흘러가고 조치까지 보여 주는 안내 재생 ---------- */
 // 현재(가상 10/22 21:00)로 돌아가기: 1시간 창, 전체 고객사, 서버실도 같은 시각
 function goNow() {
   state.end = NOW_IDX; state.win = 12; state.ymode = "cap"; state.cust = "all";
   $("#win").value = "12"; $("#ymode").value = "cap"; $("#cust").value = "all";
-  HL.clear(); sr.end = NOW_IDX; renderAll(); renderServerRoom();
+  HL.clear(); sr.end = NOW_IDX; setCenter("ALL");
 }
 const SCN_TICK = 180, SCN_HOLD = 8;   // 5분씩 0.18초, 단계가 나오면 약 1.4초 멈춤
 const KIND_CLS = { 감지: "crit", 확인: "", 조치: "warn", 결과: "ok" };
@@ -853,22 +899,22 @@ function buildScenarios() {
   ] };
 
   // 4) 서버 온도 변화: A-03 냉각 이상
-  const R3 = RACKS.find(r => r.id === "A-03"), al = Lib.detectRoom(RACKS, TD).find(a => a.rack === "A-03");
+  const COOL = "IDC_B_R03", R3 = RACKS.find(r => r.id === COOL), al = Lib.detectRoom(RACKS, TD).find(a => a.rack === COOL);
   const fc = R3.temp.findIndex((t, i) => i >= al.s && t >= TD.crit), sv = R3.servers.find(x => x.downStart);
-  const dMs = parseT(sv.downStart), tAt = i => g1(R3.temp[i]), tor = torOf("A-03");
-  const temp = { name: "서버 온도 변화", tab: "room", from: "2026-10-26T14:30", to: "2026-10-26T17:20", steps: [
-    { at: isoLocal(msOf(al.s)), kind: "감지", title: `A-03 입구 온도 ${TD.hot}°C 이상 (${tAt(al.s)}°C): 온도 경고 등록`, focus: ["A-03"] },
-    { at: isoLocal(msOf(fc)), kind: "감지", title: `${TD.crit}°C 이상 (${tAt(fc)}°C): 서버 LED 상태가 빨강 깜박임`, focus: ["A-03"] },
-    { at: isoLocal(msOf(fc) + 15 * 60000), kind: "조치", title: "냉각기 점검 요청(티켓)과 육안점검 요청", focus: ["A-03"] },
-    { at: isoLocal(dMs), kind: "감지", title: `${sv.name} 과열로 꺼짐 (전원 LED 꺼짐)`, focus: ["A-03"] },
-    { at: isoLocal(dMs + 10 * 60000), kind: "조치", title: `터미널로 ${sv.name}이 연결된 스위치(${tor.id}) 포트 확인: 빛이 안 들어와서 서버가 꺼진 것으로 확인`, detail: runOn(tor.id, `show interfaces diagnostics optics xe-0/0/${sv.slot - 1}`), sum: `광 수신 ${DEV[tor.id].ifs.find(x => x[1] === sv.name)[3].toFixed(2)} dBm, 수신 낮음 알람 켜짐 → 빛이 안 들어옴`, detailLabel: "터미널 출력 보기", focus: ["A-03"] },
-    { at: isoLocal(msOf(al.e) + 5 * 60000), kind: "확인", title: `냉각 복구: ${TD.hot}°C 아래로 내려옴 (${tAt(al.e + 1)}°C)`, focus: ["A-03"] },
-    { at: "2026-10-26T17:15", kind: "결과", title: `복구 완료 (${tAt(isoIdx("2026-10-26T17:15"))}°C). 육안점검 기록 남김: A-03 이상 있음 → 정상 복귀`, focus: ["A-03"] }
+  const dMs = parseT(sv.downStart), tAt = i => g1(R3.temp[i]), tor = torOf(COOL);
+  const temp = { name: "서버 온도 변화", tab: "room", center: "B", from: "2026-10-26T14:30", to: "2026-10-26T17:20", steps: [
+    { at: isoLocal(msOf(al.s)), kind: "감지", title: `${COOL} 입구 온도 ${TD.hot}°C 이상 (${tAt(al.s)}°C): 온도 경고 등록`, focus: [COOL] },
+    { at: isoLocal(msOf(fc)), kind: "감지", title: `${TD.crit}°C 이상 (${tAt(fc)}°C): 서버 LED 상태가 빨강 깜박임`, focus: [COOL] },
+    { at: isoLocal(msOf(fc) + 15 * 60000), kind: "조치", title: "냉각기 점검 요청(티켓)과 육안점검 요청", focus: [COOL] },
+    { at: isoLocal(dMs), kind: "감지", title: `${sv.name} 과열로 꺼짐 (전원 LED 꺼짐)`, focus: [COOL] },
+    { at: isoLocal(dMs + 10 * 60000), kind: "조치", title: `터미널로 ${sv.name}이 연결된 스위치(${tor.id}) 포트 확인: 빛이 안 들어와서 서버가 꺼진 것으로 확인`, detail: runOn(tor.id, `show interfaces diagnostics optics xe-0/0/${sv.slot - 1}`), sum: `광 수신 ${DEV[tor.id].ifs.find(x => x[1] === sv.name)[3].toFixed(2)} dBm, 수신 낮음 알람 켜짐 → 빛이 안 들어옴`, detailLabel: "터미널 출력 보기", focus: [COOL] },
+    { at: isoLocal(msOf(al.e) + 5 * 60000), kind: "확인", title: `냉각 복구: ${TD.hot}°C 아래로 내려옴 (${tAt(al.e + 1)}°C)`, focus: [COOL] },
+    { at: "2026-10-26T17:15", kind: "결과", title: `복구 완료 (${tAt(isoIdx("2026-10-26T17:15"))}°C). 육안점검 기록 남김: ${COOL} 이상 있음 → 정상 복귀`, focus: [COOL] }
   ] };
 
   return { calm, drop, surge, temp };
 }
-const SCN_LIST = [["calm", "평일 오후 7시", "저녁 피크 전 평소 점검 (이상 없음)"], ["drop", "트래픽 급감", "국내 연동(IX)이 갑자기 빠짐: 원인 확인과 조치"], ["surge", "트래픽 폭주", "월드컵 8강: 사전 연락·분산·모니터링"], ["temp", "서버 온도 변화", "A-03 냉각 이상: 육안점검·터미널 확인·복구"]];
+const SCN_LIST = [["calm", "평일 오후 7시", "저녁 피크 전 평소 점검 (이상 없음)"], ["drop", "트래픽 급감", "국내 연동(IX)이 갑자기 빠짐: 원인 확인과 조치"], ["surge", "트래픽 폭주", "월드컵 8강: 사전 연락·분산·모니터링"], ["temp", "서버 온도 변화", "분당 IDC_B_R03 냉각 이상: 육안점검·터미널 확인·복구"]];
 let scn = null;
 function stopScn() { if (scn && scn.timer) clearInterval(scn.timer); scn = null; HL.clear(); }
 function scnSetView() {
@@ -908,6 +954,7 @@ function startScn(id) {
   const steps = def.steps.map(st => Object.assign({ i: isoIdx(st.at), shown: false }, st)).sort((a, b) => a.i - b.i);
   scn = { def, steps, i0: isoIdx(def.from), i1: isoIdx(def.to), idx: isoIdx(def.from), done: [], hold: 0, paused: false, finished: false, timer: null };
   state.cust = "all"; $("#cust").value = "all"; state.ymode = "cap"; $("#ymode").value = "cap";
+  setCenter(def.center || "ALL", false);   // 시나리오가 보여 줄 센터 (선택값은 저장하지 않음)
   if (def.win) { state.win = def.win; $("#win").value = String(def.win); }
   showTab(def.tab);
   $("#scnBar").hidden = false; $("#scnSteps").innerHTML = "";
@@ -936,7 +983,7 @@ $("#homeLink").addEventListener("click", e => {   // 제목을 누르면 관제(
 });
 const qs = new URLSearchParams(location.search), h0 = location.hash.slice(1);
 if (qs.get("popup") === "term") {
-  document.body.classList.add("popup");
+  document.body.classList.add("popup"); setCenter("ALL", false);
   showTab("term"); termConnect(qs.get("dev"), qs.get("server"));
   document.title = `${qs.get("server")} 터미널 (가상)`;
   $("#termIn").focus();

@@ -73,6 +73,54 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   }
   await page.setViewportSize({ width: 1600, height: 900 });
 
+  // 센터 선택 동기화: 같은 센터를 고르면 관제 그래프·서버실 랙·터미널 장비·설계도가 모두 그 센터 소속만 보인다
+  const expectBy = await page.evaluate(() => Object.fromEntries(Object.keys(TOPOLOGY.centers).map(c => [c, {
+    panels: DATA.links.filter(l => l.id.split('_')[1] === c).map(l => l.id).sort(),
+    racks: DATA.racks.filter(r => r.id.split('_')[1] === c).map(r => r.id).sort(),
+    devs: TOPOLOGY.devices.filter(d => d.id.split('_')[1] === c).map(d => d.id).sort(),
+    links: TOPOLOGY.links.filter(l => l.link.split('_')[1] === c).map(l => l.link).sort()
+  }])));
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  for (const code of ['B', 'S', 'G', 'A']) {
+    await page.click(`#centerBar [data-center=${code}]`);
+    await page.click('[data-tab=monitor]');
+    const panels = (await page.locator('.panel:visible').evaluateAll(els => els.map(e => e.id.replace('p-', '')))).sort();
+    await page.click('[data-tab=room]');
+    const racks = (await page.locator('#racks .rack').evaluateAll(els => els.map(e => e.dataset.rack))).sort();
+    const servers = await page.locator('#racks .srv').evaluateAll(els => els.map(e => e.dataset.server));
+    await page.click('[data-tab=term]');
+    const devs = (await page.locator('#devTbl tr.click').evaluateAll(els => els.map(e => e.dataset.dev))).sort();
+    const lnks = (await page.locator('#linkTbl tr.click td:first-child').allInnerTexts()).sort();
+    const sel = await page.locator('#devSel option').evaluateAll(els => els.map(e => e.value));
+    const e = expectBy[code];
+    const allCode = [...panels, ...racks, ...servers.map(s => s.replace(/_S\d$/, '')), ...devs, ...sel].every(id => id.split('_')[1] === code);
+    check(`센터 ${code}: 관제 그래프 ${panels.length}·서버실 랙 ${racks.length}·터미널 장비 ${devs.length}·연결 ${lnks.length}이 모두 이 센터 소속이고 설계도와 일치`,
+      same(panels, e.panels) && same(racks, e.racks) && same(devs, e.devs) && same(lnks, e.links) && allCode && servers.length === racks.length * 4,
+      `그래프 ${same(panels, e.panels)}, 랙 ${same(racks, e.racks)}, 장비 ${same(devs, e.devs)}, 연결 ${same(lnks, e.links)}, 이름 ${allCode}`);
+  }
+  // 서초를 보다가 "냉각 이상" 버튼을 누르면 사건이 있는 분당으로 센터가 맞춰진다
+  await page.click('#centerBar [data-center=S]');
+  await page.click('[data-tab=room]');
+  await page.click('[data-sr="2026-10-26T15:55"]');
+  check('냉각 이상 버튼: 서초를 보고 있어도 사건이 있는 분당으로 맞춰지고 IDC_B_R03가 보임', (await page.locator('#centerBar .cbtn.on').getAttribute('data-center')) === 'B' && (await page.locator('.rack[data-rack="IDC_B_R03"]').count()) === 1);
+  check('서버실 화면에 옛 랙 이름(A-03)이 없음', !(await page.locator('#tab-room').innerText()).includes('A-03'));
+  // 서버실에서 서버를 누르면 같은 센터의 랙 스위치 터미널이 열린다 (서초)
+  await page.click('#centerBar [data-center=S]');
+  await page.click('[data-tab=room]');
+  const [popS] = await Promise.all([ctx.waitForEvent('page'), page.click('#racks .srv >> nth=0')]);
+  await popS.waitForLoadState('load');
+  const tgt = await popS.locator('#termTarget').innerText();
+  check('서초 서버를 누르면 서초 랙 스위치(IDC_S_...) 터미널이 열림', /^IDC_S_R01_S1 → IDC_S_FS3/.test(tgt), tgt);
+  await popS.close();
+  // 센터 선택은 저장되어 새로고침해도 유지된다
+  await page.click('#centerBar [data-center=G]');
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForTimeout(300);
+  await page.click('[data-tab=monitor]');   // 새로고침한 주소에 #room이 남아 있을 수 있어 관제 화면으로 간다
+  check('센터 선택(구로)이 새로고침 후에도 유지됨', (await page.locator('#centerBar .cbtn.on').getAttribute('data-center')) === 'G' && (await page.locator('.panel:visible').count()) === 1);
+  await page.click('#centerBar [data-center=ALL]');
+  check('전체를 고르면 그래프 8개가 모두 보임', (await page.locator('.panel:visible').count()) === 8);
+
   // 시나리오 4가지: 시간이 흘러가고, 단계(감지·확인·조치·결과)가 나오고, 닫으면 현재로 돌아온다
   const scenarios = [['calm', '평일 오후 7시', 4, ['그래프 8개 확인', '서버실 확인', '이상 없음']], ['drop', '트래픽 급감', 6, ['급감', 'IDC_B_FS2_INTL1', '광값', '예시미디어', '회복']],
     ['surge', '트래픽 폭주', 7, ['사전 연락', '분산', '하이드레이션', '경고선 80%', '사후 정리', '[사전 안내]']], ['temp', '서버 온도 변화', 7, ['온도 경고', '빨강 깜박임', '터미널', '냉각 복구', '-40.00 dBm']]];
@@ -94,7 +142,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
       check('급감 시나리오: 강조된 IDC_B_FS2_IX1 패널이 안내 막대에 가리지 않고 화면 안에 보임', vis.top >= vis.barBottom - 2 && vis.bottom <= vis.h + 2, JSON.stringify(vis));
       check('안내 막대 높이가 화면의 30% 이하 (그래프를 가리지 않음)', vis.barBottom <= vis.h * 0.30, `막대 아래 ${vis.barBottom.toFixed(0)}px / 화면 ${vis.h}px`);
     }
-    if (id === 'temp') check('온도 시나리오: 서버실 탭으로 이동하고 A-03 랙이 강조 표시됨', (await page.locator('#tab-room').isVisible()) && (await page.locator('.rack.hl[data-rack="A-03"]').count()) === 1);
+    if (id === 'temp') check('온도 시나리오: 서버실 탭으로 이동하고 IDC_B_R03 랙이 강조 표시됨', (await page.locator('#tab-room').isVisible()) && (await page.locator('.rack.hl[data-rack="IDC_B_R03"]').count()) === 1);
     await page.click('#scnClose');
     check(`시나리오 "${name}": 닫으면 관제 현재(10/22 21:00)로 돌아옴`, !(await page.locator('#scnBar').isVisible()) && (await page.locator('#tab-monitor').isVisible()) && (await page.locator('#endTime').inputValue()) === '2026-10-22T21:00');
   }
@@ -161,9 +209,9 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('기본값으로 되돌리면 경고 랙이 다시 0', (await page.locator('.rack.hot, .rack.crit').count()) === 0);
   await page.click('#cfgToggle');
 
-  const [pop] = await Promise.all([ctx.waitForEvent('page'), page.click('.srv[data-server="A-03-S2"]')]);
+  const [pop] = await Promise.all([ctx.waitForEvent('page'), page.click('.srv[data-server="IDC_B_R03_S2"]')]);
   await pop.waitForLoadState('load');
-  check('서버를 누르면 새 창에 해당 스위치 터미널이 열림', pop.url().includes('popup=term') && (await pop.locator('#termTarget').innerText()).includes('A-03-S2 → IDC_B_FS6'), await pop.locator('#termTarget').innerText());
+  check('서버를 누르면 새 창에 해당 스위치 터미널이 열림', pop.url().includes('popup=term') && (await pop.locator('#termTarget').innerText()).includes('IDC_B_R03_S2 → IDC_B_FS6'), await pop.locator('#termTarget').innerText());
   check('새 창에는 터미널만 보임', (await pop.locator('#tab-term').isVisible()) && !(await pop.locator('#tab-monitor').isVisible()));
   await pop.press('#termIn', 'Enter');
   check('연결된 포트 명령 출력(빛 없음)', (await pop.locator('#termOut').innerText()).includes('-40.00 dBm'));
@@ -180,13 +228,13 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
 
   await page.click('[data-tab=term]');
   const opts = async () => (await page.locator('#devSel option').allInnerTexts()).map(o => o.split(' · ')[0]);
-  check('제조사 기본값은 Juniper이고 Juniper 장비만 나옴', (await page.locator('#vendorSel').inputValue()) === 'juniper' && (await opts()).length === 10 && (await opts()).includes('IDC_B_FS1') && (await opts()).includes('IDC_S_FS1'));
+  check('제조사 기본값은 Juniper이고 Juniper 장비만 나옴', (await page.locator('#vendorSel').inputValue()) === 'juniper' && (await opts()).length === 18 && (await opts()).includes('IDC_B_FS1') && (await opts()).includes('IDC_S_FS1'));
   await page.selectOption('#vendorSel', 'cisco');
   check('Cisco를 고르면 Cisco 장비만 나옴 (백본 4대)', JSON.stringify(await opts()) === JSON.stringify(['IDC_B_FR1', 'IDC_B_FR2', 'IDC_A_FR1', 'IDC_S_FR1']));
   const qcmds = await page.locator('#qcmd button').allInnerTexts();
   check('자주 쓰던 명령에 같은 명령이 두 번 나오지 않음 (Cisco 장비)', qcmds.length > 0 && new Set(qcmds).size === qcmds.length, qcmds.join(' | '));
   await page.selectOption('#vendorSel', 'huawei');
-  check('Huawei를 고르면 Huawei 장비만 나옴 (소규모 장비 8대)', (await opts()).length === 8 && (await opts()).includes('IDC_B_AS1'));
+  check('Huawei를 고르면 Huawei 장비만 나옴 (소형 14대)', (await opts()).length === 14 && (await opts()).includes('IDC_B_AS1'));
   await page.selectOption('#vendorSel', 'juniper');
   await page.click('#qcmd button');
   await page.press('#termIn', 'Enter');

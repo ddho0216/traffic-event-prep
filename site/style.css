@@ -148,3 +148,15 @@ body.popup #bell,body.popup #notif{display:none}
 
 :root{color-scheme:dark}
 input[type=month],input[type=number]{background:#0f161c;border:1px solid var(--line);border-radius:3px;padding:5px 8px}
+
+.centerbar{flex-basis:100%;display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding-top:8px;margin-top:2px;border-top:1px solid var(--line)}
+.cbtn{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:3px 12px;color:var(--text);cursor:pointer}
+.cbtn small{margin-left:6px;color:var(--muted)}
+.cbtn:hover{border-color:var(--accent)}
+.cbtn.on{background:#1f3a52;border-color:#2f5a7d}
+.cbtn.on small{color:#a9bfd2}
+body.popup #centerBar{display:none}
+.sub2{padding:0 10px 2px;color:var(--muted);font:11.5px var(--mono)}
+
+.scn{padding:6px 12px;margin-bottom:10px}
+.scn-steps{max-height:96px;margin-top:6px}
