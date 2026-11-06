@@ -200,26 +200,38 @@
 
 <!-- 4. 방문 신청 -->
 <section class="tab" id="tab-room3d">
-  <p class="note">서버실 랙의 <b>정면도</b>입니다 (한 화면에 랙 8개). 랙 색은 입구 온도, 랙 위의 숫자 3개는 위·중간·아래 온도(제가 만든 보정값: 위 +1.2°C, 아래 -0.4°C), 장비의 작은 칸은 포트이고 초록은 연결됨·빨강은 이상입니다. <b>장비를 누르면</b> 포트와 꽂혀 있는 광케이블을 자세히 보고, <b>화면을 드래그</b>하면 각도가 바뀝니다(슬라이더·정면 버튼으로 되돌림). 장비 크기(Cisco 21U, Juniper 6U, Huawei 2U)는 제가 만든 가상 그림입니다.</p>
-  <div class="toolbar">
+  <div class="gltool">
+    <span class="muted" id="glCrumb"></span>
+    <span class="sp"></span>
     <label>기준 시각 <input type="datetime-local" id="r3Time"></label>
     <button class="btn" id="r3Prev">&lsaquo; 이전</button>
     <button class="btn" id="r3Next">다음 &rsaquo;</button>
     <label>열 <select id="r3RowSel"></select></label>
-    <label>좌우 <input type="range" id="r3Yaw" min="-50" max="50" value="0"></label>
-    <label>상하 <input type="range" id="r3Tilt" min="-10" max="25" value="0"></label>
-    <button class="btn" id="r3Front">정면</button>
-    <span class="sp"></span>
+    <span class="seg"><button class="btn on" data-glmode="status">상태</button><button class="btn" data-glmode="temp">온도</button><button class="btn" disabled title="가상 데이터에 전력 값이 없어 아직 만들지 않았습니다">전력</button></span>
+    <span class="seg"><button class="btn" id="glZoomOut" title="축소">&minus;</button><button class="btn" id="glZoomIn" title="확대">+</button><button class="btn" id="glFit">화면 맞춤</button><button class="btn" id="glHome">초기 시점</button></span>
+  </div>
+  <div class="gltool" style="margin-top:6px">
     <span class="muted">빠른 이동</span>
     <button class="btn" data-r3="2026-10-22T21:00">평소 저녁</button>
     <button class="btn" data-r3="2026-10-26T15:55" data-center="B" data-rack="IDC_B_R07">냉각 이상</button>
     <button class="btn" data-r3="2026-10-26T16:15" data-center="B" data-rack="IDC_B_R07">장비 꺼짐</button>
+    <span class="sp"></span>
+    <span class="note" style="margin:0">모두 가상 데이터. 드래그 = 회전(좌우 70°까지), 오른쪽 드래그 또는 Shift+드래그 = 이동, 휠 = 확대·축소. 장비 높이·랙 안 배치와 패치 패널·PDU 같은 보조 장비는 제가 만든 가상 그림입니다.</span>
   </div>
-  <p class="note" id="r3Sum" style="color:var(--text);margin:0 0 8px"></p>
-  <div class="r3grid">
-    <div class="card r3list" style="padding:0"><table id="r3List"></table></div>
-    <div class="r3stage" id="r3Stage"><div class="r3row" id="r3Row3d"></div>
-      <div class="r3legend"><span class="sw ok"></span>정상 <span class="sw warn"></span>주의 <span class="sw hot"></span>경고 <span class="sw crit"></span>위험</div></div>
+  <div class="glgrid">
+    <aside class="glleft card">
+      <input type="search" id="glSearch" placeholder="랙·장비 검색 (예: R07, FS6)">
+      <div class="glchips"><button class="btn sm on" data-glf="all">전체</button><button class="btn sm" data-glf="ok">정상</button><button class="btn sm" data-glf="warn">주의</button><button class="btn sm" data-glf="crit">경고·위험</button><span class="muted" id="glCount"></span></div>
+      <div id="glList"></div>
+    </aside>
+    <div class="glwrap" id="glWrap"><canvas id="glCanvas"></canvas><div class="gltip" id="glTip" hidden></div><div class="glhint" id="glHint"></div>
+      <div class="r3legend"><span class="sw ok"></span>정상 <span class="sw warn"></span>주의 <span class="sw hot"></span>경고 <span class="sw crit"></span>위험 <span class="muted">(온도 보기: 파랑→초록→노랑→주황→빨강)</span></div></div>
+    <aside class="glright card" id="glDetail"></aside>
+  </div>
+  <div class="glbottom">
+    <div class="card" id="glAlerts"></div>
+    <div class="card" id="glChart"></div>
+    <div class="card" id="glDevs"></div>
   </div>
   <div class="r3detail" id="r3Detail" hidden><div class="r3panel" id="r3DBody"></div></div>
 </section>
@@ -290,5 +302,6 @@
 <script src="topology.js"></script>
 <script src="lib.js"></script>
 <script src="app.js"></script>
+<script src="room3d.js"></script>
 </body>
 </html>

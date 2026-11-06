@@ -962,65 +962,16 @@ function startScn(id) {
   syncHdr(); window.addEventListener("resize", syncHdr);
 })();
 
-/* ---------- 서버실-3D: 랙 정면도(기본) + 장비 상세(포트·광케이블) ---------- */
+/* ---------- 서버실-3D 공용: 포트 배치, 장비 상세(포트·광케이블). 3D 화면 자체는 room3d.js ---------- */
 // 랙·장비의 크기(Cisco 21U, Juniper 6U, Huawei 2U)와 포트 배치는 제가 만든 가상 그림입니다.
-const R3 = { yaw: 0, tilt: 0, row: 0, sel: null, jump: false, center: null, dev: null, port: null };
-const U_PX = 9, RACK_U = 42, DEV_U = { cisco: 21, juniper: 6, huawei: 2 }, ROW_N = 8, RW = 118, RD = 70, RG = 24, RH = RACK_U * U_PX;
+const R3 = { dev: null, port: null };   // 장비 상세(포트·광케이블) 창의 상태
+const RACK_U = 42, DEV_U = { cisco: 21, juniper: 6, huawei: 2 }, ROW_N = 8;   // 장비 높이는 제가 만든 가정
 const portIdx = (d, name) => { const m = String(name).match(/(\d+)\/(\d+)\/(\d+)$/); return m ? (+m[2] - (d.vendor === "huawei" ? 1 : 0)) * 48 + (+m[3]) : -1; };
 const portBad = f => f[2] > 50 || f[3] < -9;
 function portPlan(d) {   // 포트 번호 -> 연결 정보. 포트는 위아래 2줄, 왼쪽부터 번호순으로 배치
   const mx = Math.max(0, ...d.ifs.map(f => portIdx(d, f[0])));
   const total = d.vendor === "cisco" ? Math.max(48, Math.ceil((mx + 1) / 12) * 12) : (mx > 23 ? 48 : 24);
   return { total, cols: total / 2, map: new Map(d.ifs.map(f => [portIdx(d, f[0]), f])) };
-}
-function r3Rows(vr) {   // 한 화면에 랙 8개씩 (센터별 열)
-  const rows = [];
-  [...new Set(vr.map(r => codeOf(r.id)))].forEach(c => {
-    const rs = vr.filter(r => codeOf(r.id) === c);
-    for (let k = 0; k < rs.length; k += ROW_N) { const part = rs.slice(k, k + ROW_N);
-      rows.push({ label: `${TOPOLOGY.centers[c]} ${Math.floor(k / ROW_N) + 1}열 (${part[0].id.slice(4)}~${part[part.length - 1].id.slice(4)})`, racks: part }); }
-  });
-  return rows;
-}
-function r3DevFront(r, dv, i) {
-  const d = DEV[dv.id], st = devState(r, dv, i), pl = portPlan(d), h = DEV_U[dv.vendor] * U_PX - 2;
-  const ports = (a, b) => { let s = ""; for (let k = a; k < b; k++) { const f = pl.map.get(k); s += `<i class="${f ? (portBad(f) ? "x" : "u") : ""}"></i>`; } return s; };
-  const body = dv.vendor === "cisco"
-    ? `<div class="sup"></div><div class="sup"></div>` + Array.from({ length: pl.total / 12 }, (_, c) => `<div class="lc"><div class="pp" style="grid-template-columns:repeat(6,1fr)">${ports(c * 12, c * 12 + 12)}</div></div>`).join("") + `<div class="fan"></div>`
-    : `<div class="pp" style="grid-template-columns:repeat(${pl.cols},1fr)">${ports(0, pl.total)}</div>`;
-  return `<div class="dv ${dv.vendor}${st.power ? "" : " dead"}" data-dev="${dv.id}" style="height:${h}px" title="${dv.id}: 누르면 포트와 광케이블을 자세히 봅니다"><div class="dh">${ledHtml(st)}<b>${dv.id.slice(4)}</b></div><div class="db">${body}</div></div>`;
-}
-function r3Rack(r, k, i) {
-  const t = r.temp[i], lv = tempCls(t), used = r.devices.reduce((n, dv) => n + DEV_U[dv.vendor], 0);
-  const tb = (y, off) => { const v = t + off; return `<span class="tb ${tempCls(v)}" style="top:${y}px">${v.toFixed(1)}<small>°C</small></span>`; };
-  return `<div class="rk ${lv}${R3.sel === r.id ? " sel" : ""}${HL.has(r.id) ? " hl" : ""}" data-rack="${r.id}" style="left:${k * (RW + RG)}px">` +
-    `<div class="rtag"><b>${r.id.slice(4)}</b><small>장비 ${r.devices.length}대 · ${used}U/${RACK_U}U</small></div>` +
-    `<div class="cube"><div class="face front"><div class="devs">${r.devices.map(dv => r3DevFront(r, dv, i)).join("")}</div>${tb(6, 1.2)}${tb(RH / 2 - 10, 0.4)}${tb(RH - 26, -0.4)}</div>` +
-    `<div class="face sd l"></div><div class="face sd r"></div><div class="face topf"></div></div></div>`;
-}
-function r3Apply() {
-  const w = $("#r3Row3d"); if (!w) return;
-  w.style.setProperty("--yaw", R3.yaw + "deg"); w.style.setProperty("--tilt", R3.tilt + "deg");
-  $("#r3Yaw").value = R3.yaw; $("#r3Tilt").value = R3.tilt;
-}
-function render3d() {
-  if (!$("#tab-room3d").classList.contains("on")) return;
-  const i = clamp(sr.end, 0, N - 1), vr = visibleRacks(), rows = r3Rows(vr);
-  $("#r3Time").value = isoLocal(msOf(i));
-  if (R3.center !== view.center) { R3.center = view.center; R3.row = 0; R3.sel = null; }
-  if (R3.sel && !vr.some(r => r.id === R3.sel)) R3.sel = null;
-  if (R3.jump && R3.sel) R3.row = Math.max(0, rows.findIndex(x => x.racks.some(r => r.id === R3.sel)));
-  R3.jump = false; R3.row = clamp(R3.row, 0, rows.length - 1);
-  const row = rows[R3.row], n = row.racks.length, rowW = n * RW + (n - 1) * RG;
-  $("#r3Sum").textContent = `${viewLabel()} · 랙 ${vr.length}개 · 장비 ${vr.reduce((a, r) => a + r.devices.length, 0)}대`;
-  $("#r3RowSel").innerHTML = rows.map((x, k) => `<option value="${k}" ${k === R3.row ? "selected" : ""}>${x.label}</option>`).join("");
-  const fit = Math.min(1, ($("#r3Stage").clientWidth - 30) / rowW);
-  const w = $("#r3Row3d");
-  w.style.cssText = `width:${rowW}px;margin-left:${-rowW / 2}px;--fit:${fit}`;
-  w.innerHTML = `<div class="floorp" style="left:-60px;width:${rowW + 120}px"></div>` + row.racks.map((r, k) => r3Rack(r, k, i)).join("");
-  r3Apply();
-  $("#r3List").innerHTML = `<tr><th>랙</th><th class="n">입구 온도</th><th class="n">장비</th></tr>` + vr.map(r => `<tr class="click${r.id === R3.sel ? " on" : ""}" data-rack="${r.id}"><td>${r.id}</td><td class="n"><span class="dot ${tempCls(r.temp[i])}"></span>${r.temp[i].toFixed(1)}°C</td><td class="n">${r.devices.length}</td></tr>`).join("");
-  if (R3.dev) r3Detail();
 }
 /* 장비 상세: 포트 배치와 꽂혀 있는 광케이블 (위줄 포트의 케이블은 위로, 아래줄은 아래로) */
 function r3Detail() {
@@ -1061,43 +1012,13 @@ function r3Detail() {
 }
 function r3Open(id) { R3.dev = id; R3.port = null; r3Detail(); }
 function r3Close() { R3.dev = null; $("#r3Detail").hidden = true; }
-(function init3d() {
-  const stage = $("#r3Stage"); let drag = null;
-  stage.addEventListener("pointerdown", e => { drag = { x: e.clientX, y: e.clientY, yaw: R3.yaw, tilt: R3.tilt, moved: false, id: e.pointerId }; });
-  stage.addEventListener("pointermove", e => {
-    if (!drag) return; if (e.buttons === 0) { drag = null; return; }
-    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-    if (!drag.moved && Math.abs(dx) + Math.abs(dy) > 6) { drag.moved = true; try { stage.setPointerCapture(drag.id); } catch (er) { /* 무시 */ } }
-    if (drag.moved) { R3.yaw = clamp(drag.yaw + dx * 0.15, -50, 50); R3.tilt = clamp(drag.tilt - dy * 0.1, -10, 25); r3Apply(); }
-  });
-  const end = () => { R3.dragged = !!(drag && drag.moved); drag = null; setTimeout(() => { R3.dragged = false; }, 0); };
-  stage.addEventListener("pointerup", end); stage.addEventListener("pointercancel", end); stage.addEventListener("lostpointercapture", () => { drag = null; });
-  stage.addEventListener("click", e => {
-    if (R3.dragged) return;
-    const dv = e.target.closest(".dv"); if (dv) { r3Open(dv.dataset.dev); return; }
-    const rk = e.target.closest(".rk"); if (rk) { R3.sel = rk.dataset.rack; render3d(); }
-  });
-  $("#r3Yaw").oninput = e => { R3.yaw = +e.target.value; r3Apply(); };
-  $("#r3Tilt").oninput = e => { R3.tilt = +e.target.value; r3Apply(); };
-  $("#r3Front").onclick = () => { R3.yaw = 0; R3.tilt = 0; r3Apply(); };
-  $("#r3RowSel").onchange = e => { R3.row = +e.target.value; R3.sel = null; render3d(); };
-  $("#r3List").addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { R3.sel = tr.dataset.rack; R3.jump = true; render3d(); } });
+(function initDetailModal() {   // 장비 상세(포트·광케이블) 창의 버튼
   $("#r3Detail").addEventListener("click", ev => {
     if (ev.target.id === "r3Detail" || ev.target.id === "r3DClose") { r3Close(); return; }
     if (ev.target.id === "r3DTerm") { openDeviceTerminal(R3.dev); return; }
     const pt = ev.target.closest("[data-i]"); if (pt) { R3.port = +pt.dataset.i; r3Detail(); }
   });
   window.addEventListener("keydown", e => { if (e.key === "Escape" && R3.dev) r3Close(); });
-  $("#r3Time").addEventListener("change", e => { if (e.target.value) { sr.end = idxOf(parseT(e.target.value)); render3d(); } });
-  $("#r3Prev").onclick = () => { sr.end -= cfg.step; render3d(); };
-  $("#r3Next").onclick = () => { sr.end += cfg.step; render3d(); };
-  $$("[data-r3]").forEach(b => b.onclick = () => {
-    sr.end = idxOf(parseT(b.dataset.r3));
-    if (b.dataset.center && view.center !== "ALL" && view.center !== b.dataset.center) setCenter(b.dataset.center);
-    if (b.dataset.rack) { R3.sel = b.dataset.rack; R3.jump = true; }
-    render3d();
-  });
-  window.addEventListener("resize", () => { if ($("#tab-room3d").classList.contains("on")) render3d(); });
 })();
 
 /* ---------- 시작 ---------- */

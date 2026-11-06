@@ -9,7 +9,7 @@ let failed = 0;
 const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') + name + (extra ? ' - ' + extra : '')); if (!ok) failed++; };
 
 (async () => {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 900 }, acceptDownloads: true });
   const page = await ctx.newPage();
   const errors = [];
@@ -78,45 +78,65 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const vis = {};
   for (const tab of ['monitor', 'room', 'room3d', 'term', 'event', 'monthly', 'visit']) { await page.click(`[data-tab=${tab}]`); vis[tab] = await page.locator('#centerBar').isVisible(); }
   check('센터 선택은 관제·서버실에서만 보이고 나머지 탭에서는 숨겨짐', vis.monitor && vis.room && vis.room3d && !vis.term && !vis.event && !vis.monthly && !vis.visit, JSON.stringify(vis));
-  // 서버실-3D: 정면도가 기본, 센터 선택과 맞고, 장비를 누르면 포트·광케이블 상세가 열린다
+  // 서버실-3D (WebGL): 랙 8개 정면, 목록·상세·아래 영역 연동, 장비 클릭, 확대/축소, 드래그
   await page.click('[data-tab=room3d]');
   await page.click('#centerBar [data-center=ALL]');
-  check('서버실-3D: 기본은 정면 (좌우 0, 상하 0)', (await page.locator('#r3Yaw').inputValue()) === '0' && (await page.locator('#r3Tilt').inputValue()) === '0');
-  check('서버실-3D: 한 화면에 랙 8개까지', (await page.locator('#r3Row3d .rk').count()) === 8);
+  await page.waitForFunction(() => window.THREE && document.querySelectorAll('#glList .gli').length > 0, null, { timeout: 15000 });
+  check('서버실-3D: 전체 보기 왼쪽 목록에 랙 44개', (await page.locator('#glList .gli').count()) === 44, await page.locator('#glList .gli').count());
+  check('서버실-3D: 3D 화면(canvas)이 그려지고 비어 있지 않음', await page.evaluate(() => { const c = document.getElementById('glCanvas'); if (!c || c.width < 100) return false; const t = document.createElement('canvas'); t.width = 64; t.height = 64; const g = t.getContext('2d'); g.drawImage(c, 0, 0, 64, 64); const d = g.getImageData(0, 0, 64, 64).data; let n = 0; for (let k = 0; k < d.length; k += 4) if (d[k] + d[k + 1] + d[k + 2] > 90) n++; return n > 100; }));
   await page.click('#centerBar [data-center=S]');
   const rowsS = await page.locator('#r3RowSel option').count();
-  check('서버실-3D: 서초 랙 16개는 8개씩 2열로 나뉨', rowsS === 2 && (await page.locator('#r3List tr.click').count()) === 16, rowsS);
+  check('서버실-3D: 서초 랙 16개는 8개씩 2열로 나뉨', rowsS === 2 && (await page.locator('#glList .gli').count()) === 16, rowsS);
   await page.selectOption('#r3RowSel', '1');
-  const second = await page.locator('#r3Row3d .rk').evaluateAll(els => els.map(e => e.dataset.rack));
-  check('서버실-3D: 2열을 고르면 서초 R09~R16이 보임', second.length === 8 && second[0] === 'IDC_S_R09' && second[7] === 'IDC_S_R16', second.join());
-  await page.click('#r3List tr[data-rack="IDC_S_R02"]');
-  check('서버실-3D: 목록에서 랙을 누르면 그 랙이 있는 열로 이동하고 선택됨', (await page.locator('#r3Row3d .rk.sel').getAttribute('data-rack')) === 'IDC_S_R02');
-  const devsIn = await page.locator('#r3Row3d .dv').evaluateAll(els => els.map(e => e.dataset.dev));
-  check('서버실-3D: 그려진 장비가 설계도의 랙 배치와 같음', JSON.stringify(devsIn.sort()) === JSON.stringify(await page.evaluate(() => TOPOLOGY.devices.filter(d => RACKS.filter(r => r.id.startsWith('IDC_S_R0') && r.id <= 'IDC_S_R08').some(r => r.id === d.rack)).map(d => d.id).sort())), devsIn.length);
-  // 드래그하면 각도가 바뀌고, 정면 버튼으로 돌아온다. 클릭만 하면 각도는 그대로.
-  const sbox = await page.locator('#r3Stage').boundingBox();
-  await page.mouse.move(sbox.x + 300, sbox.y + 400); await page.mouse.down(); await page.mouse.move(sbox.x + 420, sbox.y + 400, { steps: 5 }); await page.mouse.up();
-  const yawAfter = +(await page.locator('#r3Yaw').inputValue());
-  check('서버실-3D: 드래그하면 각도가 바뀜', yawAfter > 5, yawAfter);
-  await page.mouse.move(sbox.x + 100, sbox.y + 300);
-  check('서버실-3D: 마우스를 떼고 움직여도 각도가 더 바뀌지 않음', +(await page.locator('#r3Yaw').inputValue()) === yawAfter);
-  await page.click('#r3Front');
-  check('서버실-3D: 정면 버튼으로 돌아옴', (await page.locator('#r3Yaw').inputValue()) === '0');
-  await page.click('[data-r3="2026-10-26T15:55"]');
-  check('서버실-3D: 냉각 이상 버튼은 분당으로 맞추고 IDC_B_R07을 고름', (await page.locator('#centerBar .cbtn.on').getAttribute('data-center')) === 'B' && (await page.locator('#r3Row3d .rk.sel').getAttribute('data-rack')) === 'IDC_B_R07' && (await page.locator('#r3Row3d .rk.crit').count()) === 1);
-  await page.click('#r3Row3d .dv[data-dev="IDC_B_FS1"]', { force: true }).catch(async () => { await page.selectOption('#r3RowSel', '0'); });
-  await page.waitForTimeout(100);
-  if (!(await page.locator('#r3Detail').isVisible())) { await page.click('#r3Row3d .dv[data-dev="IDC_B_FS1"]'); }
-  check('서버실-3D: 장비를 누르면 상세가 열리고 연결된 포트가 표시됨', (await page.locator('#r3Detail').isVisible()) && (await page.locator('#r3Detail .pt.u').count()) >= 8 && (await page.locator('#r3Detail').innerText()).includes('IDC_B_FS1'));
-  check('서버실-3D: 광케이블(선)과 이상 포트(빨강)가 그려짐', (await page.locator('#r3Detail svg path').count()) >= 8 && (await page.locator('#r3Detail .pt.x').count()) >= 1);
-  await page.click('#r3Detail .pt.x >> nth=0');
-  check('서버실-3D: 포트를 누르면 그 케이블의 상대 장비 표시가 강조됨', (await page.locator('#r3Detail .ctag.sel').count()) === 1);
-  const [p3] = await Promise.all([ctx.waitForEvent('page'), page.click('#r3DTerm')]);
-  await p3.waitForLoadState('load');
-  check('서버실-3D: 상세에서 터미널 열기', (await p3.locator('#termTarget').innerText()).includes('IDC_B_FS1'));
-  await p3.close();
+  check('서버실-3D: 2열을 고르면 위쪽 경로 표시가 바뀜', (await page.locator('#glCrumb').innerText()).includes('S_R09~S_R16'));
+  await page.fill('#glSearch', 'AS30');
+  check('서버실-3D: 검색 "AS30"은 그 장비가 든 랙 1개만 남김', (await page.locator('#glList .gli').count()) === 1, await page.locator('#glList .gli').count());
+  await page.fill('#glSearch', '');
+  await page.click('[data-glf=crit]');
+  check('서버실-3D: 필터 "경고·위험"은 평소엔 0개', (await page.locator('#glList .gli').count()) === 0);
+  await page.click('[data-glf=all]');
+  await page.click('#glList .gli[data-rack="IDC_S_R02"]');
+  check('서버실-3D: 목록에서 랙을 누르면 오른쪽 상세·아래 목록이 그 랙으로 바뀜', (await page.locator('#glDetail').innerText()).includes('IDC_S_R02') && (await page.locator('#glDevs').innerText()).includes('IDC_S_R02'));
+  // 3D 화면을 직접 눌러 장비 선택: 카메라 위치로 화면 좌표를 계산하지 않고, 화면 맞춤 상태에서 랙 한가운데를 누른다
+  await page.click('#r3RowSel'); await page.selectOption('#r3RowSel', '0');
+  await page.waitForTimeout(300);
+  const cv = await page.locator('#glCanvas').boundingBox();
+  const spot = await page.evaluate(() => {   // 첫 번째 랙의 장비(맨 아래쪽 큰 섀시)가 화면 어디에 보이는지 투영해서 구함
+    const v = new THREE.Vector3(); const g = G.root.children[0]; const m = G.ray.find(o => o.userData.kind === 'cisco'); if (!m) return null;
+    m.getWorldPosition(v); v.project(G.cam); const r = G.r.domElement.getBoundingClientRect(); return { x: r.left + (v.x + 1) / 2 * r.width, y: r.top + (1 - v.y) / 2 * r.height };
+  });
+  await page.mouse.click(spot.x, spot.y);
+  check('서버실-3D: 3D 화면의 장비를 누르면 오른쪽에 그 장비 상세가 나옴 (Cisco 섀시)', /IDC_S_FR\d/.test(await page.locator('#glDetail h3').innerText()) && (await page.locator('#glDetail').innerText()).includes('자산 ID'), await page.locator('#glDetail h3').innerText());
+  await page.mouse.click(cv.x + 8, cv.y + 8);
+  check('서버실-3D: 빈 곳을 누르면 선택이 풀림', (await page.locator('#glDetail h3').innerText()).includes('요약'));
+  // 확대/축소/드래그/정면
+  const d0 = await page.evaluate(() => G.cs.dist);
+  await page.click('#glZoomIn'); const d1 = await page.evaluate(() => G.cs.dist);
+  check('서버실-3D: 확대 버튼이 카메라를 가깝게 함', d1 < d0, `${d0} -> ${d1}`);
+  await page.click('#glFit'); check('서버실-3D: 화면 맞춤으로 처음 거리로 돌아옴', Math.abs((await page.evaluate(() => G.cs.dist)) - d0) < 0.01);
+  await page.mouse.move(cv.x + 300, cv.y + 300); await page.mouse.down(); await page.mouse.move(cv.x + 420, cv.y + 300, { steps: 5 }); await page.mouse.up();
+  const az = await page.evaluate(() => G.cs.az);
+  check('서버실-3D: 드래그하면 시점이 회전하고 좌우 70도를 넘지 않음', Math.abs(az) > 5 && Math.abs(az) <= 70, az);
+  await page.mouse.move(cv.x + 100, cv.y + 200);
+  check('서버실-3D: 마우스를 뗀 뒤에는 시점이 더 바뀌지 않음', (await page.evaluate(() => G.cs.az)) === az);
+  await page.click('#glHome'); check('서버실-3D: 초기 시점 버튼', (await page.evaluate(() => G.cs.az)) === 0);
+  // 사건: 냉각 이상 -> 분당 R07 선택, 위험 표시, 장비 상세에서 포트·광케이블
+  await page.click('[data-r3="2026-10-26T16:15"]');
+  check('서버실-3D: 장비 꺼짐 버튼은 분당으로 맞추고 IDC_B_R07을 선택', (await page.locator('#centerBar .cbtn.on').getAttribute('data-center')) === 'B' && (await page.locator('#glDetail h3').innerText()).includes('IDC_B_R07'));
+  check('서버실-3D: 목록의 R07이 경고·위험 상태이고 필터에 잡힘', (await page.locator('#glList .gli[data-rack="IDC_B_R07"] .dot.crit').count()) === 1);
+  await page.click('#glDevs tr[data-id="IDC_B_FS6"]');
+  const t6 = await page.locator('#glDetail').innerText();
+  check('서버실-3D: 아래 장비 목록에서 IDC_B_FS6을 누르면 꺼짐 상태·알림이 보임', t6.includes('IDC_B_FS6') && t6.includes('꺼짐') && t6.includes('과열로 꺼짐'), t6.slice(0, 80));
+  await page.click('[data-glmode=temp]');
+  check('서버실-3D: 온도 보기로 바꿀 수 있음', (await page.locator('[data-glmode=temp].on').count()) === 1);
+  await page.click('#glPorts');
+  check('서버실-3D: 포트·광케이블 자세히 창이 열리고 연결 포트가 보임', (await page.locator('#r3Detail').isVisible()) && (await page.locator('#r3Detail .pt.u').count()) >= 1);
   await page.keyboard.press('Escape');
-  check('서버실-3D: Esc로 상세가 닫힘', !(await page.locator('#r3Detail').isVisible()));
+  check('서버실-3D: Esc로 상세 창이 닫힘', !(await page.locator('#r3Detail').isVisible()));
+  const [p3] = await Promise.all([ctx.waitForEvent('page'), page.click('#glTerm')]);
+  await p3.waitForLoadState('load');
+  check('서버실-3D: 오른쪽 상세에서 터미널 열기', (await p3.locator('#termTarget').innerText()).includes('IDC_B_FS6'));
+  await p3.close();
   await page.click('[data-tab=monitor]');
   const barMon = await page.locator('#centerBar').innerText();
   await page.click('[data-tab=room]');
