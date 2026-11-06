@@ -13,6 +13,7 @@
   <nav class="tabs" id="tabs">
     <button data-tab="monitor" class="on">관제</button>
     <button data-tab="room">서버실</button>
+    <button data-tab="room3d">서버실-3D</button>
     <button data-tab="term">장비 터미널</button>
     <button data-tab="event">이벤트 대비</button>
     <button data-tab="monthly">월간 자료</button>
@@ -198,6 +199,27 @@
 </section>
 
 <!-- 4. 방문 신청 -->
+<section class="tab" id="tab-room3d">
+  <p class="note">서버실을 위에서 내려다본 배치도입니다. <b>드래그로 회전, 휠로 확대·축소</b>, 랙을 누르면 오른쪽에 정면도가 나옵니다. 정면도의 장비를 누르면 그 장비의 가상 터미널이 새 창으로 열립니다. 랙 색은 입구 온도(주의·경고·위험), 랙 정면의 막대는 장비 LED 상태입니다. 배치와 크기(Cisco 21U, Juniper 6U)는 제가 만든 가상 그림입니다.</p>
+  <div class="toolbar">
+    <label>기준 시각 <input type="datetime-local" id="r3Time"></label>
+    <button class="btn" id="r3Prev">&lsaquo; 이전</button>
+    <button class="btn" id="r3Next">다음 &rsaquo;</button>
+    <button class="btn" id="r3Reset">기본 시점</button>
+    <button class="btn" id="r3Top">위에서 보기</button>
+    <span class="sp"></span>
+    <span class="muted">빠른 이동</span>
+    <button class="btn" data-r3="2026-10-22T21:00">평소 저녁</button>
+    <button class="btn" data-r3="2026-10-26T15:55" data-center="B" data-rack="IDC_B_R03">냉각 이상</button>
+    <button class="btn" data-r3="2026-10-26T16:15" data-center="B" data-rack="IDC_B_R03">장비 꺼짐</button>
+  </div>
+  <p class="note" id="r3Sum" style="color:var(--text);margin:0 0 8px"></p>
+  <div class="r3grid">
+    <div class="r3stage" id="r3Stage"><div class="r3world" id="r3World"></div>
+      <div class="r3legend"><span class="sw ok"></span>정상 <span class="sw warn"></span>주의 <span class="sw hot"></span>경고 <span class="sw crit"></span>위험</div></div>
+    <div class="card r3elev" id="r3Elev"></div>
+  </div>
+</section>
 <section class="tab" id="tab-visit">
   <p class="note">방문 신청 메일을 받아 방문 등록(주차, 서버실 키 포함)을 하고 회신하는 일. 이름·메일은 모두 가상입니다. 입력한 내용은 이 브라우저에만 저장됩니다.</p>
   <div class="steps"><span>1 메일 읽기</span><span>2 방문자 조회 (기존/신규)</span><span>3 방문 등록</span><span>4 회신 메일</span></div>

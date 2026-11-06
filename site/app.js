@@ -77,12 +77,13 @@ function showTab(name) {
   $$("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
   $$("section.tab").forEach(s => s.classList.toggle("on", s.id === "tab-" + name));
   if (typeof renderCenterBar === "function") {   // 센터 선택은 관제와 서버실에서만 보인다
-    $("#centerBar").hidden = !(name === "monitor" || name === "room");
+    $("#centerBar").hidden = !(name === "monitor" || name === "room" || name === "room3d");
     if ($("#centerBar").hidden) syncHdr(); else renderCenterBar();
   }
   if (name === "monitor") { renderAll(); renderTasks(); }
   if (name !== "room" && typeof stopPlay === "function") stopPlay();
   if (name === "room") renderServerRoom();
+  if (name === "room3d" && typeof render3d === "function") render3d();
   try { history.replaceState(null, "", "#" + name); } catch (e) { /* 무시 */ }
 }
 $("#tabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) showTab(b.dataset.tab); });
@@ -793,7 +794,7 @@ function applyRoomCfg(save) {
 /* ---------- 공통 센터 선택: 모든 화면이 같은 센터로 맞춰진다 ---------- */
 const syncHdr = () => document.documentElement.style.setProperty("--hdr", $("header.top").offsetHeight + "px");   // 안내 막대를 헤더 아래에 붙여 두려고
 function renderCenterBar() {
-  const names = TOPOLOGY.centers, inRoom = $("#tab-room").classList.contains("on");
+  const names = TOPOLOGY.centers, inRoom = $("#tab-room").classList.contains("on") || $("#tab-room3d").classList.contains("on");
   const stat = c => { const rs = RACKS.filter(r => c === "ALL" || codeOf(r.id) === c); return `랙 ${rs.length} · 장비 ${rs.reduce((n, r) => n + r.devices.length, 0)}`; };   // 서버실에서만 보여 준다
   $("#centerBar").innerHTML = `<span class="muted">센터</span>` + ["ALL", ...Object.keys(names)].map(c =>
     `<button class="cbtn${view.center === c ? " on" : ""}" data-center="${c}" title="${c === "ALL" ? "모든 센터" : names[c]}">${c === "ALL" ? "전체" : names[c]}${inRoom ? `<small>${stat(c)}</small>` : ""}</button>`).join("");
@@ -801,7 +802,7 @@ function renderCenterBar() {
 }
 function setCenter(code, persist = true) {
   view.center = code; if (persist) store.set("center", code);
-  renderCenterBar(); renderAll(); renderServerRoom();
+  renderCenterBar(); renderAll(); renderServerRoom(); if (typeof render3d === "function") render3d();
 }
 $("#centerBar").addEventListener("click", e => { const b = e.target.closest("[data-center]"); if (b) setCenter(b.dataset.center); });
 renderCenterBar();
@@ -949,6 +950,84 @@ function startScn(id) {
   syncHdr(); window.addEventListener("resize", syncHdr);
 })();
 
+/* ---------- 서버실-3D: 바닥 배치도(CSS 3D) + 랙 정면도 ---------- */
+// 랙 크기와 U 높이는 제가 정한 가정입니다 (Cisco 대형은 21U, Juniper는 6U로 그림).
+const R3 = { rx: 56, rz: -24, zoom: 1, sel: null };
+const U_PX = 10, RACK_U = 42, DEV_U = { cisco: 21, juniper: 6 };
+function r3Layout(vr) {   // 센터마다 한 줄씩, 랙은 왼쪽부터
+  const codes = [...new Set(vr.map(r => codeOf(r.id)))], pos = {};
+  codes.forEach((c, row) => vr.filter(r => codeOf(r.id) === c).forEach((r, k) => { pos[r.id] = { x: k * 100, y: row * 190 }; }));
+  return { pos, codes, cols: Math.max(...codes.map(c => vr.filter(r => codeOf(r.id) === c).length)) };
+}
+function r3Cab(r, i, p) {
+  const W = 44, D = 66, H = 96, lv = tempCls(r.temp[i]);
+  const bars = r.devices.map(dv => { const st = devState(r, dv, i); const big = dv.vendor === "cisco";
+    return `<i class="b ${st.power ? st.status : "off"}${big ? " big" : ""}"></i>`; }).join("");
+  const face = (cls, w, h, tf, inner) => `<div class="f ${cls}" style="width:${w}px;height:${h}px;transform:${tf}">${inner || ""}</div>`;
+  return `<div class="cab ${lv}${R3.sel === r.id ? " sel" : ""}${HL.has(r.id) ? " hl" : ""}" data-rack="${r.id}" style="transform:translate3d(${p.x}px,${p.y}px,0)">` +
+    face("top", W, D, `translateZ(${H}px)`) +
+    face("front", W, H, `translate3d(0,${D}px,${H}px) rotateX(-90deg)`, `<span class="bars">${bars}</span>`) +
+    face("back", W, H, `translate3d(0,0,${H}px) rotateX(-90deg)`) +
+    face("left", D, H, `translate3d(0,0,${H}px) rotateZ(90deg) rotateX(-90deg)`) +
+    face("right", D, H, `translate3d(${W}px,0,${H}px) rotateZ(90deg) rotateX(-90deg)`) +
+    `<div class="lbl3" style="transform:translate3d(${W / 2}px,${D / 2}px,${H + 8}px)"><span><b>${r.id.slice(4)}</b> <em class="${lv}">${r.temp[i].toFixed(1)}°</em></span></div></div>`;
+}
+function r3Elevation(r, i) {
+  const lv = tempCls(r.temp[i]);
+  let used = 0, html = "";
+  r.devices.forEach(dv => {
+    const u = DEV_U[dv.vendor], st = devState(r, dv, i), d = DEV[dv.id]; used += u;
+    const cust = (d.customers || []).map(k => CUSTOMERS.find(c => c.key === k).name).join(" · ");
+    html += `<div class="edev ${dv.vendor}" data-dev="${dv.id}" role="button" tabindex="0" style="height:${u * U_PX}px" title="누르면 이 장비의 터미널이 새 창으로 열립니다 (가상)">` +
+      `<div class="eh">${ledHtml(st)}<b>${dv.id}</b><span class="muted">${dv.vendor === "cisco" ? "Cisco · " + u + "U (랙 전용)" : "Juniper · " + u + "U"}</span></div>` +
+      `<div class="ep">${d.ifs.slice(0, dv.vendor === "cisco" ? 8 : 4).map(f => `<s class="${f[2] > 50 || f[3] < -9 ? "bad" : ""}"></s>`).join("")}</div>` +
+      `<div class="muted ec">${esc(d.role)}${cust ? "" : ""}</div></div>`;
+  });
+  const free = RACK_U - used;
+  return `<div class="ehd"><b>${r.id}</b><span class="tmp ${lv}">${r.temp[i].toFixed(1)}°C</span></div>` +
+    `<div class="note" style="margin:0 0 6px">${viewLabelOf(r.id)} · 장비 ${r.devices.length}대 · 사용 ${used}U / ${RACK_U}U (빈 ${free}U)</div>` +
+    `<div class="elev">${html}<div class="efree" style="height:${free * U_PX}px"></div></div>` +
+    spark(r.temp, Math.max(0, i - (cfg.range * 12 - 1)), i);
+}
+const viewLabelOf = id => TOPOLOGY.centers[codeOf(id)];
+function render3d() {
+  if (!$("#tab-room3d").classList.contains("on")) return;
+  const i = clamp(sr.end, 0, N - 1), vr = visibleRacks();
+  $("#r3Time").value = isoLocal(msOf(i));
+  if (!vr.some(r => r.id === R3.sel)) R3.sel = vr[0].id;
+  const { pos, codes, cols } = r3Layout(vr); R3.codes = codes.length;
+  $("#r3Sum").textContent = `${viewLabel()} · 랙 ${vr.length}개 · 장비 ${vr.reduce((n, r) => n + r.devices.length, 0)}대`;
+  const w = (cols - 1) * 100 + 44, h = (codes.length - 1) * 190 + 66;
+  $("#r3World").style.cssText = `--rx:${R3.rx}deg;--rz:${R3.rz}deg;--z:${R3.zoom * (codes.length > 1 ? 0.8 : 1)};width:${w}px;height:${h}px;margin:${-h / 2}px 0 0 ${-w / 2}px`;
+  $("#r3World").innerHTML = `<div class="floor" style="left:-40px;top:-40px;width:${w + 80}px;height:${h + 80}px"></div>` +
+    codes.map((c, row) => `<div class="clbl" style="transform:translate3d(-30px,${row * 190 + 33}px,2px)"><span>${TOPOLOGY.centers[c]}</span></div>`).join("") +
+    vr.map(r => r3Cab(r, i, pos[r.id])).join("");
+  const rk = vr.find(r => r.id === R3.sel);
+  $("#r3Elev").innerHTML = r3Elevation(rk, i);
+}
+(function init3d() {
+  const world = () => $("#r3World"), apply = () => world().style.cssText = world().style.cssText.replace(/--rx:[^;]*;--rz:[^;]*;--z:[^;]*;/, `--rx:${R3.rx}deg;--rz:${R3.rz}deg;--z:${R3.zoom * (R3.codes > 1 ? 0.8 : 1)};`);
+  const stage = $("#r3Stage"); let drag = null;
+  stage.addEventListener("pointerdown", e => { drag = { x: e.clientX, y: e.clientY, rx: R3.rx, rz: R3.rz, moved: false }; });
+  window.addEventListener("pointermove", e => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
+    R3.rz = drag.rz + dx * 0.4; R3.rx = clamp(drag.rx - dy * 0.3, 20, 88); apply(); });
+  window.addEventListener("pointerup", () => { setTimeout(() => { drag = null; }, 0); });
+  stage.addEventListener("click", e => { if (drag && drag.moved) return; const c = e.target.closest(".cab"); if (c) { R3.sel = c.dataset.rack; render3d(); } });
+  stage.addEventListener("wheel", e => { e.preventDefault(); R3.zoom = clamp(R3.zoom * (e.deltaY < 0 ? 1.1 : 0.9), 0.5, 2.2); apply(); }, { passive: false });
+  $("#r3Reset").onclick = () => { Object.assign(R3, { rx: 56, rz: -24, zoom: 1 }); render3d(); };
+  $("#r3Top").onclick = () => { Object.assign(R3, { rx: 88, rz: 0 }); render3d(); };
+  $("#r3Elev").addEventListener("click", ev => { const el = ev.target.closest(".edev"); if (el) openDeviceTerminal(el.dataset.dev); });
+  $("#r3Time").addEventListener("change", e => { if (e.target.value) { sr.end = idxOf(parseT(e.target.value)); render3d(); } });
+  $("#r3Prev").onclick = () => { sr.end -= cfg.step; render3d(); };
+  $("#r3Next").onclick = () => { sr.end += cfg.step; render3d(); };
+  $$("[data-r3]").forEach(b => b.onclick = () => {
+    sr.end = idxOf(parseT(b.dataset.r3));
+    if (b.dataset.center && view.center !== "ALL" && view.center !== b.dataset.center) setCenter(b.dataset.center);
+    if (b.dataset.rack) R3.sel = b.dataset.rack;
+    render3d();
+  });
+})();
+
 /* ---------- 시작 ---------- */
 $("#homeLink").addEventListener("click", e => {   // 제목을 누르면 관제(홈)로
   if (document.body.classList.contains("popup")) return;
@@ -961,5 +1040,5 @@ if (qs.get("popup") === "term") {
   document.title = `${qs.get("dev")} 터미널 (가상)`;
   $("#termIn").focus();
 } else {
-  showTab(["monitor", "monthly", "event", "room", "visit", "term"].includes(h0) ? h0 : "monitor");
+  showTab(["monitor", "monthly", "event", "room", "room3d", "visit", "term"].includes(h0) ? h0 : "monitor");
 }

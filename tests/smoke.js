@@ -74,10 +74,24 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.setViewportSize({ width: 1600, height: 900 });
 
   // 탭 순서와 센터 선택: 센터 선택은 관제·서버실에서만 보이고, 두 화면이 같은 센터로 동기화된다
-  check('탭 순서: 관제 / 서버실 / 장비 터미널 / 이벤트 대비 / 월간 자료 / 방문 신청', JSON.stringify(await page.locator('#tabs button').allInnerTexts()) === JSON.stringify(['관제', '서버실', '장비 터미널', '이벤트 대비', '월간 자료', '방문 신청']));
+  check('탭 순서: 관제 / 서버실 / 서버실-3D / 장비 터미널 / 이벤트 대비 / 월간 자료 / 방문 신청', JSON.stringify(await page.locator('#tabs button').allInnerTexts()) === JSON.stringify(['관제', '서버실', '서버실-3D', '장비 터미널', '이벤트 대비', '월간 자료', '방문 신청']));
   const vis = {};
-  for (const tab of ['monitor', 'room', 'term', 'event', 'monthly', 'visit']) { await page.click(`[data-tab=${tab}]`); vis[tab] = await page.locator('#centerBar').isVisible(); }
-  check('센터 선택은 관제·서버실에서만 보이고 나머지 탭에서는 숨겨짐', vis.monitor && vis.room && !vis.term && !vis.event && !vis.monthly && !vis.visit, JSON.stringify(vis));
+  for (const tab of ['monitor', 'room', 'room3d', 'term', 'event', 'monthly', 'visit']) { await page.click(`[data-tab=${tab}]`); vis[tab] = await page.locator('#centerBar').isVisible(); }
+  check('센터 선택은 관제·서버실에서만 보이고 나머지 탭에서는 숨겨짐', vis.monitor && vis.room && vis.room3d && !vis.term && !vis.event && !vis.monthly && !vis.visit, JSON.stringify(vis));
+  // 서버실-3D: 센터 선택과 맞고, 랙·장비가 설계도와 같고, 장비를 누르면 터미널이 열린다
+  await page.click('[data-tab=room3d]');
+  const c3 = await page.evaluate(() => ({ racks: [...document.querySelectorAll('#r3World .cab')].map(e => e.dataset.rack).sort(), want: DATA.racks.map(r => r.id).sort() }));
+  check('서버실-3D: 전체 보기에 랙 14개가 모두 그려짐', JSON.stringify(c3.racks) === JSON.stringify(c3.want) && c3.racks.length === 14, c3.racks.length);
+  await page.click('#centerBar [data-center=S]');
+  check('서버실-3D: 서초를 고르면 서초 랙 4개만 보임', (await page.locator('#r3World .cab').count()) === 4 && (await page.locator('#r3World .cab').evaluateAll(els => els.every(e => e.dataset.rack.startsWith('IDC_S_')))));
+  await page.click('#r3World .cab >> nth=2', { force: true });
+  check('서버실-3D: 랙을 누르면 정면도에 그 랙 장비가 나옴 (Cisco 1대 단독)', (await page.locator('#r3Elev .edev').count()) === 1 && (await page.locator('#r3Elev').innerText()).includes('IDC_S_FR1'));
+  await page.click('[data-r3="2026-10-26T15:55"]');
+  check('서버실-3D: 냉각 이상 버튼은 분당으로 맞추고 IDC_B_R03을 고름', (await page.locator('#centerBar .cbtn.on').getAttribute('data-center')) === 'B' && (await page.locator('#r3Elev').innerText()).includes('IDC_B_R03') && (await page.locator('#r3World .cab.crit').count()) === 1);
+  const [p3] = await Promise.all([ctx.waitForEvent('page'), page.click('#r3Elev .edev[data-dev="IDC_B_FS6"]')]);
+  await p3.waitForLoadState('load');
+  check('서버실-3D: 정면도의 장비를 누르면 그 장비 터미널이 열림', (await p3.locator('#termTarget').innerText()).includes('IDC_B_FS6'));
+  await p3.close();
   await page.click('[data-tab=monitor]');
   const barMon = await page.locator('#centerBar').innerText();
   await page.click('[data-tab=room]');
