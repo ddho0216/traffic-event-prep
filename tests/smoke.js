@@ -197,7 +197,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
 
   // 시나리오 4가지: 시간이 흘러가고, 단계(감지·확인·조치·결과)가 나오고, 닫으면 현재로 돌아온다
   const scenarios = [['calm', '평일 오후 7시', 4, ['그래프 8개 확인', '서버실 확인', '이상 없음']], ['drop', '트래픽 급감', 6, ['급감', 'IDC_B_FS2_INTL1', '광값', '예시미디어', '회복']],
-    ['surge', '트래픽 폭주', 7, ['사전 연락', '분산', '하이드레이션', '경고선 80%', '사후 정리', '[사전 안내]']], ['temp', '서버실 온도 변화', 7, ['온도 경고', '빨강 깜박임', '터미널', '냉각 복구', '-40.00 dBm']]];
+    ['linkDown', '업링크 회선 다운', 8, ['Admin', '트래픽(전/후)', '광값', 'ping', '연동망', '회복']], ['surge', '트래픽 폭주', 7, ['사전 연락', '분산', '하이드레이션', '경고선 80%', '사후 정리', '[사전 안내]']], ['temp', '서버실 온도 변화', 7, ['온도 경고', '빨강 깜박임', '터미널', '냉각 복구', '-40.00 dBm']]];
   for (const [id, name, n, words] of scenarios) {
     await page.click('[data-tab=monitor]');
     await page.click('#scnBtn'); await page.click(`#scnMenu [data-scn=${id}]`);
@@ -288,7 +288,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('꺼진 장비(IDC_B_FS6)를 누르면 새 창에 그 장비 터미널이 열림', pop.url().includes('popup=term') && (await pop.locator('#termTarget').innerText()).includes('IDC_B_FS6 · IDC_B_R07'), await pop.locator('#termTarget').innerText());
   check('새 창에는 터미널만 보임', (await pop.locator('#tab-term').isVisible()) && !(await pop.locator('#tab-monitor').isVisible()));
   await pop.press('#termIn', 'Enter');
-  check('채워 둔 명령이 실행됨 (광 정보 출력)', (await pop.locator('#termOut').innerText()).includes('Receiver signal'));
+  check('채워 둔 첫 명령(회선 설명)이 실행됨', (await pop.locator('#termOut').innerText()).includes('Admin Link Description'));
   await pop.close();
 
   await page.click('[data-tab=room]');
@@ -311,11 +311,36 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('Huawei를 고르면 Huawei 장비만 나옴 (70대)', (await opts()).length === 70 && (await opts()).includes('IDC_B_AS1') && (await opts()).includes('IDC_S_AS30'));
   await page.click('#qcmd button');
   await page.press('#termIn', 'Enter');
-  check('Huawei 명령 출력', /RX Power|CRC/.test(await page.locator('#termOut').innerText()));
+  check('Huawei 명령 출력 (첫 자주 쓰는 명령 = 회선 설명)', (await page.locator('#termOut').innerText()).includes('PHY: Physical'));
   await page.selectOption('#vendorSel', 'juniper');
   await page.click('#qcmd button');
   await page.press('#termIn', 'Enter');
-  check('터미널 명령 출력', (await page.locator('#termOut').innerText()).includes('Receiver signal'));
+  check('터미널 명령 출력 (첫 자주 쓰는 명령 = 회선 설명)', (await page.locator('#termOut').innerText()).includes('Admin Link Description'));
+  // 업무 메모에서 가져온 명령: Admin/Link 차이, 고객사, ARP·ping, 로그, BGP (전부 가상 출력)
+  const T = await page.evaluate(() => {
+    const r = (id, c) => runCmd(c, DEV[id]);
+    const g = DEV.IDC_G_FS1.ifs.find(f => f[0] === 'xe-0/0/11'), ip = g[8];
+    return {
+      desc: r('IDC_G_FS1', 'show interfaces descriptions'), adminDown: r('IDC_B_FS1', 'show interfaces descriptions'),
+      ping: r('IDC_G_FS1', `ping ${ip} rapid count 100`), pingOk: r('IDC_B_FS1', `ping ${DEV.IDC_B_FS1.ifs[0][8]} rapid count 100`),
+      arpDown: r('IDC_G_FS1', 'show arp | match xe-0/0/11'), arpUp: r('IDC_B_FS1', `show arp | match ${DEV.IDC_B_FS1.ifs[0][0]}`),
+      cfg: r('IDC_B_FS1', 'show configuration interfaces xe-0/0/14 | display set'), log: r('IDC_G_FS1', 'show log messages | last 20'),
+      bgp: r('IDC_G_FS1', 'show bgp summary'), route: r('IDC_B_FS1', `show route ${DEV.IDC_B_FS1.ifs[0][7]}`),
+      cdesc: r('IDC_S_FR1', 'show interfaces description'), cbrief: r('IDC_S_FR1', 'show interfaces brief'), clog: r('IDC_B_FR3', 'show logging last 100'), cping: r('IDC_S_FR1', `ping ${DEV.IDC_S_FR1.ifs[0][8]} repeat 100`),
+      hdesc: r('IDC_B_AS1', 'display interface description'), hlog: r('IDC_B_AS5', 'display logbuffer'), hcfg: r('IDC_B_AS1', 'display current-configuration interface XGigabitEthernet0/1/10'),
+      wrong: r('IDC_B_AS1', 'show interfaces descriptions')
+    };
+  });
+  check('명령 show interfaces descriptions: Admin/Link 열과 고객사가 보이고, 끊긴 포트는 Admin up·Link down', /xe-0\/0\/11\s+up\s+down\s+IDC_G_FS1_DN2 -> IDC_G_FS3 \/ 예제교육/.test(T.desc), T.desc.split('\n').slice(0, 4).join(' | '));
+  check('Admin down(관리자가 내림)은 Admin down·Link down으로 따로 보임', /xe-0\/0\/14\s+down\s+down/.test(T.adminDown) && T.cfg.includes('disable'));
+  check('ping rapid count 100: 끊긴 회선은 100% 손실, 정상 회선은 0% 손실', T.ping.includes('100% packet loss') && T.pingOk.includes('0% packet loss') && T.pingOk.split('\n')[1].length === 100, T.ping.split('\n').slice(-2).join(' | '));
+  check('show arp | match: 정상 회선은 항목이 있고 Down 회선은 출력 없음 (IP 확인 불가)', T.arpDown === '' && /Total entries: 1/.test(T.arpUp));
+  check('show log messages: Down·Admin down 같은 상태 변화가 로그에 보임', /SNMP_TRAP_LINK_DOWN.*xe-0\/0\/11/.test(T.log) && /ifName xe-0\/0\/11/.test(T.log));
+  check('show bgp summary·show route: 끊긴 상대는 Active, route는 via 회선을 알려 줌', /Active/.test(T.bgp) && /via xe-0\/0\/\d+\.0/.test(T.route), T.bgp.split('\n').slice(-1)[0]);
+  check('Cisco: description·brief·logging last 100·ping repeat 100', /Status\s+Protocol Description/.test(T.cdesc) && /Intf\s+LineP/.test(T.cbrief) && /Interface Te1\/0\/10, changed state to administratively down/.test(T.clog) === false && /changed state to (down|administratively down)/.test(T.clog) && /Success rate is 100 percent/.test(T.cping), T.clog.split('\n')[0]);
+  check('Huawei: display interface description·logbuffer·current-configuration (L2라 IP 없음)', /\*down: administratively down/.test(T.hdesc) && /RX_POWER_LOW/.test(T.hlog) && /interface XGigabitEthernet0\/1\/10/.test(T.hcfg) && !/\d+\.\d+\.\d+\.\d+/.test(T.hdesc));
+  check('장비 종류에 안 맞는 명령은 거절됨 (Huawei에 Juniper 명령)', /Unrecognized command/.test(T.wrong));
+  check('가상 데이터만 씀: 실제 IP처럼 보이는 값 없이 10.x 사설 대역만', ![T.desc, T.ping, T.bgp, T.route, T.cdesc].join('\n').match(/\b(?!10\.)\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/));
 
   check('콘솔·페이지 오류 없음', errors.length === 0, JSON.stringify(errors));
   await browser.close();

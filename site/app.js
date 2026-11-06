@@ -555,12 +555,63 @@ function renderVisits() {
 const PROMPT = { juniper: id => `admin@${id}>`, cisco: id => `${id}#`, huawei: id => `<${id}>` };
 const DEVICES = TOPOLOGY.devices.map(d => Object.assign({}, d, { prompt: PROMPT[d.vendor](d.id), ifs: [] }));
 const DEV = Object.fromEntries(DEVICES.map(d => [d.id, d]));
-// 포트 한 칸: [포트 이름, 상대(장비·외부), CRC 오류 수, 광 수신값 dBm, 연결 정보]
-const addPort = (dev, port, peer, link) => {
-  const f = TOPOLOGY.faults[`${dev}|${port}`] || {}, d = DEV[dev];
-  d.ifs.push([port, peer, f.crc || 0, f.rx != null ? f.rx : -3.0 - (d.ifs.length % 4) * 0.15, link]);
+// 포트 한 칸: [포트 이름, 상대(장비·외부), CRC 오류 수, 광 수신값 dBm, 연결 정보, 링크 상태(up/down), 관리 상태(up/down), 내 IP, 상대 IP]
+// IP는 전부 제가 만든 가상 값(10.x)이고 L3 장비(Juniper·Cisco)에만 있다. Huawei(AS)는 L2 스위치라 IP가 없다.
+const LINK_NO = new Map(TOPOLOGY.links.map((l, k) => [l, k]));
+const addPort = (dev, port, peer, link, side) => {
+  const f = TOPOLOGY.faults[`${dev}|${port}`] || {}, d = DEV[dev], k = LINK_NO.get(link), pd = DEV[peer];
+  const admin = f.admin === "down" ? "down" : "up", up = f.down || admin === "down" ? "down" : "up";
+  const base = `10.${100 + Math.floor(k / 60)}.${k % 60}`, mine = d.vendor !== "huawei", theirs = !pd || pd.vendor !== "huawei";
+  const rx = f.rx != null ? f.rx : up === "down" ? -40 : -3.0 - (d.ifs.length % 4) * 0.15;
+  d.ifs.push([port, peer, f.crc || 0, rx, link, up, admin, mine && theirs ? `${base}.${side === "a" ? 1 : 2}` : "", mine && theirs ? `${base}.${side === "a" ? 2 : 1}` : ""]);
 };
-TOPOLOGY.links.forEach(l => { addPort(l.a, l.ap, l.b, l); if (DEV[l.b]) addPort(l.b, l.bp, l.a, l); });
+TOPOLOGY.links.forEach(l => { addPort(l.a, l.ap, l.b, l, "a"); if (DEV[l.b]) addPort(l.b, l.bp, l.a, l, "b"); });
+
+/* 업무 메모에서 일반화한 명령들: 회선 설명(Up/Down·Admin/Link·고객사), ARP·ping, 로그, BGP, 설정. 출력은 전부 가상입니다. */
+const custNames = keys => keys.map(k => CUSTOMERS.find(c => c.key === k).name);
+function descOf(d, f) {   // 회선 설명: 회선 이름 -> 상대 / 고객사
+  const l = f[4]; if (!l) return "";
+  let cust = CUSTOMERS.filter(c => c.links.includes(l.link)).map(c => c.name);
+  if (!cust.length) cust = custNames(d.customers || (DEV[f[1]] && DEV[f[1]].customers) || []);
+  const n = cust.length > 2 ? `${cust.slice(0, 2).join("·")} 외 ${cust.length - 2}곳` : cust.join("·");
+  return `${l.link} -> ${f[1]}${n ? " / " + n : ""}`;
+}
+const hexOf = s => [...s].reduce((q, c) => (q * 131 + c.charCodeAt(0)) >>> 0, 7).toString(16).padStart(8, "0");
+const macOf = s => { const h = hexOf(s); return `00:0e:c6:${h.slice(0, 2)}:${h.slice(2, 4)}:${h.slice(4, 6)}`; };
+const asOf = id => id && DEV[id] ? 64512 + (+id.match(/(\d+)$/)[1]) + (id.split("_")[1].charCodeAt(0) % 7) * 10 : 64999;
+const shortPort = p => p.replace("XGigabitEthernet", "XGE").replace("TenGigE", "Te");
+const logTime = k => `Oct 22 20:${String(10 + k * 7).padStart(2, "0")}:${String((k * 17) % 60).padStart(2, "0")}`;
+function pingBody(f, n) {
+  const down = f[5] === "down", lost = down ? n : portBad(f) ? Math.round(n * 0.06) : 0, gap = lost && !down ? Math.max(2, Math.floor(n / lost)) : 1;
+  let s = "", miss = 0; for (let k = 0; k < n; k++) { const bad = down || (lost && k % gap === 3 && miss < lost); if (bad) miss++; s += bad ? "." : "!"; }
+  return { s, ok: n - miss, miss };
+}
+function findPeerIf(d, ip) { return d.ifs.find(f => f[8] === ip); }
+function jDesc(d) {
+  return "Interface       Admin Link Description\n" + d.ifs.map(f => `${f[0].padEnd(15)} ${f[6].padEnd(5)} ${f[5].padEnd(4)} ${descOf(d, f)}`).join("\n");
+}
+function jPing(d, ip, n) {
+  const f = findPeerIf(d, ip); if (!f) return `ping: sendto: No route to host`;
+  const p = pingBody(f, +n);
+  return `PING ${ip} (${ip}): 56 data bytes\n${p.s}\n--- ${ip} ping statistics ---\n${n} packets transmitted, ${p.ok} packets received, ${Math.round(p.miss / n * 100)}% packet loss` + (p.ok ? "\nround-trip min/avg/max/stddev = 0.7/0.9/2.1/0.3 ms" : "");
+}
+function iosPing(d, ip, n) {
+  const f = findPeerIf(d, ip); if (!f) return "Type escape sequence to abort.\n% No route to host";
+  const p = pingBody(f, +n);
+  return `Type escape sequence to abort.\nSending ${n}, 100-byte ICMP Echos to ${ip}, timeout is 2 seconds:\n${p.s}\nSuccess rate is ${Math.round(p.ok / n * 100)} percent (${p.ok}/${n})` + (p.ok ? ", round-trip min/avg/max = 1/1/3 ms" : "");
+}
+function logLines(d, style) {   // 이상이 있는 포트의 로그만 만든다 (가상)
+  const out = []; let k = 0;
+  d.ifs.forEach(f => {
+    if (f[6] === "down") out.push({ j: `${logTime(k)} ${d.id} mib2d[1234]: SNMP_TRAP_LINK_DOWN: ifIndex ${500 + k}, ifAdminStatus down(2), ifOperStatus down(2), ifName ${f[0]}`, c: `${logTime(k)}: %LINK-5-CHANGED: Interface ${f[0]}, changed state to administratively down`, h: `Oct 22 2026 ${logTime(k).slice(7)} ${d.id} %%01IFNET/4/LINK_STATE(l)[${k}]:The interface ${f[0]} was shut down by the administrator.` }), k++;
+    else if (f[5] === "down") out.push({ j: `${logTime(k)} ${d.id} mib2d[1234]: SNMP_TRAP_LINK_DOWN: ifIndex ${500 + k}, ifAdminStatus up(1), ifOperStatus down(2), ifName ${f[0]}`, c: `${logTime(k)}: %LINK-3-UPDOWN: Interface ${f[0]}, changed state to down`, h: `Oct 22 2026 ${logTime(k).slice(7)} ${d.id} %%01IFNET/4/LINK_STATE(l)[${k}]:The line protocol on the interface ${f[0]} has entered the DOWN state.` }), k++;
+    else if (f[3] < -9) out.push({ j: `${logTime(k)} ${d.id} fpc0: ${f[0]}: Optical receive power low alarm`, c: `${logTime(k)}: %OPTICS-4-RX_LOW: ${f[0]} receive power low warning (${f[3].toFixed(1)} dBm)`, h: `Oct 22 2026 ${logTime(k).slice(7)} ${d.id} %%01OPTMOD/4/RX_POWER_LOW(l)[${k}]:${f[0]} RX power is too low.` }), k++;
+    if (f[2] > 50) out.push({ j: `${logTime(k)} ${d.id} fpc0: ${f[0]}: input errors increasing (CRC ${f[2]})`, c: `${logTime(k)}: %PM-4-ERR: ${f[0]} CRC errors increasing (${f[2]})`, h: `Oct 22 2026 ${logTime(k).slice(7)} ${d.id} %%01IFPDT/4/CRC_ERR(l)[${k}]:${f[0]} CRC errors ${f[2]}.` }), k++;
+  });
+  const quiet = style === "j" ? `${logTime(9)} ${d.id} mgd[2201]: UI_CMDLINE_READ_LINE: User 'admin', command 'show log messages'` : style === "c" ? `${logTime(9)}: %SYS-5-CONFIG_I: Configured from console by admin` : `Oct 22 2026 20:59:01 ${d.id} %%01SHELL/5/CMDRECORD(s)[9]:Recorded command information.`;
+  return out.map(x => x[style]).concat([quiet]).join("\n");
+}
+function bgpRows(d) { return d.ifs.filter(f => f[8] && DEV[f[1]]).map(f => ({ ip: f[8], as: asOf(f[1]), down: f[5] === "down" })); }
 const dBm = v => (Math.pow(10, v / 10)).toFixed(4);
 function jOptics(f) {
   const bad = f[3] < -11;
@@ -571,12 +622,30 @@ const DEV_CMDS = {
   juniper: [
     [/^show interfaces? diagnostics optics (\S+)$/i, (d, m) => { const f = findIf(d, m[1]); return f ? jOptics(f) : `error: device ${m[1]} not found`; }],
     [/^show interfaces? extensive (\S+) \| match CRC$/i, (d, m) => { const f = findIf(d, m[1]); return f ? jCrc(f) : `error: device ${m[1]} not found`; }],
+    [/^show interfaces? descriptions?$/i, d => jDesc(d)],
+    [/^show interfaces? diagnostics optics \| match (\S+)$/i, (d, m) => { const f = findIf(d, m[1]); return f ? jOptics(f) : `error: device ${m[1]} not found`; }],
+    [/^show arp \| match (\S+)$/i, (d, m) => { const f = findIf(d, m[1]); if (!f || f[5] === "down" || !f[8]) return ""; return `MAC Address       Address         Name                      Interface           Flags\n${macOf(f[1])} ${f[8].padEnd(15)} ${f[8].padEnd(25)} ${(f[0] + ".0").padEnd(19)} none\nTotal entries: 1`; }],
+    [/^show configuration interfaces (\S+) \| display set$/i, (d, m) => { const f = findIf(d, m[1]); if (!f) return `error: configuration database has no interface ${m[1]}`; return `set interfaces ${f[0]} description "${descOf(d, f)}"\n` + (f[8] ? `set interfaces ${f[0]} unit 0 family inet address ${f[7]}/30` : `set interfaces ${f[0]} unit 0 family ethernet-switching`) + (f[6] === "down" ? `\nset interfaces ${f[0]} disable` : ""); }],
+    [/^ping (\S+) rapid count (\d+)$/i, (d, m) => jPing(d, m[1], Math.min(+m[2], 200))],
+    [/^show log(?:s)? messages?(?: \| last (\d+))?$/i, d => logLines(d, "j")],
+    [/^show bgp summary$/i, d => { const r = bgpRows(d); return `Groups: 1 Peers: ${r.length} Down peers: ${r.filter(x => x.down).length}\nPeer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...\n` + r.map(x => `${x.ip.padEnd(24)} ${String(x.as).padEnd(7)} ${x.down ? "      12          9" : "    5148      23139"}       0 ${x.down ? "    1 00:12:01 Active" : "    0 1d 16:23:28 36/37/37/0"}`).join("\n"); }],
+    [/^show route (\S+)$/i, (d, m) => { const f = d.ifs.find(x => x[8] === m[1] || x[7] === m[1]); if (!f || !f[7]) return ""; const net = f[7].replace(/\.\d+$/, ".0"); return `inet.0: 12 destinations, 12 routes (12 active, 0 holddown, 0 hidden)\n+ = Active Route, - = Last Active, * = Both\n\n${net}/30 *[Direct/0] 3d 02:11:04\n                    > via ${f[0]}.0`; }],
     [/^show interfaces? extensive \| (?:match )?"?CRC\|(?:physical interface|xe)"?$/i, d => d.ifs.map(f => `Physical interface: ${f[0]}, Enabled, Physical link is Up\n${jCrc(f)}`).join("\n")]
   ],
   cisco: [
+    [/^show interfaces? descriptions?$/i, d => "Interface                      Status         Protocol Description\n" + d.ifs.map(f => `${f[0].padEnd(30)} ${(f[6] === "down" ? "admin-down" : f[5]).padEnd(14)} ${(f[6] === "down" ? "down" : f[5]).padEnd(8)} ${descOf(d, f)}`).join("\n")],
+    [/^show interfaces? brief$/i, d => "Intf       Intf        LineP           Encap  MTU    BW\nName       State       State           Type   (byte) (Kbps)\n" + d.ifs.map(f => `${f[0].padEnd(10)} ${(f[6] === "down" ? "admin-down" : f[5]).padEnd(11)} ${(f[6] === "down" ? "down" : f[5]).padEnd(15)} ARPA   1514   10000000`).join("\n")],
+    [/^show logging(?: last (\d+))?$/i, d => logLines(d, "c")],
+    [/^show running-config interface (\S+)$/i, (d, m) => { const f = findIf(d, m[1]); if (!f) return `% Invalid input detected at '^' marker.`; return `interface ${f[0].replace("Te", "TenGigE")}\n description ${descOf(d, f)}\n` + (f[8] ? ` ipv4 address ${f[7]} 255.255.255.252\n` : "") + (f[6] === "down" ? " shutdown\n" : "") + "!"; }],
+    [/^ping (\S+) repeat (\d+)$/i, (d, m) => iosPing(d, m[1], Math.min(+m[2], 200))],
+    [/^show bgp summary$/i, d => { const r = bgpRows(d); return `BGP router identifier ${d.id}, local AS number ${asOf(d.id)}\n\nNeighbor        Spk    AS MsgRcvd MsgSent   TblVer  InQ OutQ  Up/Down  St/PfxRcd\n` + r.map(x => `${x.ip.padEnd(15)}   0 ${String(x.as).padEnd(5)}  ${x.down ? "    12       9" : "  5148   23139"}      100    0    0 ${x.down ? "00:12:01 Active" : "1d16h           37"}`).join("\n"); }],
+    [/^show route (\S+)$/i, (d, m) => { const f = d.ifs.find(x => x[8] === m[1] || x[7] === m[1]); if (!f || !f[7]) return "% Network not in table"; const net = f[7].replace(/\.\d+$/, ".0"); return `Routing entry for ${net}/30\n  Known via "connected", distance 0, metric 0 (connected)\n    directly connected, via ${f[0].replace("Te", "TenGigE")}`; }],
     [/^show interfaces? (\S+) \| include CRC$/i, (d, m) => { const f = findIf(d, m[1]); return f ? `     ${f[2]} input errors, ${f[2]} CRC, 0 frame, 0 overrun, 0 ignored` : `% Invalid input detected at '^' marker.`; }]
   ],
   huawei: [
+    [/^display interface description$/i, d => "PHY: Physical\n*down: administratively down\nInterface                     PHY      Protocol Description\n" + d.ifs.map(f => `${(f[6] === "down" ? "*" : "") + shortPort(f[0])}`.padEnd(29) + ` ${f[5].padEnd(8)} ${f[5].padEnd(8)} ${descOf(d, f)}`).join("\n")],
+    [/^display logbuffer$/i, d => logLines(d, "h")],
+    [/^display current-configuration interface (.+)$/i, (d, m) => { const f = findIf(d, m[1].replace(/\s+/g, "")); if (!f) return "Error: Wrong parameter found at '^' position."; return `#\ninterface ${f[0]}\n description ${descOf(d, f)}\n port link-type trunk\n` + (f[6] === "down" ? " shutdown\n" : "") + "#"; }],
     [/^display interface (.+?) \| include CRC$/i, (d, m) => {
       const f = findIf(d, m[1].replace(/\s+/g, "")); if (!f) return "Error: Wrong parameter found at '^' position.";
       return `    CRC: ${f[2]} packets, Giants: 0 packets, Jabbers: 0 packets`;
@@ -600,10 +669,11 @@ function runCmd(raw, dev) {
 }
 function quickCmds() {
   const d = devNow(), bad = d.ifs.find(f => f[2] > 50 || f[3] < -9) || d.ifs[0], ok = d.ifs[0];
+  const pp = d.ifs.find(f => f[8] && f[5] === "up"), ip = pp ? pp[8] : "";
   const list = {
-    juniper: [`show interfaces diagnostics optics ${bad[0]}`, `show interfaces extensive ${bad[0]} | match CRC`, `show interfaces extensive | match "CRC|physical interface"`],
-    cisco: [`show interface ${bad[0]} | include CRC`, `show interface ${ok[0]} | include CRC`],
-    huawei: [`display transceiver interface ${bad[0].replace("XGigabitEthernet", "XGigabitEthernet ")} verbose`, `display interface ${bad[0].replace("XGigabitEthernet", "XGigabitEthernet ")} | include CRC`]
+    juniper: [`show interfaces descriptions`, `show interfaces diagnostics optics ${bad[0]}`, `show interfaces extensive ${bad[0]} | match CRC`, `show interfaces extensive | match "CRC|physical interface"`, `show log messages | last 20`, ...(ip ? [`show arp | match ${pp[0]}`, `ping ${ip} rapid count 100`] : []), `show bgp summary`],
+    cisco: [`show interfaces description`, `show interfaces brief`, `show interface ${bad[0]} | include CRC`, `show logging last 100`, ...(ip ? [`ping ${ip} repeat 100`] : []), `show bgp summary`],
+    huawei: [`display interface description`, `display transceiver interface ${bad[0].replace("XGigabitEthernet", "XGigabitEthernet ")} verbose`, `display interface ${bad[0].replace("XGigabitEthernet", "XGigabitEthernet ")} | include CRC`, `display logbuffer`, `display current-configuration interface ${bad[0]}`]
   }[d.vendor];
   $("#qcmd").innerHTML = [...new Set(list)].map(c => `<button data-c="${esc(c)}">${esc(c)}</button>`).join("");   // 포트가 하나뿐인 장비는 같은 명령이 두 번 나오지 않게
 }
@@ -834,7 +904,11 @@ const g1 = v => v.toFixed(1);
 const outAt = (id, t) => LINK[id].out[isoIdx(t)], inAt = (id, t) => LINK[id].in[isoIdx(t)];
 const utilAt = (id, t) => outAt(id, t) / LINK[id].cap * 100;
 const prevDay = t => isoLocal(parseT(t) - 86400000);
-const runOn = (devId, cmd) => `${DEV[devId].prompt} ${cmd}\n${runCmd(cmd, DEV[devId])}`;
+const runOn = (devId, cmd, down) => {   // down: 이 시나리오에서 Down이라고 가정할 포트 이름들 (실행 뒤 원래대로 되돌린다)
+  const d = DEV[devId], saved = [];
+  (down || []).forEach(p => { const f = findIf(d, p); if (f) { saved.push([f, f.slice()]); f[5] = "down"; f[3] = -40; f[2] = 0; } });
+  try { return `${d.prompt} ${cmd}\n${runCmd(cmd, d)}`; } finally { saved.forEach(([f, o]) => o.forEach((v, k) => { f[k] = v; })); }
+};
 
 // 숫자는 전부 데이터에서 읽어 문장을 만든다 (고정 문구 아님)
 function buildScenarios() {
@@ -854,6 +928,7 @@ function buildScenarios() {
     { at: c4, kind: "결과", title: `이상 없음: 이 시각 전후 새 경고 ${near}건. 점검 기록을 남기고 다음 점검으로`, focus: [] }
   ] };
 
+  const INQUIRY = "\n\n[연동망에 문의할 때 확인할 3가지]\n가. NOC 작업 유/무\n나. 연동 구간(타 부서·타 ISP) 작업 및 이슈 유/무\n다. 보안 관련 이슈 유/무\n* 전화로 내용을 전달받을 때는 통화한 분의 성함을 꼭 확인해서 기록한다.";
   // 2) 트래픽 급감: 국내 연동(IX)
   const dropA = ALERTS.find(a => a.link === IX && a.kind.includes("급감"));
   const dt = m => isoLocal(msOf(dropA.s) + m * 60000);   // 급감이 시작된 시각 기준 분
@@ -864,9 +939,26 @@ function buildScenarios() {
     { at: dt(0), kind: "감지", title: `${IX}(국내 연동) out이 전날 같은 시각 ${g1(outAt(IX, prevDay(dt(0))))}G에서 ${g1(outAt(IX, dt(0)))}G로 급감 (평소의 ${pct}%). 종 알림에 '확인 필요'로 등록`, focus: [IX] },
     { at: dt(5), kind: "확인", title: `같은 시각 ${INTL}(해외 연동) out ${g1(outAt(INTL, dt(-5)))}G → ${g1(outAt(INTL, dt(5)))}G로 증가: 빠진 트래픽 일부가 해외 회선으로 우회 중으로 보임`, focus: [IX, INTL] },
     { at: dt(10), kind: "조치", title: `${EDGE}에서 ${IX} 포트(xe-0/0/2) 광값 확인`, detail: runOn(EDGE, "show interfaces diagnostics optics xe-0/0/2") + "\n\n→ 광 수신값이 정상 범위. 우리 쪽 광 문제는 아님", sum: `광 수신 ${DEV[EDGE].ifs.find(x => x[0] === "xe-0/0/2")[3].toFixed(2)} dBm, 알람 없음 → 정상. 우리 쪽 광 문제는 아님`, detailLabel: "터미널 출력 보기", focus: [IX] },
-    { at: dt(15), kind: "조치", title: `상대 IX 사업자에 확인 요청, 영향 고객사(${ixCust})에 상황 안내`, detail: dropMail, detailLabel: "고객사 안내 메일 보기" },
+    { at: dt(15), kind: "조치", title: `상대 IX 사업자에 확인 요청, 영향 고객사(${ixCust})에 상황 안내`, detail: dropMail + INQUIRY, detailLabel: "고객사 안내 메일·연동망 문의 항목 보기" },
     { at: dt(50), kind: "결과", title: `${IX} 회복: out ${g1(outAt(IX, dt(50)))}G (전날 같은 시각 ${g1(outAt(IX, prevDay(dt(50))))}G). 급감 구간 ${hhmm(dropA.s)}~${hhmm(dropA.e)} (${(dropA.e - dropA.s + 1) * 5}분)`, focus: [IX, INTL] },
     { at: dt(55), kind: "결과", title: "복구 안내 메일 발송, 경고 이력에 기록하고 마무리", focus: [IX] }
+  ] };
+
+  // 2-2) 업링크 회선 다운: 안산 -> 중앙 백본 (업무 메모의 장애 대응 순서를 일반화한 것)
+  const DN = "IDC_A_FS1_UP1", dnA = ALERTS.find(a => a.link === DN && a.kind.includes("급감")), dn = m => isoLocal(msOf(dnA.s) + m * 60000);
+  const dlk = TOPOLOGY.links.find(l => l.link === DN), dDev = dlk.a, dPort = dlk.ap, dPeerIp = DEV[dDev].ifs.find(x => x[0] === dPort)[8];
+  const dnBefore = outAt(DN, dn(-5)), dnAfter = outAt(DN, dn(5)), dnCust = custOf(DN);
+  const dnWin = (dnA.e - dnA.s + 1) * 5;
+  const dnSms = `[장애] ${dnCust.join(", ")} 담당자님, ${hhmm(dnA.s)}부터 안산 ↔ 중앙 백본 업링크(${DN})가 끊겨 확인 중입니다. 우회 경로로 서비스는 유지되고 있으며 경과는 다시 안내드리겠습니다. (가상 문자)`;
+  const linkDown = { name: "업링크 회선 다운", tab: "monitor", win: 12, from: dn(-20), to: dn(dnWin + 15), steps: [
+    { at: dn(0), kind: "감지", title: `${DN} in·out이 거의 0으로 떨어짐 (전날 같은 시각 out ${g1(outAt(DN, prevDay(dn(0))))}G → ${g1(outAt(DN, dn(0)))}G). 종 알림에 '확인 필요'로 등록`, focus: [DN] },
+    { at: dn(3), kind: "확인", title: `정확한 장비·회선명 확인: ${dDev} ${dPort}. descriptions로 보면 Admin up / Link down`, detail: runOn(dDev, "show interfaces descriptions", [dPort]) + "\n\n→ Admin = 관리자가 켜 둔 상태, Link = 실제 연결 상태.\n   Admin up + Link down: 누가 일부러 내린 게 아니라 선이나 상대 쪽 문제로 끊긴 것.\n   (Admin down이면 누군가 포트를 일부러 내려 둔 것)\n고객사 이름도 같은 줄에서 같이 보인다.", sum: "Admin up, Link down → 실제 연결이 끊긴 것. 고객사도 확인", detailLabel: "터미널 출력 보기", focus: [DN] },
+    { at: dn(5), kind: "확인", title: `트래픽(전/후) 확인: Down이면 5분 전 값만 보고 이후는 0 (OUT 기준)`, detail: `■ 트래픽(전/후)\n${DN} : ${g1(dnBefore)}Gbps / ${dnAfter < 0.5 ? "0" : g1(dnAfter) + "Gbps"}\n\n* 경과 문자가 나가기 전에 트래픽을 먼저 전달해야 하므로 빠르게 확인한다.`, detailLabel: "경과 문자에 넣을 트래픽 보기", focus: [DN] },
+    { at: dn(7), kind: "조치", title: `발생 문자 전송, 영향 고객사(${dnCust.join(", ")})에 안내`, detail: dnSms, detailLabel: "발생 문자 보기", focus: [DN] },
+    { at: dn(10), kind: "조치", title: "광값·CRC 확인: 빛이 안 들어옴 (광 케이블 접촉 불량이나 SFP 불량이 많음)", detail: runOn(dDev, `show interfaces diagnostics optics ${dPort}`, [dPort]) + "\n\n" + runOn(dDev, `show interfaces extensive ${dPort} | match CRC`, [dPort]) + "\n\n→ 수신 광값이 -40 dBm이면 빛이 안 들어오는 것. 케이블·SFP·상대 장비 쪽을 의심한다.", sum: `광 수신 -40 dBm → 빛이 안 들어옴 (케이블·SFP 의심)`, detailLabel: "터미널 출력 보기", focus: [DN] },
+    { at: dn(13), kind: "조치", title: "IP 확인과 ping: ARP가 없고 ping 100% 손실", detail: runOn(dDev, `show arp | match ${dPort}`, [dPort]) + "(출력 없음: 링크가 Down이면 ARP 항목이 없다)\n\n" + runOn(dDev, `ping ${dPeerIp} rapid count 100`, [dPort]) + "\n\n* L2 장비는 IP가 안 나오므로 MAC 주소로 찾는다.", sum: "ARP 없음, ping 100% 손실 → 상대 쪽까지 안 닿음", detailLabel: "터미널 출력 보기", focus: [DN] },
+    { at: dn(16), kind: "조치", title: "연동망(상대 센터)에 문의 후 조장에게 전달", detail: "[연동망에 문의할 때 확인할 3가지]\n가. NOC 작업 유/무\n나. 연동 구간(타 부서·타 ISP) 작업 및 이슈 유/무\n다. 보안 관련 이슈 유/무\n\n* 통화한 분의 성함을 확인해서 기록하고, 경과나 원인을 알게 되면 바로바로 전달한다.\n* 확인한 내용(트래픽 전/후, 광값, CRC, ping 결과)은 조장에게 함께 전달한다.", detailLabel: "문의 항목 보기", focus: [DN] },
+    { at: dn(dnWin), kind: "결과", title: `${DN} 회복: out ${g1(outAt(DN, dn(dnWin)))}G (다운 구간 ${hhmm(dnA.s)}~${hhmm(dnA.e)}, ${dnWin}분). 경과 문자 발송, 조장에게 결과 전달`, focus: [DN] }
   ] };
 
   // 3) 트래픽 폭주: 월드컵 8강
@@ -899,9 +991,9 @@ function buildScenarios() {
     { at: "2026-10-26T17:15", kind: "결과", title: `복구 완료 (${tAt(isoIdx("2026-10-26T17:15"))}°C). 육안점검 기록 남김: ${COOL} 이상 있음 → 정상 복귀`, focus: [COOL] }
   ] };
 
-  return { calm, drop, surge, temp };
+  return { calm, drop, linkDown, surge, temp };
 }
-const SCN_LIST = [["calm", "평일 오후 7시", "저녁 피크 전 평소 점검 (이상 없음)"], ["drop", "트래픽 급감", "국내 연동(IX)이 갑자기 빠짐: 원인 확인과 조치"], ["surge", "트래픽 폭주", "월드컵 8강: 사전 연락·분산·모니터링"], ["temp", "서버실 온도 변화", "분당 IDC_B_R07 냉각 이상: 육안점검·터미널 확인·복구"]];
+const SCN_LIST = [["calm", "평일 오후 7시", "저녁 피크 전 평소 점검 (이상 없음)"], ["drop", "트래픽 급감", "국내 연동(IX)이 갑자기 빠짐: 원인 확인과 조치"], ["linkDown", "업링크 회선 다운", "안산 업링크 Down: 회선·트래픽·광값·ping·연동망 문의 순서"], ["surge", "트래픽 폭주", "월드컵 8강: 사전 연락·분산·모니터링"], ["temp", "서버실 온도 변화", "분당 IDC_B_R07 냉각 이상: 육안점검·터미널 확인·복구"]];
 let scn = null;
 function stopScn() { if (scn && scn.timer) clearInterval(scn.timer); scn = null; HL.clear(); }
 function scnSetView() {

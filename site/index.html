@@ -283,8 +283,22 @@
     <div class="card">
       <h3>자주 쓰던 명령</h3>
       <div class="qcmd" id="qcmd"></div>
-      <p class="note">누르면 입력창에 채워집니다. 장비 종류에 맞는 명령만 동작합니다. <span class="crit-t">IDC_B_FS2 xe-0/0/3(해외 연동), IDC_A_FR1 Te1/0/1(안산 Cisco 백본), IDC_B_FS7 업링크 등에 CRC와 광 수신값 이상이 심어져 있습니다.</span></p>
+      <p class="note">누르면 입력창에 채워집니다. 장비 종류에 맞는 명령만 동작합니다. <span class="crit-t">IDC_B_FS2 xe-0/0/3(해외 연동), IDC_A_FR1 Te1/0/1(안산 Cisco 백본), IDC_B_FS7·IDC_B_AS5 업링크 등에 CRC와 광 수신값 이상이, IDC_G_FS1 xe-0/0/11에는 Link down(Admin up), IDC_B_FS1 xe-0/0/14에는 Admin down이 심어져 있습니다.</span></p>
     </div>
+  </div>
+  <div class="card" id="runbook">
+    <h3>장애가 터졌을 때 (업무 메모를 일반화한 순서)</h3>
+    <p class="note">제 업무 메모의 명령어와 순서를 이 가상 환경에 맞게 정리한 것입니다. 실제 고객사 이름·IP·내부 도구의 메뉴 경로는 쓰지 않았고, 아래 명령은 위 터미널에서 그대로 연습할 수 있습니다. 시나리오 "업링크 회선 다운"에서 이 순서를 따라가 볼 수 있습니다.</p>
+    <ol class="runbook">
+      <li><b>정확한 장비·회선 확인</b>: <code>show interfaces descriptions</code>(Cisco는 <code>description</code> 또는 <code>brief</code>, Huawei는 <code>display interface description</code>). <b>Admin</b>은 관리자가 켜 둔 상태, <b>Link</b>는 실제 연결 상태입니다. Admin up + Link down = 일부러 내린 게 아니라 끊긴 것, Admin down = 누가 일부러 내린 것. 고객사 이름도 같이 보입니다. 장비에 따라 descriptions로 up/down이 안 보이면 brief로 확인합니다.</li>
+      <li><b>로그 확인</b>: Cisco <code>show logging last 100</code>, Juniper <code>show log messages | last 20</code>, Huawei <code>display logbuffer</code>.</li>
+      <li><b>트래픽 전/후 확인</b>: 관제 그래프에서 장애 시작 전·후 값을 비교합니다. Down이면 5분 전 값만 보고 이후는 0으로 적습니다(OUT 기준). 경과 문자가 나가기 전에 트래픽을 먼저 전달합니다. 트래픽이 오르면 DDoS인지 아닌지 확인하고, 클린존 가입 고객사는 가입한 IP 말고 다른 IP로 오는 공격을 절차대로 먼저 차단합니다.</li>
+      <li><b>광값·CRC</b>: <code>show interfaces diagnostics optics</code>, <code>show interfaces extensive 포트 | match CRC</code>. 전 회선은 <code>show interfaces extensive | match "CRC|physical interface"</code>. 광 케이블 접촉 불량이나 SFP 불량이 많아서 CRC 오류를 잘 봐야 합니다.</li>
+      <li><b>IP 확인과 ping</b>: <code>show arp | match 포트</code> → <code>ping IP rapid count 100</code>(Cisco는 <code>ping IP repeat 100</code>). Down이면 IP·ARP가 안 나옵니다. L2 장비(Huawei)는 IP 대신 MAC 주소로 찾습니다. 설정은 <code>show configuration interfaces 포트 | display set</code>.</li>
+      <li><b>BGP 끊김·복구가 났을 때</b>: <code>show bgp summary</code>로 죽었다 살아난 상대만 추리고 → <code>show route IP</code>로 어느 회선(via)인지 찾고 → descriptions로 그 회선의 고객사를 확인해 조장에게 전달합니다.</li>
+      <li><b>연동망에 문의할 때</b>: 가. NOC 작업 유/무, 나. 연동 구간(타 부서·타 ISP) 작업·이슈 유/무, 다. 보안 관련 이슈 유/무. 통화한 분의 성함을 꼭 확인해 기록합니다.</li>
+      <li><b>발생 문자 전송·고객사 연락</b>, 경과나 원인을 알게 되면 바로 전달하고 확인한 내용은 조장에게 전달합니다.</li>
+    </ol>
   </div>
   <h2>설계도 (가상) <small>제가 만든 초안입니다. 행을 누르면 그 장비로 연결됩니다. 전체 장비와 연결이 보입니다.</small></h2>
   <p class="note" id="designSum" style="margin:0 0 8px;color:var(--text)"></p>

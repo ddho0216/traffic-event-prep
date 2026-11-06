@@ -13,7 +13,7 @@
    - devices: 장비 (vendor: juniper / cisco / huawei, rack: 들어 있는 랙, tier: core면 중앙 백본, customers: 이 장비에 붙은 고객사)
    - links: 연결 (a장비 a포트 <-> b장비 b포트). b가 장비 목록에 없으면 외부(IX·해외 등). link는 그래프의 회선 이름.
             회선이 어느 센터 소속인지는 이름의 센터 코드(= a장비가 있는 센터)로 정한다.
-   - faults: 포트에 심어 둔 이상 ("장비|포트": crc 오류 수, rx 광 수신값 dBm). 고객사·회선 배정은 제가 임의로 정한 것입니다. */
+   - faults: 포트에 심어 둔 이상 ("장비|포트": crc 오류 수, rx 광 수신값 dBm, down = 연결 끊김(Link down), admin = "down"이면 관리자가 내림). 고객사·회선 배정은 제가 임의로 정한 것입니다. */
 (function (root, factory) {
   const t = factory();
   if (typeof module !== "undefined" && module.exports) module.exports = t; else root.TOPOLOGY = t;
@@ -125,6 +125,12 @@
     "IDC_S_FS2|xe-0/0/1": { crc: 0, rx: -12.9 },                    // 같은 연결의 반대쪽 끝 (중앙 백본)
     "IDC_B_FS7|xe-0/0/10": { crc: 12, rx: -9.8 },                   // 고객 접속 4 업링크: 작은 CRC 오류와 약한 광 수신
     "IDC_B_FS1|xe-0/0/13": { crc: 0, rx: -9.8 },
+    "IDC_B_FS1|xe-0/0/14": { admin: "down" },                       // 관리자가 일부러 내려 둔 포트 (Admin down)
+    "IDC_B_FR3|Te1/0/10": { down: true },                            // 위 포트의 반대쪽 끝: Link down
+    "IDC_G_FS1|xe-0/0/11": { down: true },                           // 구로 고객 접속 2 업링크: 연결이 끊김 (Admin up, Link down)
+    "IDC_G_FS3|xe-0/0/10": { down: true },
+    "IDC_B_AS5|XGigabitEthernet0/1/10": { crc: 12, rx: -9.8 },      // Huawei 접속 스위치 업링크: 작은 CRC 오류와 약한 광 수신
+    "IDC_B_FS1|xe-0/0/21": { crc: 0, rx: -9.8 },
     "IDC_B_FS1|xe-0/0/12": { crc: 0, rx: -40 }                      // 과열로 꺼진 IDC_B_FS6 쪽 포트: 빛이 안 들어옴
   };
 
