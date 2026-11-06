@@ -145,3 +145,6 @@ body.popup #bell,body.popup #notif{display:none}
 .scn{position:sticky;top:var(--hdr,56px);z-index:4}
 .scn-steps{max-height:112px}
 .panel,.rack{scroll-margin-top:250px;scroll-margin-bottom:24px}
+
+:root{color-scheme:dark}
+input[type=month],input[type=number]{background:#0f161c;border:1px solid var(--line);border-radius:3px;padding:5px 8px}

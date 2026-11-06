@@ -68,7 +68,7 @@ const CUSTOMERS = [
   { name: "예시미디어", key: "yesi-media", links: ["OUR-A", "CTR-B1", "IX-1"] },
   { name: "샘플게임즈", key: "sample-games", links: ["CTR-C1", "CTR-D1"] }
 ];
-const CENTER = id => id.startsWith("OUR") ? "우리 센터" : id.startsWith("CTR-B") ? "센터B" : id === "CTR-C1" ? "센터C" : id === "CTR-D1" ? "센터D" : "연동";
+const CENTER = id => id.startsWith("OUR") ? "분당 센터" : id.startsWith("CTR-B") ? "안산 센터" : id === "CTR-C1" ? "구로 센터" : id === "CTR-D1" ? "서초 센터" : "연동";
 
 /* ---------- 경고 탐지: 규칙은 lib.js에 있다 (터미널에서도 시험할 수 있게 분리) ---------- */
 const { runs, median } = Lib;
@@ -483,7 +483,7 @@ function renderEvent() {
 const SAMPLE_MAIL = `제목: 방문 신청 - 11/06 센터 방문
 방문자: 김가상 (예시전자)
 방문예정일시: 2026-11-06 14:00
-방문센터: 우리 센터(가상)
+방문센터: 분당 센터(가상)
 방문목적: 서버 증설 작업
 방문장소: 서버실 2층 B구역
 주차: 필요

@@ -66,7 +66,7 @@ test('센터 4개가 모두 중앙 백본에 연결되고, 중앙 백본 2대에
   for (const l of T.links) {
     for (const [x, y] of [[l.a, l.b], [l.b, l.a]]) if (core.has(y) && center[x] && center[x] !== '중앙') (up[center[x]] = up[center[x]] || new Set()).add(y);
   }
-  const centers = ['우리 센터', '센터B', '센터C', '센터D'];
+  const centers = ['분당 센터', '안산 센터', '구로 센터', '서초 센터'];
   for (const c of centers) assert.ok(up[c], `${c}가 중앙 백본에 연결되지 않음`);
   const used = new Set(); centers.forEach(c => up[c].forEach(x => used.add(x)));
   assert.equal(used.size, 2, '중앙 백본 2대가 모두 쓰여야 함');

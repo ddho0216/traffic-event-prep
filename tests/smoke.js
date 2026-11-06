@@ -99,6 +99,9 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
     check(`시나리오 "${name}": 닫으면 관제 현재(10/22 21:00)로 돌아옴`, !(await page.locator('#scnBar').isVisible()) && (await page.locator('#tab-monitor').isVisible()) && (await page.locator('#endTime').inputValue()) === '2026-10-22T21:00');
   }
 
+  await page.click('[data-tab=event]');
+  const planText = await page.locator('#evPlan').innerText();
+  check('센터 이름이 지명(분당·안산·구로·서초)으로 나옴', ['분당 센터 백본 A', '안산 센터 백본 1', '구로 센터 백본', '서초 센터 백본'].every(w => planText.includes(w)) && !/우리 센터|센터B|센터C|센터D/.test(planText), planText.split('\n').slice(0, 3).join(' | '));
   for (const t of ['monthly', 'event', 'room', 'visit', 'term']) {
     await page.click(`[data-tab=${t}]`);
     await page.waitForTimeout(150);
@@ -114,6 +117,9 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('월간 자료 기본값: 지난달 1일~말일 한 달치', (await page.locator('#mMonth').inputValue()) === '2026-10' && (await page.locator('#mFrom').inputValue()) === '2026-10-01' && (await page.locator('#mTo').inputValue()) === '2026-10-31');
   check('기간 단위 선택은 없다 (기본 한 달, 다른 기간은 시작일·끝나는 날)', (await page.locator('#mUnits').count()) === 0);
   check('"대상 월"이라는 이름을 쓴다 ("기준 월"은 없음)', monthlyText.includes('대상 월') && !monthlyText.includes('기준 월'));
+  check('시작일 옆 안내 문구("다른 기간이 필요하면…")를 지웠다', !monthlyText.includes('다른 기간이 필요하면'));
+  const look = await page.evaluate(() => { const g = id => getComputedStyle(document.querySelector(id)).backgroundColor; return { month: g('#mMonth'), from: g('#mFrom'), scheme: getComputedStyle(document.documentElement).colorScheme }; });
+  check('대상 월 입력칸이 다른 입력칸처럼 검정 배경이고, 달력 아이콘이 흰색이 되는 다크 모드', look.month === look.from && look.month !== 'rgb(255, 255, 255)' && look.scheme.includes('dark'), JSON.stringify(look));
   check('시작일이 끝나는 날보다 위에 있음', await page.evaluate(() => !!(document.querySelector('#mFrom').compareDocumentPosition(document.querySelector('#mTo')) & Node.DOCUMENT_POSITION_FOLLOWING)));
   check('메일 초안에 기간이 10/01~10/31로 들어감', (await page.locator('#mMail').inputValue()).includes('2026-10-01 ~ 2026-10-31'));
   await page.fill('#mMonth', '2026-11'); await page.press('#mMonth', 'Tab');

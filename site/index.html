@@ -9,7 +9,7 @@
 <body>
 <header class="top">
   <h1><a href="#monitor" id="homeLink" title="관제(홈)로 가기">백본 트래픽 관제 · 이벤트 대비</a></h1>
-  <span class="badge">가상 데이터 · 실제 센터·고객사·수치 아님</span>
+  <span class="badge">가상 데이터 · 센터는 지명만 빌린 가상 센터</span>
   <nav class="tabs" id="tabs">
     <button data-tab="monitor" class="on">관제</button>
     <button data-tab="monthly">월간 자료</button>
@@ -78,7 +78,7 @@
       <div class="form">
         <span>고객사</span><select id="mCust"></select>
         <span>대상 월</span><span><input type="month" id="mMonth"> <span class="muted">기본은 지난달 1일부터 말일까지 한 달치</span></span>
-        <span>시작일</span><span><input type="date" id="mFrom"> <span class="muted">다른 기간이 필요하면 시작일과 끝나는 날을 직접 고르세요</span></span>
+        <span>시작일</span><span><input type="date" id="mFrom"></span>
         <span>끝나는 날</span><span><input type="date" id="mTo"></span>
         <span>회선</span><div id="mLinks"></div>
       </div>
@@ -243,7 +243,7 @@
     <div class="card">
       <h3>자주 쓰던 명령</h3>
       <div class="qcmd" id="qcmd"></div>
-      <p class="note">누르면 입력창에 채워집니다. 장비 종류에 맞는 명령만 동작합니다. <span class="crit-t">BB-EDGE xe-0/0/3(해외 연동), BB-B2 Te1/0/1(센터B 백본2), AS-2 업링크 등에 CRC와 광 수신값 이상이 심어져 있습니다.</span></p>
+      <p class="note">누르면 입력창에 채워집니다. 장비 종류에 맞는 명령만 동작합니다. <span class="crit-t">BB-EDGE xe-0/0/3(해외 연동), BB-B2 Te1/0/1(안산 센터 백본 2), AS-2 업링크 등에 CRC와 광 수신값 이상이 심어져 있습니다.</span></p>
     </div>
   </div>
   <h2>설계도 (가상) <small>제가 만든 초안입니다. 행을 누르면 그 장비로 연결됩니다. 장비·연결이 현장과 다르면 알려 주세요.</small></h2>
