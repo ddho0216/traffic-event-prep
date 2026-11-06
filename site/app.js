@@ -96,7 +96,8 @@ const state = { end: NOW_IDX, win: 12, ymode: "cap", cust: "all" };
 // 회선·랙·장비 이름이 모두 IDC_<센터 코드>_... 라서 이름의 두 번째 칸으로 센터를 알 수 있다.
 const codeOf = id => id.split("_")[1];
 const view = { center: ["ALL", ...Object.keys(TOPOLOGY.centers)].includes(store.get("center", "ALL")) ? store.get("center", "ALL") : "ALL" };
-const inView = id => view.center === "ALL" || codeOf(id) === view.center;
+const FEEDS = Object.fromEntries(TOPOLOGY.links.filter(l => l.feeds).map(l => [l.link, l.feeds]));   // 다른 센터에서 들어오는 회선: 들어가는 센터 관제에서도 보인다
+const inView = id => view.center === "ALL" || codeOf(id) === view.center || FEEDS[id] === view.center;
 const viewLabel = () => view.center === "ALL" ? "전체 센터" : TOPOLOGY.centers[view.center];
 const custOf = id => CUSTOMERS.filter(c => c.links.includes(id)).map(c => c.name);
 
@@ -750,7 +751,8 @@ function openDeviceTerminal(devId) {   // 랙 안 장비를 누르면 그 장비
 const ROOM_DEFAULT = { warn: 27, hot: 30, crit: 33, range: 3, step: 12, speed: 1000 };   // 기본 온도 기준은 제가 가정한 값
 const cfg = Object.assign({}, ROOM_DEFAULT, store.get("roomCfg", {}));
 let TEMP_WARN = cfg.warn, TEMP_HOT = cfg.hot, TEMP_CRIT = cfg.crit;
-const RACKS = DATA.racks;
+const CENTER_ORDER = Object.keys(TOPOLOGY.centers);
+const RACKS = [...DATA.racks].sort((x, y) => CENTER_ORDER.indexOf(codeOf(x.id)) - CENTER_ORDER.indexOf(codeOf(y.id)));   // 센터 순서(서초, 분당, 구로, 안산)대로
 const visibleRacks = () => RACKS.filter(r => inView(r.id));   // 센터 선택에 맞는 랙
 const sr = { end: idxOf(parseT("2026-10-22T21:00")) };
 const thNow = () => ({ warn: TEMP_WARN, hot: TEMP_HOT, crit: TEMP_CRIT });
@@ -922,7 +924,7 @@ function buildScenarios() {
   const fans = RACKS.flatMap(r => r.devices.filter(dv => dv.fanWarn).map(dv => dv.id));
   const near = ALERTS.filter(a => Math.abs(a.s - isoIdx(c4)) <= 12).length + Lib.detectRoom(RACKS, TD).filter(a => Math.abs(a.s - isoIdx(c4)) <= 12).length;
   const calm = { name: "평일 오후 7시", tab: "monitor", win: 12, from: calmFrom, to: "2026-10-22T19:40", steps: [
-    { at: calmFrom, kind: "확인", title: `그래프 8개 확인: 가장 높은 사용률 ${maxU(calmFrom).toFixed(0)}% (경고선 80% 아래)`, focus: LINKS.map(l => l.id) },
+    { at: calmFrom, kind: "확인", title: `그래프 ${LINKS.length}개 확인: 가장 높은 사용률 ${maxU(calmFrom).toFixed(0)}% (경고선 80% 아래)`, focus: LINKS.map(l => l.id) },
     { at: c2, kind: "확인", title: `서버실 확인: 랙 입구 온도 최고 ${g1(maxT(c2))}°C (주의 기준 ${TD.warn}°C 아래), LED 정상${fans.length ? `, 팬 주의 ${fans.join(", ")}(교체 대기)` : ""}` },
     { at: c3, kind: "확인", title: `저녁 피크로 올라가는 중: ${OA} out ${g1(outAt(OA, calmFrom))}G → ${g1(outAt(OA, c3))}G, 평소 범위`, focus: [OA] },
     { at: c4, kind: "결과", title: `이상 없음: 이 시각 전후 새 경고 ${near}건. 점검 기록을 남기고 다음 점검으로`, focus: [] }

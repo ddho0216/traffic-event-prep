@@ -7,3 +7,4 @@ IDC_G_FS1_UP1,구로 → 중앙 백본,200
 IDC_S_FR1_UP1,서초 센터 백본 (Cisco),400
 IDC_B_FS2_IX1,국내 연동(IX),100
 IDC_B_FS2_INTL1,해외 연동,100
+IDC_S_FS2_TOB1,서초 → 분당 (서초를 거쳐 들어오는 트래픽),200

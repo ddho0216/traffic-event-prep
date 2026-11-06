@@ -19,7 +19,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const goTo = async (iso, win) => { if (win) await page.selectOption('#win', String(win)); await page.fill('#endTime', iso); await page.press('#endTime', 'Tab'); await page.waitForTimeout(150); };
   await page.waitForTimeout(400);
 
-  check('그래프 패널 8개', (await page.locator('.panel').count()) === 8);
+  check('그래프 패널 9개', (await page.locator('.panel').count()) === 9);
   check('가상 데이터 표시가 맨 위에 있음', (await page.locator('.badge').innerText()).includes('가상 데이터'));
 
   const box = await page.locator('#p-IDC_B_FS1_UP1 svg').boundingBox();
@@ -31,7 +31,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const [csv] = await Promise.all([page.waitForEvent('download'), page.click('#csvAll')]);
   const csvPath = await csv.path();
   const text = require('fs').readFileSync(csvPath, 'utf8').replace(/^﻿/, '');
-  check('전체 CSV 헤더와 96행(8회선 x 12점)', text.startsWith('time,link,in_gbps,out_gbps,out_util_pct') && text.trim().split('\n').length === 97);
+  check('전체 CSV 헤더와 108행(9회선 x 12점)', text.startsWith('time,link,in_gbps,out_gbps,out_util_pct') && text.trim().split('\n').length === 109);
 
   await page.selectOption('#cust', '샘플게임즈');
   check('고객사 선택 시 해당 그래프만 보임', (await page.locator('.panel:visible').count()) === 2);
@@ -139,11 +139,19 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await p3.close();
   await page.click('[data-tab=monitor]');
   const barMon = await page.locator('#centerBar').innerText();
+  const order = await page.locator('#centerBar .cbtn').evaluateAll(els => els.map(e => e.dataset.center));
+  check('센터 순서: 전체 → 서초 → 분당 → 구로 → 안산', JSON.stringify(order) === JSON.stringify(['ALL', 'S', 'B', 'G', 'A']), order.join());
+  await page.click('#centerBar [data-center=B]');
+  const bPanels = await page.locator('.panel:visible').evaluateAll(els => els.map(e => e.id.replace('p-', '')));
+  check('분당 관제에는 분당 회선과 함께 서초에서 들어오는 회선(IDC_S_FS2_TOB1)도 보임', bPanels.includes('IDC_S_FS2_TOB1') && bPanels.includes('IDC_B_FS1_UP1') && !bPanels.includes('IDC_G_FS1_UP1'), bPanels.join());
+  await page.click('#centerBar [data-center=S]');
+  check('서초 관제에도 그 회선이 보임', (await page.locator('#p-IDC_S_FS2_TOB1:visible').count()) === 1);
+  await page.click('#centerBar [data-center=ALL]');
   await page.click('[data-tab=room]');
   const barRoom = await page.locator('#centerBar').innerText();
   check('센터 버튼 옆의 숫자: 관제에는 없고 서버실에서만 "랙 · 장비" 수가 보임', !/\d/.test(barMon) && /랙 10 · 장비 22/.test(barRoom) && /랙 44 · 장비 120/.test(barRoom), barRoom.replace(/\n/g, ' '));
   const expectBy = await page.evaluate(() => Object.fromEntries(Object.keys(TOPOLOGY.centers).map(c => [c, {
-    panels: DATA.links.filter(l => l.id.split('_')[1] === c).map(l => l.id).sort(),
+    panels: DATA.links.filter(l => l.id.split('_')[1] === c || TOPOLOGY.links.some(t => t.link === l.id && t.feeds === c)).map(l => l.id).sort(),
     racks: DATA.racks.filter(r => r.id.split('_')[1] === c).map(r => r.id).sort(),
     devs: TOPOLOGY.devices.filter(d => d.id.split('_')[1] === c).map(d => d.id).sort()
   }])));
@@ -156,7 +164,8 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
     const racks = (await page.locator('#racks .rack').evaluateAll(els => els.map(e => e.dataset.rack))).sort();
     const devs = (await page.locator('#racks .rdev').evaluateAll(els => els.map(e => e.dataset.dev))).sort();
     const e = expectBy[code];
-    const allCode = [...panels, ...racks, ...devs].every(id => id.split('_')[1] === code);
+    const feeds = await page.evaluate(() => TOPOLOGY.links.filter(t => t.feeds).map(t => t.link));   // 다른 센터에서 들어오는 회선은 예외
+    const allCode = [...panels.filter(id => !feeds.includes(id)), ...racks, ...devs].every(id => id.split('_')[1] === code);
     check(`센터 ${code}: 관제 그래프 ${panels.length}와 서버실 랙 ${racks.length}(장비 ${devs.length})가 같은 센터 소속이고 설계도·데이터와 일치`,
       same(panels, e.panels) && same(racks, e.racks) && same(devs, e.devs) && allCode,
       `그래프 ${same(panels, e.panels)}, 랙 ${same(racks, e.racks)}, 이름 ${allCode}`);
@@ -193,10 +202,10 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('[data-tab=monitor]');   // 새로고침한 주소에 #room이 남아 있을 수 있어 관제 화면으로 간다
   check('센터 선택(구로)이 새로고침 후에도 유지됨', (await page.locator('#centerBar .cbtn.on').getAttribute('data-center')) === 'G' && (await page.locator('.panel:visible').count()) === 1);
   await page.click('#centerBar [data-center=ALL]');
-  check('전체를 고르면 그래프 8개가 모두 보임', (await page.locator('.panel:visible').count()) === 8);
+  check('전체를 고르면 그래프 9개가 모두 보임', (await page.locator('.panel:visible').count()) === 9);
 
   // 시나리오 4가지: 시간이 흘러가고, 단계(감지·확인·조치·결과)가 나오고, 닫으면 현재로 돌아온다
-  const scenarios = [['calm', '평일 오후 7시', 4, ['그래프 8개 확인', '서버실 확인', '이상 없음']], ['drop', '트래픽 급감', 6, ['급감', 'IDC_B_FS2_INTL1', '광값', '예시미디어', '회복']],
+  const scenarios = [['calm', '평일 오후 7시', 4, ['그래프 9개 확인', '서버실 확인', '이상 없음']], ['drop', '트래픽 급감', 6, ['급감', 'IDC_B_FS2_INTL1', '광값', '예시미디어', '회복']],
     ['linkDown', '업링크 회선 다운', 8, ['Admin', '트래픽(전/후)', '광값', 'ping', '연동망', '회복']], ['surge', '트래픽 폭주', 7, ['사전 연락', '분산', '하이드레이션', '경고선 80%', '사후 정리', '[사전 안내]']], ['temp', '서버실 온도 변화', 7, ['온도 경고', '빨강 깜박임', '터미널', '냉각 복구', '-40.00 dBm']]];
   for (const [id, name, n, words] of scenarios) {
     await page.click('[data-tab=monitor]');

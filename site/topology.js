@@ -18,18 +18,18 @@
   const t = factory();
   if (typeof module !== "undefined" && module.exports) module.exports = t; else root.TOPOLOGY = t;
 })(typeof self !== "undefined" ? self : this, function () {
-  const centers = { B: "분당 센터", S: "서초 센터", G: "구로 센터", A: "안산 센터" };
+  const centers = { S: "서초 센터", B: "분당 센터", G: "구로 센터", A: "안산 센터" };   // 서초가 가장 큰 백본 센터라 맨 앞
   const B = centers.B, S = centers.S, G = centers.G, A = centers.A;
   const customers = [   // 전부 가상 고객사. 회선은 제가 임의로 나눈 것
     { name: "가상물산", key: "gasang", links: ["IDC_B_FS1_UP1", "IDC_B_FS1_UP2"] },
-    { name: "예시미디어", key: "yesi-media", links: ["IDC_B_FS1_UP1", "IDC_A_FS1_UP1", "IDC_B_FS2_IX1"] },
+    { name: "예시미디어", key: "yesi-media", links: ["IDC_B_FS1_UP1", "IDC_A_FS1_UP1", "IDC_B_FS2_IX1", "IDC_S_FS2_TOB1"] },
     { name: "샘플게임즈", key: "sample-games", links: ["IDC_G_FS1_UP1", "IDC_S_FR1_UP1"] },
     { name: "테스트클라우드", key: "test-cloud", links: ["IDC_S_FR1_UP1"] },
-    { name: "데모스트리밍", key: "demo-streaming", links: ["IDC_B_FS2_IX1", "IDC_B_FS2_INTL1"] },
+    { name: "데모스트리밍", key: "demo-streaming", links: ["IDC_B_FS2_IX1", "IDC_B_FS2_INTL1", "IDC_S_FS2_TOB1"] },
     { name: "모의커머스", key: "mock-commerce", links: ["IDC_B_FS1_UP2", "IDC_A_FR1_UP1"] },
     { name: "가상은행", key: "gasang-bank", links: ["IDC_B_FS1_UP1", "IDC_B_FS1_UP2"] },
     { name: "예제교육", key: "yeje-edu", links: ["IDC_G_FS1_UP1"] },
-    { name: "샘플방송", key: "sample-broadcast", links: ["IDC_B_FS2_IX1", "IDC_A_FS1_UP1"] },
+    { name: "샘플방송", key: "sample-broadcast", links: ["IDC_B_FS2_IX1", "IDC_A_FS1_UP1", "IDC_S_FS2_TOB1"] },
     { name: "시험물류", key: "test-logistics", links: ["IDC_A_FR1_UP1"] },
     { name: "데모헬스", key: "demo-health", links: ["IDC_S_FR1_UP1", "IDC_G_FS1_UP1"] },
     { name: "가상모빌리티", key: "gasang-mobility", links: ["IDC_A_FS1_UP1", "IDC_A_FR1_UP1"] },
@@ -70,7 +70,7 @@
     } });
   });
 
-  const L = (link, a, ap, b, bp, kind, gbps) => ({ link, a, ap, b, bp, kind, gbps });
+  const L = (link, a, ap, b, bp, kind, gbps, feeds) => Object.assign({ link, a, ap, b, bp, kind, gbps }, feeds ? { feeds } : {});   // feeds: 이 회선이 들어가는 센터 (그 센터 관제에서도 보인다)
   const links = [
     // 센터 -> 중앙 백본 (그래프에 나오는 회선). 중앙 백본 2대에 나눠 붙어 이중화. Juniper끼리, Juniper-Cisco가 섞여 있다.
     L("IDC_B_FS1_UP1", "IDC_B_FS1", "xe-0/0/0", "IDC_S_FS1", "xe-0/0/0", "분당 → 중앙 백본 (A)", 100),
@@ -90,6 +90,8 @@
     // 외부 연결 (상대는 장비 목록에 없음)
     L("IDC_B_FS2_IX1", "IDC_B_FS2", "xe-0/0/2", "국내 IX", "-", "연동(IX)", 100),
     L("IDC_B_FS2_INTL1", "IDC_B_FS2", "xe-0/0/3", "해외 사업자", "-", "해외 연동", 100),
+    // 서초 중앙 백본에서 분당으로 들어오는 트래픽 (서초가 소유, 분당 관제에서도 보인다). 용량 200G는 임시값
+    L("IDC_S_FS2_TOB1", "IDC_S_FS2", "xe-0/0/21", "IDC_B_FS1", "xe-0/0/2", "서초 → 분당 (서초를 거쳐 들어오는 트래픽)", 200, "B"),
     // CDN 연결은 여러 곳에 걸쳐 있다 (그래프는 없음)
     L("IDC_B_FS2_CDN1", "IDC_B_FS2", "xe-0/0/4", "IDC_B_FS3", "xe-0/0/0", "CDN 연결 (그래프 없음)", 100),
     L("IDC_S_FS1_CDN1", "IDC_S_FS1", "xe-0/0/20", "IDC_B_FS3", "xe-0/0/1", "CDN 연결 (그래프 없음)", 100),

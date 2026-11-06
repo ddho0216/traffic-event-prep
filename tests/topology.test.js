@@ -53,7 +53,7 @@ test('연결 이름(회선)이 겹치지 않고, 규칙(IDC_센터_장비_용도
   for (const n of names) assert.match(n, /^IDC_[BSGA]_(FS|FR|AS)\d+_[A-Z]+\d*$/, n);
 });
 
-test('그래프의 회선 8개가 모두 연결표에 있다', () => {
+test('그래프의 회선 9개가 모두 연결표에 있다', () => {
   const names = new Set(T.links.map(l => l.link));
   for (const l of data.links) assert.ok(names.has(l.id), `${l.id}가 설계도에 없음`);
 });
@@ -187,4 +187,11 @@ test('동기화: 모든 장비는 같은 센터의 장비로 올라가는 업링
 
 test('동기화: 모든 연결의 A장비는 연결 이름의 센터 코드와 같은 센터다', () => {
   for (const l of T.links) assert.equal(l.link.split('_')[1], l.a.split('_')[1], l.link);
+});
+
+test('센터 순서는 서초, 분당, 구로, 안산 (가장 큰 백본 센터가 맨 앞)', () => assert.deepEqual(Object.keys(T.centers), ['S', 'B', 'G', 'A']));
+
+test('서초에서 분당으로 들어오는 회선이 있고 분당 관제에서도 보이도록 feeds가 B다', () => {
+  const l = T.links.find(x => x.link === 'IDC_S_FS2_TOB1');
+  assert.ok(l && l.feeds === 'B' && dev[l.a].center === '서초 센터' && dev[l.b].center === '분당 센터');
 });
