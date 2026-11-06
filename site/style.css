@@ -109,3 +109,16 @@ body.popup #homeLink{pointer-events:none}
 body.popup nav.tabs{display:none}
 body.popup main{padding-top:10px}
 body.popup .term{height:calc(100vh - 215px)}
+
+.bell{position:relative;background:none;border:1px solid var(--line);border-radius:3px;width:36px;height:32px;display:inline-flex;align-items:center;justify-content:center;color:var(--text);cursor:pointer;margin-left:4px}
+.bell:hover,.bell[aria-expanded=true]{border-color:var(--accent)}
+.bell-n{position:absolute;top:-7px;right:-7px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--crit);color:#fff;font-size:11px;line-height:18px;text-align:center;font-family:var(--mono)}
+.bell-n[hidden]{display:none}
+.notif{position:absolute;right:20px;top:calc(100% + 6px);width:min(700px,calc(100vw - 24px));max-height:min(72vh,680px);overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:4px;box-shadow:0 14px 34px #000b;z-index:30}
+.notif[hidden],.notif-body[hidden]{display:none}
+.notif-hd{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--panel);z-index:1}
+.seg{display:flex;gap:2px}
+.seg button{background:none;border:0;border-bottom:2px solid transparent;padding:4px 10px;color:var(--muted);cursor:pointer}
+.seg button.on{color:var(--text);border-bottom-color:var(--accent)}
+.notif-body{padding:10px 12px}
+body.popup #bell,body.popup #notif{display:none}

@@ -209,16 +209,9 @@ const fileStamp = ms => ymdhm(ms).replace(/[- :]/g, "").slice(0, 12);
     const [s, e] = viewRange(); downloadCsv(`traffic_${b.dataset.link}_${fileStamp(msOf(s))}_${fileStamp(msOf(e))}.csv`, csvOf([b.dataset.link], s, e));
   });
   let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(renderAll, 120); });
-
-  $("#alertTbl").innerHTML = `<tr><th>시각</th><th>링크</th><th>유형</th><th>최대</th><th>경기 일정과 겹침</th></tr>` + ALERTS.map((a, k) =>
-    `<tr class="click" data-k="${k}"><td>${md(msOf(a.s))} ~ ${hm(msOf(a.e))}</td><td>${a.link}</td><td><span class="tag ${a.sev}">${a.kind}</span></td><td>${a.val}</td><td>${a.evName ? `<span class="tag ok">${esc(a.evName)}</span>` : '<span class="tag crit">경기 아님 · 확인 필요</span>'}</td></tr>`).join("");
-  $("#alertTbl").addEventListener("click", ev => {
-    const tr = ev.target.closest("tr.click"); if (!tr) return;
-    state.end = Math.min(N - 1, ALERTS[+tr.dataset.k].peak + 6); renderAll(); window.scrollTo({ top: 0, behavior: "smooth" });
-  });
 })();
 
-function renderTasks() {
+function renderTasksTable() {
   const sent = CUSTOMERS.filter(c => store.get("sent:" + c.name, false)).length;
   const checks = DATA.events.map(ev => (store.get("chk:" + ev.id, []) || []).length);
   const visits = store.get("visits", []).length;
@@ -234,7 +227,40 @@ function renderTasks() {
   ];
   $("#taskTbl").innerHTML = rows.map(r => `<tr><td>${r[0]}</td><td><span class="tag ${r[2]}">${r[1]}</span></td><td><button class="btn sm" data-go="${r[3]}">열기</button></td></tr>`).join("");
 }
-$("#taskTbl").addEventListener("click", e => { const b = e.target.closest("[data-go]"); if (b) showTab(b.dataset.go); });
+function renderTasks() { renderTasksTable(); renderBell(); }
+$("#taskTbl").addEventListener("click", e => { const b = e.target.closest("[data-go]"); if (b) { closeNotif(); showTab(b.dataset.go); } });
+
+/* ---------- 알림 (종 모양): 경고 이력 + 내 업무. 관제 첫 화면에는 모니터만 남긴다 ---------- */
+const needCheck = () => ALERTS.filter(a => !a.evName).length + ROOM_ALERTS.length;   // 사람이 확인해야 하는 건수
+function renderBell() {
+  const n = needCheck(), all = $("#showAllAlerts").checked, hidden = ALERTS.filter(a => a.evName).length;
+  $("#bellN").textContent = n; $("#bellN").hidden = n === 0;
+  const rows = [];
+  ALERTS.forEach((a, k) => { if (all || !a.evName) rows.push({ t: a.s, html: `<tr class="click" data-k="${k}"><td>${md(msOf(a.s))} ~ ${hm(msOf(a.e))}</td><td>${a.link}</td><td><span class="tag ${a.sev}">${a.kind}</span></td><td>${a.val}</td><td>${a.evName ? `<span class="tag ok">${esc(a.evName)}</span>` : '<span class="tag crit">확인 필요</span>'}</td></tr>` }); });
+  ROOM_ALERTS.forEach((a, k) => rows.push({ t: a.s, html: `<tr class="click" data-r="${k}"><td>${md(msOf(a.s))} ~ ${hm(msOf(a.e))}</td><td>랙 ${a.rack}</td><td><span class="tag crit">온도 경고</span></td><td>${TEMP_HOT}°C 이상, 최고 ${a.max.toFixed(1)}°C</td><td><span class="tag crit">확인 필요</span></td></tr>` }));
+  rows.sort((x, y) => x.t - y.t);
+  $("#alertTbl").innerHTML = `<tr><th>시각</th><th>대상</th><th>유형</th><th>내용</th><th>구분</th></tr>` + (rows.length ? rows.map(r => r.html).join("") : `<tr><td colspan="5" class="muted">확인 필요한 알림이 없습니다.</td></tr>`);
+  $("#alertSum").textContent = `확인 필요 ${n}건` + (all ? ` · 경기와 겹침 ${hidden}건 포함` : ` · 경기와 겹치는 ${hidden}건은 숨김`);
+}
+function closeNotif() { $("#notif").hidden = true; $("#bell").setAttribute("aria-expanded", "false"); }
+(function initNotif() {
+  const panel = $("#notif"), bell = $("#bell");
+  bell.addEventListener("click", e => { e.stopPropagation(); if (panel.hidden) { renderTasks(); panel.hidden = false; bell.setAttribute("aria-expanded", "true"); } else closeNotif(); });
+  $("#notifClose").onclick = closeNotif;
+  document.addEventListener("click", e => { if (!panel.hidden && !panel.contains(e.target) && !bell.contains(e.target)) closeNotif(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeNotif(); });
+  $$("[data-np]").forEach(b => b.addEventListener("click", () => {
+    $$("[data-np]").forEach(x => x.classList.toggle("on", x === b));
+    $("#np-alerts").hidden = b.dataset.np !== "alerts"; $("#np-tasks").hidden = b.dataset.np !== "tasks";
+  }));
+  $("#showAllAlerts").addEventListener("change", renderBell);
+  $("#alertTbl").addEventListener("click", ev => {
+    const tr = ev.target.closest("tr.click"); if (!tr) return;
+    closeNotif();
+    if (tr.dataset.k !== undefined) { showTab("monitor"); state.end = Math.min(N - 1, ALERTS[+tr.dataset.k].peak + 6); renderAll(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+    else { sr.end = ROOM_ALERTS[+tr.dataset.r].peak; showTab("room"); }
+  });
+})();
 
 /* ---------- 2. 월간 자료 ---------- */
 const MIN_DAY = ymd(T0), MAX_DAY = ymd(msOf(N - 1));
