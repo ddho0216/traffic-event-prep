@@ -567,16 +567,21 @@ const addPort = (dev, port, peer, link, side) => {
   d.ifs.push([port, peer, f.crc || 0, rx, link, up, admin, mine && theirs ? `${base}.${side === "a" ? 1 : 2}` : "", mine && theirs ? `${base}.${side === "a" ? 2 : 1}` : ""]);
 };
 TOPOLOGY.links.forEach(l => { addPort(l.a, l.ap, l.b, l, "a"); if (DEV[l.b]) addPort(l.b, l.bp, l.a, l, "b"); });
+// 고객 회선(1G·10G): 장비마다 한 줄씩. [.., 속도(G), {홈 장비, 고객사}] 가 뒤에 붙는다. 짝 장비도 같은 목록을 가진다.
+DEVICES.forEach(d => (d.lines || []).forEach((ln, k) => {
+  const f = TOPOLOGY.faults[`${d.id}|${ln.port}`] || {}, name = CUSTOMERS.find(c => c.key === ln.customer).name;
+  d.ifs.push([ln.port, name, f.crc || 0, f.rx != null ? f.rx : (ln.speed === 10 ? -2.6 : -4.1) - (k % 5) * 0.12, null, "up", "up", "", "", ln.speed, { home: ln.home, customer: name }]);
+}));
 
 /* 업무 메모에서 일반화한 명령들: 회선 설명(Up/Down·Admin/Link·고객사), ARP·ping, 로그, BGP, 설정. 출력은 전부 가상입니다. */
 const custNames = keys => keys.map(k => CUSTOMERS.find(c => c.key === k).name);
-function descOf(d, f) {   // 회선 설명: 회선 이름 -> 상대 / 고객사
+function descOf(d, f) {   // 회선 설명. 고객 회선: "홈장비 고객사 속도", 장비 간 회선: "회선이름 -> 상대 속도"
+  if (f[10]) return `${f[10].home} ${f[10].customer} ${f[9]}G`;
   const l = f[4]; if (!l) return "";
-  let cust = CUSTOMERS.filter(c => c.links.includes(l.link)).map(c => c.name);
-  if (!cust.length) cust = custNames(d.customers || (DEV[f[1]] && DEV[f[1]].customers) || []);
-  const n = cust.length > 2 ? `${cust.slice(0, 2).join("·")} 외 ${cust.length - 2}곳` : cust.join("·");
-  return `${l.link} -> ${f[1]}${n ? " / " + n : ""}`;
+  return `${l.link} -> ${f[1]} ${l.gbps}G`;
 }
+const portKey = f => { const m = String(f[0]).match(/(\d+)\/(\d+)\/(\d+)$/); return m ? (+m[1]) * 10000 + (+m[2]) * 100 + (+m[3]) : 0; };
+const sortedIfs = d => [...d.ifs].sort((x, y) => portKey(x) - portKey(y));   // 슬롯·포트 번호 순서로 보여 준다
 const hexOf = s => [...s].reduce((q, c) => (q * 131 + c.charCodeAt(0)) >>> 0, 7).toString(16).padStart(8, "0");
 const macOf = s => { const h = hexOf(s); return `00:0e:c6:${h.slice(0, 2)}:${h.slice(2, 4)}:${h.slice(4, 6)}`; };
 const asOf = id => id && DEV[id] ? 64512 + (+id.match(/(\d+)$/)[1]) + (id.split("_")[1].charCodeAt(0) % 7) * 10 : 64999;
@@ -589,7 +594,7 @@ function pingBody(f, n) {
 }
 function findPeerIf(d, ip) { return d.ifs.find(f => f[8] === ip); }
 function jDesc(d) {
-  return "Interface       Admin Link Description\n" + d.ifs.map(f => `${f[0].padEnd(15)} ${f[6].padEnd(5)} ${f[5].padEnd(4)} ${descOf(d, f)}`).join("\n");
+  return "Interface       Admin Link Description\n" + sortedIfs(d).map(f => `${f[0].padEnd(15)} ${f[6].padEnd(5)} ${f[5].padEnd(4)} ${descOf(d, f)}`).join("\n");
 }
 function jPing(d, ip, n) {
   const f = findPeerIf(d, ip); if (!f) return `ping: sendto: No route to host`;
@@ -634,8 +639,8 @@ const DEV_CMDS = {
     [/^show interfaces? extensive \| (?:match )?"?CRC\|(?:physical interface|xe)"?$/i, d => d.ifs.map(f => `Physical interface: ${f[0]}, Enabled, Physical link is Up\n${jCrc(f)}`).join("\n")]
   ],
   cisco: [
-    [/^show interfaces? descriptions?$/i, d => "Interface                      Status         Protocol Description\n" + d.ifs.map(f => `${f[0].padEnd(30)} ${(f[6] === "down" ? "admin-down" : f[5]).padEnd(14)} ${(f[6] === "down" ? "down" : f[5]).padEnd(8)} ${descOf(d, f)}`).join("\n")],
-    [/^show interfaces? brief$/i, d => "Intf       Intf        LineP           Encap  MTU    BW\nName       State       State           Type   (byte) (Kbps)\n" + d.ifs.map(f => `${f[0].padEnd(10)} ${(f[6] === "down" ? "admin-down" : f[5]).padEnd(11)} ${(f[6] === "down" ? "down" : f[5]).padEnd(15)} ARPA   1514   10000000`).join("\n")],
+    [/^show interfaces? descriptions?$/i, d => "Interface                      Status         Protocol Description\n" + sortedIfs(d).map(f => `${f[0].padEnd(30)} ${(f[6] === "down" ? "admin-down" : f[5]).padEnd(14)} ${(f[6] === "down" ? "down" : f[5]).padEnd(8)} ${descOf(d, f)}`).join("\n")],
+    [/^show interfaces? brief$/i, d => "Intf       Intf        LineP           Encap  MTU    BW\nName       State       State           Type   (byte) (Kbps)\n" + sortedIfs(d).map(f => `${f[0].padEnd(10)} ${(f[6] === "down" ? "admin-down" : f[5]).padEnd(11)} ${(f[6] === "down" ? "down" : f[5]).padEnd(15)} ARPA   1514   ${String((f[9] || (f[4] && f[4].gbps) || 10) * 1000000)}`).join("\n")],
     [/^show logging(?: last (\d+))?$/i, d => logLines(d, "c")],
     [/^show running-config interface (\S+)$/i, (d, m) => { const f = findIf(d, m[1]); if (!f) return `% Invalid input detected at '^' marker.`; return `interface ${f[0].replace("Te", "TenGigE")}\n description ${descOf(d, f)}\n` + (f[8] ? ` ipv4 address ${f[7]} 255.255.255.252\n` : "") + (f[6] === "down" ? " shutdown\n" : "") + "!"; }],
     [/^ping (\S+) repeat (\d+)$/i, (d, m) => iosPing(d, m[1], Math.min(+m[2], 200))],
@@ -644,7 +649,7 @@ const DEV_CMDS = {
     [/^show interfaces? (\S+) \| include CRC$/i, (d, m) => { const f = findIf(d, m[1]); return f ? `     ${f[2]} input errors, ${f[2]} CRC, 0 frame, 0 overrun, 0 ignored` : `% Invalid input detected at '^' marker.`; }]
   ],
   huawei: [
-    [/^display interface description$/i, d => "PHY: Physical\n*down: administratively down\nInterface                     PHY      Protocol Description\n" + d.ifs.map(f => `${(f[6] === "down" ? "*" : "") + shortPort(f[0])}`.padEnd(29) + ` ${f[5].padEnd(8)} ${f[5].padEnd(8)} ${descOf(d, f)}`).join("\n")],
+    [/^display interface description$/i, d => "PHY: Physical\n*down: administratively down\nInterface                     PHY      Protocol Description\n" + sortedIfs(d).map(f => `${(f[6] === "down" ? "*" : "") + shortPort(f[0])}`.padEnd(29) + ` ${f[5].padEnd(8)} ${f[5].padEnd(8)} ${descOf(d, f)}`).join("\n")],
     [/^display logbuffer$/i, d => logLines(d, "h")],
     [/^display current-configuration interface (.+)$/i, (d, m) => { const f = findIf(d, m[1].replace(/\s+/g, "")); if (!f) return "Error: Wrong parameter found at '^' position."; return `#\ninterface ${f[0]}\n description ${descOf(d, f)}\n port link-type trunk\n` + (f[6] === "down" ? " shutdown\n" : "") + "#"; }],
     [/^display interface (.+?) \| include CRC$/i, (d, m) => {
@@ -954,7 +959,7 @@ function buildScenarios() {
   const dnSms = `[장애] ${dnCust.join(", ")} 담당자님, ${hhmm(dnA.s)}부터 안산 ↔ 중앙 백본 업링크(${DN})가 끊겨 확인 중입니다. 우회 경로로 서비스는 유지되고 있으며 경과는 다시 안내드리겠습니다. (가상 문자)`;
   const linkDown = { name: "업링크 회선 다운", tab: "monitor", win: 12, from: dn(-20), to: dn(dnWin + 15), steps: [
     { at: dn(0), kind: "감지", title: `${DN} in·out이 거의 0으로 떨어짐 (전날 같은 시각 out ${g1(outAt(DN, prevDay(dn(0))))}G → ${g1(outAt(DN, dn(0)))}G). 종 알림에 '확인 필요'로 등록`, focus: [DN] },
-    { at: dn(3), kind: "확인", title: `정확한 장비·회선명 확인: ${dDev} ${dPort}. descriptions로 보면 Admin up / Link down`, detail: runOn(dDev, "show interfaces descriptions", [dPort]) + "\n\n→ Admin = 관리자가 켜 둔 상태, Link = 실제 연결 상태.\n   Admin up + Link down: 누가 일부러 내린 게 아니라 선이나 상대 쪽 문제로 끊긴 것.\n   (Admin down이면 누군가 포트를 일부러 내려 둔 것)\n고객사 이름도 같은 줄에서 같이 보인다.", sum: "Admin up, Link down → 실제 연결이 끊긴 것. 고객사도 확인", detailLabel: "터미널 출력 보기", focus: [DN] },
+    { at: dn(3), kind: "확인", title: `정확한 장비·회선명 확인: ${dDev} ${dPort}. descriptions로 보면 Admin up / Link down`, detail: runOn(dDev, "show interfaces descriptions", [dPort]) + "\n\n→ Admin = 관리자가 켜 둔 상태, Link = 실제 연결 상태.\n   Admin up + Link down: 누가 일부러 내린 게 아니라 선이나 상대 쪽 문제로 끊긴 것.\n   (Admin down이면 누군가 포트를 일부러 내려 둔 것)\n고객 회선은 줄마다 '장비 고객사 속도'가 같이 보인다.", sum: "Admin up, Link down → 실제 연결이 끊긴 것. 고객사도 확인", detailLabel: "터미널 출력 보기", focus: [DN] },
     { at: dn(5), kind: "확인", title: `트래픽(전/후) 확인: Down이면 5분 전 값만 보고 이후는 0 (OUT 기준)`, detail: `■ 트래픽(전/후)\n${DN} : ${g1(dnBefore)}Gbps / ${dnAfter < 0.5 ? "0" : g1(dnAfter) + "Gbps"}\n\n* 경과 문자가 나가기 전에 트래픽을 먼저 전달해야 하므로 빠르게 확인한다.`, detailLabel: "경과 문자에 넣을 트래픽 보기", focus: [DN] },
     { at: dn(7), kind: "조치", title: `발생 문자 전송, 영향 고객사(${dnCust.join(", ")})에 안내`, detail: dnSms, detailLabel: "발생 문자 보기", focus: [DN] },
     { at: dn(10), kind: "조치", title: "광값·CRC 확인: 빛이 안 들어옴 (광 케이블 접촉 불량이나 SFP 불량이 많음)", detail: runOn(dDev, `show interfaces diagnostics optics ${dPort}`, [dPort]) + "\n\n" + runOn(dDev, `show interfaces extensive ${dPort} | match CRC`, [dPort]) + "\n\n→ 수신 광값이 -40 dBm이면 빛이 안 들어오는 것. 케이블·SFP·상대 장비 쪽을 의심한다.", sum: `광 수신 -40 dBm → 빛이 안 들어옴 (케이블·SFP 의심)`, detailLabel: "터미널 출력 보기", focus: [DN] },
@@ -1060,12 +1065,11 @@ function startScn(id) {
 // 랙·장비의 크기(Cisco 21U, Juniper 6U, Huawei 2U)와 포트 배치는 제가 만든 가상 그림입니다.
 const R3 = { dev: null, port: null };   // 장비 상세(포트·광케이블) 창의 상태
 const RACK_U = 42, DEV_U = { cisco: 21, juniper: 6, huawei: 2 }, ROW_N = 8;   // 장비 높이는 제가 만든 가정
-const portIdx = (d, name) => { const m = String(name).match(/(\d+)\/(\d+)\/(\d+)$/); return m ? (+m[2] - (d.vendor === "huawei" ? 1 : 0)) * 48 + (+m[3]) : -1; };
 const portBad = f => f[2] > 50 || f[3] < -9;
-function portPlan(d) {   // 포트 번호 -> 연결 정보. 포트는 위아래 2줄, 왼쪽부터 번호순으로 배치
-  const mx = Math.max(0, ...d.ifs.map(f => portIdx(d, f[0])));
-  const total = d.vendor === "cisco" ? Math.max(48, Math.ceil((mx + 1) / 12) * 12) : (mx > 23 ? 48 : 24);
-  return { total, cols: total / 2, map: new Map(d.ifs.map(f => [portIdx(d, f[0]), f])) };
+function portPlan(d) {   // 포트를 슬롯·번호 순서대로 위치(0부터)에 놓는다. 위아래 2줄, 왼쪽부터
+  const sorted = sortedIfs(d), n = sorted.length;
+  const total = d.vendor === "cisco" ? Math.max(48, Math.ceil(n / 12) * 12) : Math.max(24, Math.ceil(n / 24) * 24);
+  return { total, cols: total / 2, map: new Map(sorted.map((f, q) => [q, f])) };
 }
 /* 장비 상세: 포트 배치와 꽂혀 있는 광케이블 (위줄 포트의 케이블은 위로, 아래줄은 아래로) */
 function r3Detail() {
@@ -1076,7 +1080,7 @@ function r3Detail() {
   const pos = k => ({ x: colX(Math.floor(k / 2)) + 10, row: k % 2, y: ZONE + HEAD + (k % 2) * 30 });
   const used = [...pl.map.keys()].sort((a, b) => a - b);
   const sel = R3.port != null && pl.map.has(R3.port) ? R3.port : null;
-  const peerOf = f => { const lk = f[4]; return { dev: f[1], port: lk ? (lk.a === d.id ? lk.bp : lk.ap) : "", kind: lk ? lk.kind : "", gbps: lk ? lk.gbps : "" }; };
+  const peerOf = f => { if (f[10]) return { dev: f[1], port: "", kind: `고객 회선 (홈 ${f[10].home})`, gbps: f[9] }; const lk = f[4]; return { dev: f[1], port: lk ? (lk.a === d.id ? lk.bp : lk.ap) : "", kind: lk ? lk.kind : "", gbps: lk ? lk.gbps : "" }; };
   let svg = "", tags = "", plate = "";
   for (let k = 0; k < pl.total; k++) { const p = pos(k), f = pl.map.get(k);
     plate += `<button class="pt${f ? (portBad(f) ? " x" : " u") : ""}${k === sel ? " sel" : ""}" data-i="${k}" style="left:${p.x - 10}px;top:${p.y}px" title="포트 ${k}${f ? " → " + f[1] : " (비어 있음)"}">${k}</button>`; }

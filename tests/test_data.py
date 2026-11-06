@@ -43,8 +43,12 @@ class TrafficData(unittest.TestCase):
         self.assertTrue((one.time.diff().dropna() == pd.Timedelta(minutes=5)).all())
 
     def test_calm_days_stay_below_60_percent(self):
+        """기존 회선은 평소에 60% 아래. 큰 고객사 전용 회선과 서초→분당 회선은 일부러 트래픽을 크게 해서 60~70%대이되 경고선 80%는 넘지 않는다."""
         calm = self.t[(self.t.time >= "2026-10-19") & (self.t.time < "2026-10-24")]
-        self.assertLess(calm.util.max(), 0.60)
+        big = calm.link.str.contains("BIG|TOB1")
+        self.assertLess(calm[~big].util.max(), 0.60)
+        self.assertLess(calm[big].util.max(), 0.80)
+        self.assertGreater(calm[big].util.max(), 0.60)
 
     def test_each_match_within_two_hours(self):
         for r in self.ev.itertuples():

@@ -207,3 +207,57 @@ test('큰 고객사 6곳: 서초 2, 분당 2, 구로 1, 안산 1이고 전용 �
     assert.equal(host.customers.length, 1, `${c.name}: 접속 장비를 혼자 씀`);
   }
 });
+
+// ---------- 이중화와 고객 회선(밀도) ----------
+const nIf = d => T.links.filter(l => l.a === d.id).length + T.links.filter(l => l.b === d.id && dev[l.a]).length + (d.lines || []).length;
+
+test('이중화: 모든 장비에 짝 장비가 있고 서로 짝이다 (같은 센터·같은 종류, 번호 홀수-짝수)', () => {
+  for (const d of T.devices) {
+    const p = dev[d.partner];
+    assert.ok(p, `${d.id}: 짝 ${d.partner} 없음`);
+    assert.equal(p.partner, d.id, `${d.id} ↔ ${p.id}`);
+    assert.equal(p.vendor, d.vendor); assert.equal(p.center, d.center);
+  }
+});
+
+test('이중화: 짝 장비끼리 연결(_PAIR1)이 있고, 모든 장비가 센터 백본 짝 두 대에 각각 연결돼 있다 (한쪽이 끊겨도 반대쪽으로)', () => {
+  for (const d of T.devices.filter(x => +x.id.match(/(\d+)$/)[1] % 2 === 1)) assert.ok(T.links.some(l => l.link === `${d.id}_PAIR1` && l.b === d.partner), `${d.id}: 짝 연결 없음`);
+  const hub = { '서초 센터': 'IDC_S_FR1', '분당 센터': 'IDC_B_FS1', '구로 센터': 'IDC_G_FS1', '안산 센터': 'IDC_A_FS1' };
+  for (const d of T.devices) {
+    const h1 = hub[d.center], h2 = dev[h1].partner; if (d.id === h1 || d.id === h2) continue;
+    const to = h => T.links.some(l => (l.a === h && l.b === d.id) || (l.b === h && l.a === d.id));
+    assert.ok(to(h1) && to(h2), `${d.id}: 허브 두 대(${h1}, ${h2})에 모두 연결돼야 함`);
+  }
+});
+
+test('이중화: 짝 장비는 같은 고객 회선 목록(홈 장비·고객사·속도)을 가진다', () => {
+  for (const d of T.devices) {
+    const p = dev[d.partner], key = x => (x.lines || []).map(l => `${l.home}|${l.customer}|${l.speed}`).join(',');
+    assert.equal(key(d), key(p), `${d.id} ↔ ${p.id}`);
+  }
+});
+
+test('밀도: 모든 장비에 인터페이스가 10개 이상 꽂혀 있고, 고객 회선은 1G 또는 10G다', () => {
+  for (const d of T.devices) {
+    assert.ok(nIf(d) >= 10, `${d.id}: 인터페이스 ${nIf(d)}개`);
+    assert.ok((d.lines || []).length >= 10, `${d.id}: 고객 회선 ${(d.lines || []).length}개`);
+    for (const l of d.lines) assert.ok(l.speed === 1 || l.speed === 10, `${d.id} ${l.port}: 속도 ${l.speed}`);
+  }
+  const all = T.devices.flatMap(d => d.lines); const g10 = all.filter(l => l.speed === 10).length;
+  assert.ok(g10 / all.length > 0.6 && g10 < all.length, '10G가 대부분이고 1G도 섞여 있어야 함');
+});
+
+test('밀도: 고객 회선 포트 이름이 제조사·속도 형식과 맞고 한 장비에서 겹치지 않는다', () => {
+  const re = { juniper: { 10: /^xe-1\/0\/\d+$/, 1: /^ge-1\/1\/\d+$/ }, cisco: { 10: /^Te2\/0\/\d+$/, 1: /^Gi2\/1\/\d+$/ }, huawei: { 10: /^XGigabitEthernet0\/2\/\d+$/, 1: /^GigabitEthernet0\/3\/\d+$/ } };
+  for (const d of T.devices) {
+    const seen = new Set();
+    for (const l of d.lines) { assert.match(l.port, re[d.vendor][l.speed], `${d.id} ${l.port}`); assert.ok(!seen.has(l.port), `${d.id} ${l.port} 중복`); seen.add(l.port); }
+    const used = new Set(T.links.flatMap(x => [x.a === d.id ? x.ap : null, x.b === d.id ? x.bp : null]).filter(Boolean));
+    for (const l of d.lines) assert.ok(!used.has(l.port), `${d.id} ${l.port}: 장비 간 연결과 포트 겹침`);
+  }
+});
+
+test('고객 회선의 고객사는 모두 같은 센터 소속이다 (고객사 첫 회선의 센터와 장비 센터가 같음)', () => {
+  const home = Object.fromEntries(T.customers.map(c => [c.key, c.links[0].split('_')[1]]));
+  for (const d of T.devices) for (const l of d.lines) assert.equal(home[l.customer], d.id.split('_')[1], `${d.id} ${l.customer}`);
+});

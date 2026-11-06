@@ -97,6 +97,15 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('[data-glf=all]');
   await page.click('#glList .gli[data-rack="IDC_S_R02"]');
   check('서버실-3D: 목록에서 랙을 누르면 오른쪽 상세·아래 목록이 그 랙으로 바뀜', (await page.locator('#glDetail').innerText()).includes('IDC_S_R02') && (await page.locator('#glDevs').innerText()).includes('IDC_S_R02'));
+  const flyDone = () => page.waitForFunction(() => !G.fly, null, { timeout: 5000 });
+  const cv0 = () => cvBox;
+  const cvBox = await page.locator('#glCanvas').boundingBox();
+  await page.click('#glFit'); await flyDone();
+  const fitDist = await page.evaluate(() => G.cs.dist);
+  await page.click('#glList .gli[data-rack="IDC_S_R03"]'); await flyDone();
+  const zoomed = await page.evaluate(() => ({ dist: G.cs.dist, tx: G.cs.tx, rackIdx: G.rowRacks.findIndex(r => r.id === 'IDC_S_R03') }));
+  check('서버실-3D: 랙을 누르면 그 랙으로 확대됨 (카메라가 가까워지고 그 랙 쪽으로 이동)', zoomed.dist < fitDist - 0.4 && Math.abs(zoomed.tx - zoomed.rackIdx * 0.67) < 0.05, JSON.stringify({ fitDist, ...zoomed }));
+  await page.mouse.move(cv0().x + 300, cv0().y + 300);
   // 3D 화면을 직접 눌러 장비 선택: 카메라 위치로 화면 좌표를 계산하지 않고, 화면 맞춤 상태에서 랙 한가운데를 누른다
   await page.click('#r3RowSel'); await page.selectOption('#r3RowSel', '0');
   await page.waitForTimeout(300);
@@ -110,16 +119,17 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.mouse.click(cv.x + 8, cv.y + 8);
   check('서버실-3D: 빈 곳을 누르면 선택이 풀림', (await page.locator('#glDetail h3').innerText()).includes('요약'));
   // 확대/축소/드래그/정면
+  await flyDone();
   const d0 = await page.evaluate(() => G.cs.dist);
   await page.click('#glZoomIn'); const d1 = await page.evaluate(() => G.cs.dist);
   check('서버실-3D: 확대 버튼이 카메라를 가깝게 함', d1 < d0, `${d0} -> ${d1}`);
-  await page.click('#glFit'); check('서버실-3D: 화면 맞춤으로 처음 거리로 돌아옴', Math.abs((await page.evaluate(() => G.cs.dist)) - d0) < 0.01);
+  await page.click('#glFit'); await flyDone(); check('서버실-3D: 화면 맞춤으로 처음 거리로 돌아옴', Math.abs((await page.evaluate(() => G.cs.dist)) - d0) < 0.05);
   await page.mouse.move(cv.x + 300, cv.y + 300); await page.mouse.down(); await page.mouse.move(cv.x + 420, cv.y + 300, { steps: 5 }); await page.mouse.up();
   const az = await page.evaluate(() => G.cs.az);
   check('서버실-3D: 드래그하면 시점이 회전하고 좌우 70도를 넘지 않음', Math.abs(az) > 5 && Math.abs(az) <= 70, az);
   await page.mouse.move(cv.x + 100, cv.y + 200);
   check('서버실-3D: 마우스를 뗀 뒤에는 시점이 더 바뀌지 않음', (await page.evaluate(() => G.cs.az)) === az);
-  await page.click('#glHome'); check('서버실-3D: 초기 시점 버튼', (await page.evaluate(() => G.cs.az)) === 0);
+  await page.click('#glHome'); await flyDone(); check('서버실-3D: 초기 시점 버튼', Math.abs(await page.evaluate(() => G.cs.az)) < 0.01);
   // 사건: 냉각 이상 -> 분당 R07 선택, 위험 표시, 장비 상세에서 포트·광케이블
   await page.click('[data-r3="2026-10-26T16:15"]');
   check('서버실-3D: 장비 꺼짐 버튼은 분당으로 맞추고 IDC_B_R07을 선택', (await page.locator('#centerBar .cbtn.on').getAttribute('data-center')) === 'B' && (await page.locator('#glDetail h3').innerText()).includes('IDC_B_R07'));
@@ -340,7 +350,12 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
       wrong: r('IDC_B_AS1', 'show interfaces descriptions')
     };
   });
-  check('명령 show interfaces descriptions: Admin/Link 열과 고객사가 보이고, 끊긴 포트는 Admin up·Link down', /xe-0\/0\/11\s+up\s+down\s+IDC_G_FS1_DN2 -> IDC_G_FS3 \/ 예제교육/.test(T.desc), T.desc.split('\n').slice(0, 4).join(' | '));
+  check('명령 show interfaces descriptions: Admin/Link 열, 회선 속도(10G)가 보이고, 끊긴 포트는 Admin up·Link down', /xe-0\/0\/11\s+up\s+down\s+IDC_G_FS1_DN2 -> IDC_G_FS3 10G/.test(T.desc), T.desc.split('\n').slice(0, 4).join(' | '));
+  const D = await page.evaluate(() => { const r = (id, c) => runCmd(c, DEV[id]); return { a: r('IDC_B_FS3', 'show interfaces descriptions'), b: r('IDC_B_FS4', 'show interfaces descriptions'), c: r('IDC_B_AS1', 'display interface description') }; });
+  const cl = x => x.split('\n').filter(l => /xe-1\/0\/|ge-1\/1\//.test(l)).map(l => l.replace(/^\S+\s+/, ''));
+  check('인터페이스가 10개 이상 보이고 고객 회선은 "장비 고객사 속도" 형식 (예: IDC_B_FS3 가상물산 10G)', D.a.split('\n').length - 1 >= 10 && /xe-1\/0\/0\s+up\s+up\s+IDC_B_FS3 \S+ (10|1)G/.test(D.a) && /ge-1\/1\/0/.test(D.a) === /\b1G\b/.test(D.a), D.a.split('\n').slice(0, 3).join(' | '));
+  check('이중화: 짝 장비(FS4)에서도 같은 고객 회선 목록이 같은 포트로 보임', cl(D.a).length >= 10 && JSON.stringify(cl(D.a)) === JSON.stringify(cl(D.b)), cl(D.b).slice(0, 2).join(' | '));
+  check('Huawei도 인터페이스 10개 이상, 고객 회선에 속도가 붙음', D.c.split('\n').length - 4 >= 10 && /IDC_B_AS1 \S+ (10|1)G/.test(D.c));
   check('Admin down(관리자가 내림)은 Admin down·Link down으로 따로 보임', /xe-0\/0\/14\s+down\s+down/.test(T.adminDown) && T.cfg.includes('disable'));
   check('ping rapid count 100: 끊긴 회선은 100% 손실, 정상 회선은 0% 손실', T.ping.includes('100% packet loss') && T.pingOk.includes('0% packet loss') && T.pingOk.split('\n')[1].length === 100, T.ping.split('\n').slice(-2).join(' | '));
   check('show arp | match: 정상 회선은 항목이 있고 Down 회선은 출력 없음 (IP 확인 불가)', T.arpDown === '' && /Total entries: 1/.test(T.arpUp));

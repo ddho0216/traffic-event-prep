@@ -183,6 +183,19 @@ function placeCam() {
   G.cam.position.set(c.tx + c.dist * Math.sin(a) * Math.sin(p), c.ty + c.dist * Math.cos(p), c.dist * Math.cos(a) * Math.sin(p));
   G.cam.lookAt(c.tx, c.ty, 0); G.dirty = true;
 }
+function fitTarget() {
+  const n = G.rowRacks ? G.rowRacks.length : 8, rowW = n * SC.RW + (n - 1) * SC.GAP;
+  const vf = G.cam.fov * Math.PI / 180, hf = 2 * Math.atan(Math.tan(vf / 2) * G.cam.aspect);
+  const need = Math.max((rowW / 2 + 0.3) / Math.tan(hf / 2), (rackH() / 2 + 0.45) / Math.tan(vf / 2));
+  return { az: 0, pol: 88, dist: need + SC.RD / 2, tx: rowW / 2 - SC.RW / 2, ty: rackH() / 2 + 0.05 };
+}
+function focusTarget(f) {   // 선택한 랙(또는 장비) 쪽으로 확대할 카메라 위치
+  const k = Math.max(0, G.rowRacks.findIndex(r => r.id === f.rack)), vf = G.cam.fov * Math.PI / 180;
+  const x = k * (SC.RW + SC.GAP);
+  if (f.u0) return { az: 0, pol: 88, dist: 2.1, tx: x, ty: SC.BASE + (f.u0 - 1 + (f.u || 1) / 2) * SC.U };
+  return { az: 0, pol: 88, dist: (rackH() / 2 + 0.35) / Math.tan(vf / 2) + SC.RD / 2, tx: x, ty: rackH() / 2 + 0.05 };
+}
+function flyTo(to) { G.fly = { from: Object.assign({}, G.cs), to, t0: performance.now(), dur: 700 }; G.dirty = true; }
 function fitCam(reset) {
   const n = G.rowRacks ? G.rowRacks.length : 8, rowW = n * SC.RW + (n - 1) * SC.GAP;
   const vf = G.cam.fov * Math.PI / 180, hf = 2 * Math.atan(Math.tan(vf / 2) * G.cam.aspect);
@@ -192,7 +205,7 @@ function fitCam(reset) {
 function bindControls(cv) {
   let d = null;
   cv.addEventListener("contextmenu", e => e.preventDefault());
-  cv.addEventListener("pointerdown", e => { d = { x: e.clientX, y: e.clientY, az: G.cs.az, pol: G.cs.pol, tx: G.cs.tx, ty: G.cs.ty, pan: e.button === 2 || e.shiftKey, moved: false, id: e.pointerId }; });
+  cv.addEventListener("pointerdown", e => { G.fly = null; d = { x: e.clientX, y: e.clientY, az: G.cs.az, pol: G.cs.pol, tx: G.cs.tx, ty: G.cs.ty, pan: e.button === 2 || e.shiftKey, moved: false, id: e.pointerId }; });
   cv.addEventListener("pointermove", e => {
     if (d) {
       if (e.buttons === 0) { d = null; return; }
@@ -209,7 +222,7 @@ function bindControls(cv) {
   const end = e => { const was = d; d = null; if (was && !was.moved && e.type === "pointerup" && e.button === 0) pick(e); };
   cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", () => { d = null; }); cv.addEventListener("lostpointercapture", () => { d = null; });
   cv.addEventListener("pointerleave", hideTip);
-  cv.addEventListener("wheel", e => { e.preventDefault(); G.cs.dist = clamp(G.cs.dist * (e.deltaY < 0 ? 0.9 : 1.1), 1.3, 14); placeCam(); }, { passive: false });
+  cv.addEventListener("wheel", e => { e.preventDefault(); G.fly = null; G.cs.dist = clamp(G.cs.dist * (e.deltaY < 0 ? 0.9 : 1.1), 1.3, 14); placeCam(); }, { passive: false });
 }
 function rayAt(e) {
   const b = G.r.domElement.getBoundingClientRect(), v = new THREE.Vector2(((e.clientX - b.left) / b.width) * 2 - 1, -((e.clientY - b.top) / b.height) * 2 + 1);
@@ -227,14 +240,17 @@ function hideTip() { const t = $("#glTip"); if (t) t.hidden = true; }
 function pick(e) {
   const u = rayAt(e);
   G.sel = u ? (u.kind === "rack" ? { kind: "rack", rack: u.rack } : { kind: u.kind, id: u.id, rack: u.rack, u0: u.u0, u: u.u }) : null;
+  G.focus = G.sel ? { rack: G.sel.rack, u0: G.sel.kind === "rack" ? 0 : G.sel.u0, u: G.sel.u } : { fit: true };
   render3d();
 }
 
 function disposeRoot() {
   [...G.root.children].forEach(o => { G.root.remove(o); o.traverse(x => { if (x.geometry) x.geometry.dispose(); if (x.material) (Array.isArray(x.material) ? x.material : [x.material]).forEach(m => m.dispose()); }); });
-  TEX.splice(0).forEach(t => t.dispose()); G.ray = [];
+  TEX.splice(0).forEach(t => t.dispose()); G.ray = []; badgeCache = {};
 }
 const dark = (c) => new THREE.MeshStandardMaterial({ color: c || 0x1b2127, roughness: 0.8, metalness: 0.3 });
+const devTemp = (r, it, i) => r.temp[i] + (it.u0 - 1) / RACK_U * 1.6;   // 장비 온도(가정): 랙 입구 온도 + 높이 보정 0~1.6°C
+let badgeCache = {};
 function buildRack(r, k, i, sel) {
   const { U, RW, RD, BASE, FW } = SC, g = new THREE.Group(), x = k * (RW + SC.GAP), H = rackH();
   g.position.x = x;
@@ -256,6 +272,10 @@ function buildRack(r, k, i, sel) {
     const h = it.u * U - 0.003, y = BASE + (it.u0 - 1) * U + h / 2 + 0.0015, zf = RD / 2 - 0.045, dep = it.kind === "pdu" || it.kind === "mgr" ? 0.12 : it.kind === "patch" ? 0.12 : 0.55;
     const st = it.dv ? devState(r, it.dv, i) : null, pl = it.dv ? portPlan(DEV[it.dv.id]) : null;
     const tex = it.dv ? devTexture(it, st, pl) : decoTexture(it);
+    if (it.dv) {   // 장비마다 온도 하나: 랙 입구 온도에 높이 보정(위쪽일수록 조금 높게, 가정)을 더한 값
+      const v = devTemp(r, it, i), key = v.toFixed(1); badgeCache[key] = badgeCache[key] || badgeTex(+key);
+      const bd = new THREE.Mesh(new THREE.PlaneGeometry(0.11, 0.055), new THREE.MeshBasicMaterial({ map: badgeCache[key], transparent: true })); bd.position.set(FW / 2 - 0.07, y, zf + 0.006); g.add(bd);
+    }
     const side = dark(0x232a31), front = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.55, metalness: 0.35 });
     const m = new THREE.Mesh(new THREE.BoxGeometry(FW, h, dep), [side, side, side, side, front, side]);
     m.position.set(0, y, zf - dep / 2); m.userData = { kind: it.kind, id: it.id, name: it.id, rack: r.id, u0: it.u0, u: it.u }; G.ray.push(m); g.add(m);
@@ -268,7 +288,6 @@ function buildRack(r, k, i, sel) {
   // 이름표와 온도 3점
   const used = r.devices.reduce((n, dv) => n + DEV_U[dv.vendor], 0);
   const lb = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.22), new THREE.MeshBasicMaterial({ map: labelTex(r.id.slice(4), `장비 ${r.devices.length}대 · ${used}U/${RACK_U}U`, hi), transparent: true })); lb.position.set(0, H + 0.2, RD / 2 - 0.02); g.add(lb);
-  [[0.9, 1.2], [0.5, 0.4], [0.12, -0.4]].forEach(([f, off]) => { const v = r.temp[i] + off, bd = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.075), new THREE.MeshBasicMaterial({ map: badgeTex(v), transparent: true })); bd.position.set(FW / 2 - 0.07, BASE + f * RACK_U * U, RD / 2 + 0.012); g.add(bd); });
   return g;
 }
 function buildScene() {
@@ -278,7 +297,13 @@ function buildScene() {
   G.rowRacks.forEach((r, k) => G.root.add(buildRack(r, k, i, G.sel)));
   G.dirty = true;
 }
-function loop() { if (G.dirty && G.ready && $("#tab-room3d").classList.contains("on")) { G.dirty = false; G.r.render(G.scene, G.cam); } requestAnimationFrame(loop); }
+function stepFly() {
+  if (!G.fly) return;
+  const f = G.fly, k = Math.min(1, (performance.now() - f.t0) / f.dur), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+  ["az", "pol", "dist", "tx", "ty"].forEach(q => { G.cs[q] = f.from[q] + (f.to[q] - f.from[q]) * e; });
+  placeCam(); if (k >= 1) G.fly = null;
+}
+function loop() { stepFly(); if (G.dirty && G.ready && $("#tab-room3d").classList.contains("on")) { G.dirty = false; G.r.render(G.scene, G.cam); } requestAnimationFrame(loop); }
 
 /* ---------- 패널: 왼쪽 목록, 오른쪽 상세, 아래 영역 ---------- */
 const stLabel = lv => lv === "ok" ? "정상" : lv === "warn" ? "주의" : "경고·위험";
@@ -303,7 +328,7 @@ function detailHtml(vr, rows, i) {
   const alertHtml = alerts.length ? alerts.map(a => `<li>${md(msOf(a.s))} ~ ${hm(msOf(a.e))} 온도 ${a.max.toFixed(1)}°C (경고 이상)</li>`).join("") : "<li class=\"muted\">온도 경고 기록 없음</li>";
   if (G.sel.kind === "rack") {
     return `<h3>${rk.id} <span class="tag ${stCls(lv)}">${stLabel(lv)}</span></h3><p class="note">${TOPOLOGY.centers[codeOf(rk.id)]} · 랙(42U)</p>` +
-      `<table class="kv"><tr><td>입구 온도</td><td class="${tempCls(t)}">${t.toFixed(1)}°C</td></tr><tr><td>위·중간·아래</td><td>${(t + 1.2).toFixed(1)} · ${(t + 0.4).toFixed(1)} · ${(t - 0.4).toFixed(1)}°C <span class="muted">(보정값, 가정)</span></td></tr><tr><td>네트워크 장비</td><td>${rk.devices.length}대 (${used}U 사용 / 42U)</td></tr><tr><td>전력</td><td class="muted">가상 데이터에 없음</td></tr></table>` +
+      `<table class="kv"><tr><td>입구 온도</td><td class="${tempCls(t)}">${t.toFixed(1)}°C</td></tr><tr><td>네트워크 장비</td><td>${rk.devices.length}대 (${used}U 사용 / 42U)</td></tr><tr><td>전력</td><td class="muted">가상 데이터에 없음</td></tr></table>` +
       `<h4>최근 알림</h4><ul class="alist">${alertHtml}</ul>`;
   }
   if (G.sel.kind === "rack") return "";
@@ -312,16 +337,16 @@ function detailHtml(vr, rows, i) {
   const d = DEV[it.id], dv = rk.devices.find(x => x.id === it.id), st = devState(rk, dv, i), pl = portPlan(d);
   const bad = [...pl.map.values()].filter(portBad).length, cust = (d.customers || []).map(k => CUSTOMERS.find(c => c.key === k).name);
   const links = TOPOLOGY.links.filter(l => (l.a === d.id || l.b === d.id) && LINK[l.link]).map(l => `<tr><td>${esc(CUSTOMERS.filter(c => c.links.includes(l.link)).map(c => c.name).slice(0, 2).join(" · ") || l.link)}</td><td class="n">in ${g1(LINK[l.link].in[i])}G</td><td class="n">out ${g1(LINK[l.link].out[i])}G</td></tr>`).join("");
-  const peers = d.ifs.slice(0, 5).map(f => `<li>${f[0]} → ${esc(f[1])}${portBad(f) ? " <span class=\"crit-t\">이상</span>" : ""}</li>`).join("");
+  const peers = d.ifs.filter(f => !f[10]).slice(0, 5).map(f => `<li>${f[0]} → ${esc(f[1])}${portBad(f) ? " <span class=\"crit-t\">이상</span>" : ""}</li>`).join("");
   const ev = []; if (dv.fanWarn) ev.push("팬 경고가 계속 켜져 있음 (교체 대기 가정)"); if (dv.downStart) ev.push(`${md(parseT(dv.downStart))} ${hm(parseT(dv.downStart))} ~ ${hm(parseT(dv.downEnd))} 과열로 꺼짐`);
   const led = { ok: "정상", warn: "주의", crit: "장애", off: "꺼짐" };
   return `<h3>${d.id} <span class="tag ${stCls(!st.power ? "crit" : st.status === "crit" ? "crit" : st.status === "warn" ? "hot" : st.fan === "warn" ? "warn" : "ok")}">${!st.power ? "꺼짐" : st.status === "ok" && st.fan === "ok" ? "정상" : "주의"}</span></h3><p class="note">자산 ID: ${d.id}</p>` +
     `<table class="kv"><tr><td>종류</td><td>${KIND_TXT[d.vendor]}</td></tr><tr><td>역할</td><td>${esc(d.role)}</td></tr><tr><td>랙 위치</td><td>${d.rack} · ${uTxt}</td></tr>` +
-    `<tr><td>LED</td><td>${ledHtml(st)} <span class="muted">전원 ${led[st.power ? "ok" : "off"]} · 상태 ${led[st.status]} · 팬 ${led[st.fan]}</span></td></tr><tr><td>랙 입구 온도</td><td class="${tempCls(rk.temp[i])}">${rk.temp[i].toFixed(1)}°C</td></tr>` +
-    `<tr><td>포트</td><td>${pl.map.size}개 연결 / ${pl.total}${bad ? ` · <span class="crit-t">이상 ${bad}</span>` : ""}</td></tr>${cust.length ? `<tr><td>고객사</td><td>${esc(cust.join(" · "))}</td></tr>` : ""}` +
+    `<tr><td>LED</td><td>${ledHtml(st)} <span class="muted">전원 ${led[st.power ? "ok" : "off"]} · 상태 ${led[st.status]} · 팬 ${led[st.fan]}</span></td></tr><tr><td>랙 입구 온도</td><td class="${tempCls(rk.temp[i])}">${rk.temp[i].toFixed(1)}°C</td></tr><tr><td>장비 온도</td><td class="${tempCls(devTemp(rk, { u0: it.u0 }, i))}">${devTemp(rk, { u0: it.u0 }, i).toFixed(1)}°C <span class="muted">(입구 온도 + 높이 보정, 가정)</span></td></tr>` +
+    `<tr><td>포트</td><td>${pl.map.size}개 연결 / ${pl.total} (고객 회선 ${d.ifs.filter(f => f[10]).length}개: 10G ${d.ifs.filter(f => f[10] && f[9] === 10).length}, 1G ${d.ifs.filter(f => f[10] && f[9] === 1).length})${bad ? ` · <span class="crit-t">이상 ${bad}</span>` : ""}</td></tr><tr><td>이중화 짝</td><td>${d.partner} <span class="muted">(같은 고객 회선 목록)</span></td></tr>${cust.length ? `<tr><td>고객사</td><td>${esc(cust.join(" · "))}</td></tr>` : ""}` +
     `<tr><td>CPU·메모리</td><td class="muted">네트워크 장비라 표시 안 함</td></tr></table>` +
     (links ? `<h4>연결 회선 트래픽 (이 시각)</h4><table class="kv">${links}</table>` : "") +
-    `<h4>연결 상대 (일부)</h4><ul class="alist">${peers}</ul><h4>최근 알림·점검</h4><ul class="alist">${ev.length ? ev.map(x => `<li>${x}</li>`).join("") : "<li class=\"muted\">알림 없음</li>"}</ul>` +
+    `<h4>장비 간 연결 (일부)</h4><ul class="alist">${peers}</ul><h4>최근 알림·점검</h4><ul class="alist">${ev.length ? ev.map(x => `<li>${x}</li>`).join("") : "<li class=\"muted\">알림 없음</li>"}</ul>` +
     `<div class="btnrow"><button class="btn" id="glPorts">포트·광케이블 자세히</button><button class="btn" id="glTerm">터미널 열기</button></div>`;
 }
 function renderPanels(vr, rows, i) {
@@ -359,7 +384,8 @@ function render3d() {
   $$("[data-glf]").forEach(b => b.classList.toggle("on", b.dataset.glf === G.filt));
   renderPanels(vr, rows, i);
   if (R3.dev) r3Detail();
-  loadThree(() => { if (!G.ready) { initGL(); requestAnimationFrame(loop); } buildScene(); if (prevRow !== G.rowRacks[0].id || !G.fitted) { fitCam(); G.fitted = true; } });
+  loadThree(() => { if (!G.ready) { initGL(); requestAnimationFrame(loop); } buildScene(); if (prevRow !== G.rowRacks[0].id || !G.fitted) { fitCam(); G.fitted = true; }
+    if (G.focus) { const f = G.focus; G.focus = null; flyTo(f.fit ? fitTarget() : focusTarget(f)); } });
 }
 
 /* ---------- 이벤트 ---------- */
@@ -373,16 +399,16 @@ function render3d() {
   $("#glSearch").addEventListener("input", e => { G.q = e.target.value; render3d(); });
   $("#glZoomIn").onclick = () => { G.cs.dist = clamp(G.cs.dist * 0.8, 1.3, 14); placeCam(); };
   $("#glZoomOut").onclick = () => { G.cs.dist = clamp(G.cs.dist * 1.25, 1.3, 14); placeCam(); };
-  $("#glFit").onclick = () => { if (G.ready) fitCam(); };
-  $("#glHome").onclick = () => { if (G.ready) { G.cs.az = 0; G.cs.pol = 88; placeCam(); } };
-  $("#glList").addEventListener("click", ev => { const el = ev.target.closest(".gli"); if (el) { G.sel = { kind: "rack", rack: el.dataset.rack }; G.jump = true; render3d(); } });
-  $("#glAlerts").addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { if (+tr.dataset.t) sr.end = +tr.dataset.t; G.sel = { kind: "rack", rack: tr.dataset.rack }; G.jump = true; render3d(); } });
-  $("#glDevs").addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { const d = tr.dataset; G.sel = { kind: d.kind, id: d.id, rack: d.rack, u0: +d.u0, u: +d.u }; render3d(); } });
+  $("#glFit").onclick = () => { if (G.ready) flyTo(fitTarget()); };
+  $("#glHome").onclick = () => { if (G.ready) flyTo(Object.assign({}, G.cs, { az: 0, pol: 88 })); };
+  $("#glList").addEventListener("click", ev => { const el = ev.target.closest(".gli"); if (el) { G.sel = { kind: "rack", rack: el.dataset.rack }; G.jump = true; G.focus = { rack: el.dataset.rack, u0: 0 }; render3d(); } });
+  $("#glAlerts").addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { if (+tr.dataset.t) sr.end = +tr.dataset.t; G.sel = { kind: "rack", rack: tr.dataset.rack }; G.jump = true; G.focus = { rack: tr.dataset.rack, u0: 0 }; render3d(); } });
+  $("#glDevs").addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { const d = tr.dataset; G.sel = { kind: d.kind, id: d.id, rack: d.rack, u0: +d.u0, u: +d.u }; G.focus = { rack: d.rack, u0: +d.u0, u: +d.u }; render3d(); } });
   $("#glDetail").addEventListener("click", ev => { if (ev.target.id === "glPorts") r3Open(G.sel.id); if (ev.target.id === "glTerm") openDeviceTerminal(G.sel.id); });
   $$("[data-r3]").forEach(b => b.onclick = () => {
     sr.end = idxOf(parseT(b.dataset.r3));
     if (b.dataset.center && view.center !== "ALL" && view.center !== b.dataset.center) setCenter(b.dataset.center);
-    if (b.dataset.rack) { G.sel = { kind: "rack", rack: b.dataset.rack }; G.jump = true; }
+    if (b.dataset.rack) { G.sel = { kind: "rack", rack: b.dataset.rack }; G.jump = true; G.focus = { rack: b.dataset.rack, u0: 0 }; }
     render3d();
   });
   if ($("#tab-room3d").classList.contains("on")) render3d();

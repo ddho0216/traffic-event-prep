@@ -13,6 +13,8 @@
    - devices: 장비 (vendor: juniper / cisco / huawei, rack: 들어 있는 랙, tier: core면 중앙 백본, customers: 이 장비에 붙은 고객사)
    - links: 연결 (a장비 a포트 <-> b장비 b포트). b가 장비 목록에 없으면 외부(IX·해외 등). link는 그래프의 회선 이름.
             회선이 어느 센터 소속인지는 이름의 센터 코드(= a장비가 있는 센터)로 정한다.
+   - 이중화: 모든 장비는 짝 장비가 있다 (FS1-FS2 ...). 짝 장비는 인터커넥트(_PAIR1)로 연결되고, 고객 회선 목록(lines)이 같다.
+   - devices.lines: 장비에 꽂힌 고객사 회선 (포트, 속도 1G/10G, 고객사, 홈 장비). 짝 장비도 같은 회선이 보인다.
    - faults: 포트에 심어 둔 이상 ("장비|포트": crc 오류 수, rx 광 수신값 dBm, down = 연결 끊김(Link down), admin = "down"이면 관리자가 내림). 고객사·회선 배정은 제가 임의로 정한 것입니다. */
 (function (root, factory) {
   const t = factory();
@@ -126,19 +128,62 @@
     L("IDC_G_FS1_BIG1", "IDC_G_FS1", "xe-0/0/5", "IDC_G_FS4", "xe-0/0/10", "큰 고객사 전용", 100),
     L("IDC_A_FS1_BIG1", "IDC_A_FS1", "xe-0/0/5", "IDC_A_FS3", "xe-0/0/10", "큰 고객사 전용", 100)
   ];
-  // 나머지 장비는 모두 같은 센터의 백본(허브)에 업링크 한 줄로 붙는다. 허브 포트는 시작 번호부터 차례로 쓴다.
+  // ---- 이중화: 같은 종류 장비를 번호 순서대로 둘씩 짝짓는다 (FS1-FS2, FS3-FS4 ... FR1-FR2 ... AS1-AS2 ...)
+  const partnerOf = id => { const m = id.match(/^(IDC_[BSGA]_(?:FS|FR|AS))(\d+)$/), n = +m[2]; return `${m[1]}${n % 2 ? n + 1 : n - 1}`; };
+  const BY = Object.fromEntries(devices.map(d => [d.id, d]));
+  devices.forEach(d => { d.partner = partnerOf(d.id); });
+  const PORT = (v, slot, n) => v === "cisco" ? `Te${slot}/0/${n}` : v === "huawei" ? `XGigabitEthernet0/${slot}/${n}` : `xe-${slot}/0/${n}`;
+  const portAt = (v, n) => v === "cisco" ? `Te1/${Math.floor(n / 48)}/${n % 48}` : v === "huawei" ? `XGigabitEthernet0/${1 + Math.floor(n / 48)}/${n % 48}` : `xe-0/${Math.floor(n / 48)}/${n % 48}`;
+  // 나머지 장비는 같은 센터의 백본(허브)에 업링크 한 줄로 붙고, 허브의 짝 장비에도 한 줄 더 붙는다. 허브 포트는 시작 번호부터 차례로 쓴다.
   (function addUplinks() {
     const hub = { B: ["IDC_B_FS1", 14, 5], S: ["IDC_S_FR1", 12, 3], G: ["IDC_G_FS1", 12, 3], A: ["IDC_A_FS1", 11, 2] };   // [허브, 첫 포트 번호, 첫 링크 번호]
-    const port = (v, n) => v === "cisco" ? `Te1/${Math.floor(n / 48)}/${n % 48}` : v === "huawei" ? `XGigabitEthernet0/${1 + Math.floor(n / 48)}/${n % 48}` : `xe-0/${Math.floor(n / 48)}/${n % 48}`;
     const linked = new Set(); links.forEach(l => { linked.add(l.a); linked.add(l.b); });
-    const by = Object.fromEntries(devices.map(d => [d.id, d]));
+    const firstPass = links.slice();
     Object.keys(centers).forEach(c => {
       const h = hub[c]; let n = h[1], k = h[2];
       devices.filter(d => d.id.split("_")[1] === c && !linked.has(d.id)).forEach(d => {
-        links.push(L(`${h[0]}_DN${k++}`, h[0], port(by[h[0]].vendor, n++), d.id, port(d.vendor, 10), d.vendor === "huawei" ? "랙 업링크" : "장비 업링크", 10));
+        links.push(L(`${h[0]}_DN${k++}`, h[0], portAt(BY[h[0]].vendor, n++), d.id, portAt(d.vendor, 10), d.vendor === "huawei" ? "랙 업링크" : "장비 업링크", 10));
+      });
+      // 허브 연결이 없는 장비(중앙 백본, CDN 장비 등)도 허브에 연결 (기존 포트 번호는 밀리지 않게 마지막에 이어 붙인다)
+      const h2x = partnerOf(h[0]);
+      devices.filter(d => d.id.split("_")[1] === c && d.id !== h[0] && d.id !== h2x && !links.some(l => (l.a === h[0] && l.b === d.id) || (l.b === h[0] && l.a === d.id))).forEach(d => {
+        links.push(L(`${h[0]}_DN${k++}`, h[0], portAt(BY[h[0]].vendor, n++), d.id, portAt(d.vendor, 9), "장비 업링크", 10));
       });
     });
+    // 이중화 업링크: 허브의 짝 장비에도 모든 장비가 한 줄씩 더 붙는다
+    Object.keys(centers).forEach(c => {
+      const h1 = hub[c][0], h2 = partnerOf(h1); let n = 20, k = 1;
+      devices.filter(d => d.id.split("_")[1] === c && d.id !== h1 && d.id !== h2).forEach(d => {
+        links.push(L(`${h2}_UP${k++}`, h2, portAt(BY[h2].vendor, n++), d.id, portAt(d.vendor, 12), "이중화 업링크 (허브 짝 장비)", 10));
+      });
+    });
+    // 짝 장비끼리 서로 연결 (인터커넥트)
+    devices.filter(d => +d.id.match(/(\d+)$/)[1] % 2 === 1).forEach(d => {
+      const p = BY[d.partner], slot = d.vendor === "cisco" ? 3 : d.vendor === "huawei" ? 4 : 2;
+      links.push(L(`${d.id}_PAIR1`, d.id, PORT(d.vendor, slot, 0), p.id, PORT(p.vendor, slot, 0), "이중화 짝 장비 연결", d.vendor === "cisco" ? 100 : d.vendor === "juniper" ? 40 : 10));
+    });
   })();
+
+  // ---- 고객 회선: 장비마다 고객사 회선(1G·10G)이 한 줄씩 꽂혀 있다. 짝 장비는 같은 목록을 가진다 (제가 만든 가상 값).
+  const hashS = s => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+  const custByCenter = {}; customers.forEach(c => { const k = c.links[0].split("_")[1]; (custByCenter[k] = custByCenter[k] || []).push(c); });
+  const linePort = (v, speed, n) => v === "cisco" ? (speed === 10 ? `Te2/0/${n}` : `Gi2/1/${n}`) : v === "huawei" ? (speed === 10 ? `XGigabitEthernet0/2/${n}` : `GigabitEthernet0/3/${n}`.replace(/\/\d+$/, `/${n}`)) : (speed === 10 ? `xe-1/0/${n}` : `ge-1/1/${n}`);
+  devices.filter(d => +d.id.match(/(\d+)$/)[1] % 2 === 1).forEach(d => {   // 짝의 첫째 장비(홀수)가 '홈'
+    const p = BY[d.partner], h = hashS(d.id), c = d.id.split("_")[1];
+    const own = [...(d.customers || []), ...(p.customers || [])];
+    const pool = own.length ? own.map(k => customers.find(x => x.key === k)) : custByCenter[c];
+    const big = pool.length && pool.every(x => x.big);
+    const n = big ? 12 : d.vendor === "cisco" ? 24 + h % 17 : d.vendor === "juniper" ? 10 + h % 13 : 12 + h % 9;
+    const run = 1 + h % 3, lines = []; let n10 = 0, n1 = 0;
+    for (let k = 0; k < n; k++) {
+      const cu = pool[Math.floor(k / run) % pool.length], speed = !big && (h >> (k % 24)) % 5 === 0 ? 1 : 10;
+      lines.push({ port: linePort(d.vendor, speed, speed === 10 ? n10++ : n1++), speed, customer: cu.key, home: d.id });
+    }
+    d.lines = lines;
+    const pl = lines.map(x => Object.assign({}, x, { port: linePort(p.vendor, x.speed, 0) }));   // 짝 장비의 포트 이름은 종류에 맞게 다시 붙인다
+    let m10 = 0, m1 = 0; pl.forEach(x => { x.port = linePort(p.vendor, x.speed, x.speed === 10 ? m10++ : m1++); });
+    p.lines = pl;
+  });
 
   // 심어 둔 포트 이상 (가상)
   const faults = {

@@ -216,7 +216,7 @@
     <button class="btn" data-r3="2026-10-26T15:55" data-center="B" data-rack="IDC_B_R07">냉각 이상</button>
     <button class="btn" data-r3="2026-10-26T16:15" data-center="B" data-rack="IDC_B_R07">장비 꺼짐</button>
     <span class="sp"></span>
-    <span class="note" style="margin:0">모두 가상 데이터. 드래그 = 회전(좌우 70°까지), 오른쪽 드래그 또는 Shift+드래그 = 이동, 휠 = 확대·축소. 장비 높이·랙 안 배치와 패치 패널·PDU 같은 보조 장비는 제가 만든 가상 그림입니다.</span>
+    <span class="note" style="margin:0">모두 가상 데이터. 랙이나 장비를 누르면 그쪽으로 확대됩니다(그 상태에서 드래그 = 회전, 오른쪽 드래그 또는 Shift+드래그 = 이동, 휠 = 확대·축소, '화면 맞춤' = 전체 보기). 장비마다 온도 하나가 붙고, 값은 랙 입구 온도에 높이 보정을 더한 제 가정입니다. 장비 높이·랙 안 배치와 패치 패널·PDU 같은 보조 장비는 제가 만든 가상 그림입니다.</span>
   </div>
   <div class="glgrid">
     <aside class="glleft card">
@@ -290,7 +290,7 @@
     <h3>장애가 터졌을 때 (업무 메모를 일반화한 순서)</h3>
     <p class="note">제 업무 메모의 명령어와 순서를 이 가상 환경에 맞게 정리한 것입니다. 실제 고객사 이름·IP·내부 도구의 메뉴 경로는 쓰지 않았고, 아래 명령은 위 터미널에서 그대로 연습할 수 있습니다. 시나리오 "업링크 회선 다운"에서 이 순서를 따라가 볼 수 있습니다.</p>
     <ol class="runbook">
-      <li><b>정확한 장비·회선 확인</b>: <code>show interfaces descriptions</code>(Cisco는 <code>description</code> 또는 <code>brief</code>, Huawei는 <code>display interface description</code>). <b>Admin</b>은 관리자가 켜 둔 상태, <b>Link</b>는 실제 연결 상태입니다. Admin up + Link down = 일부러 내린 게 아니라 끊긴 것, Admin down = 누가 일부러 내린 것. 고객사 이름도 같이 보입니다. 장비에 따라 descriptions로 up/down이 안 보이면 brief로 확인합니다.</li>
+      <li><b>정확한 장비·회선 확인</b>: <code>show interfaces descriptions</code>(Cisco는 <code>description</code> 또는 <code>brief</code>, Huawei는 <code>display interface description</code>). <b>Admin</b>은 관리자가 켜 둔 상태, <b>Link</b>는 실제 연결 상태입니다. Admin up + Link down = 일부러 내린 게 아니라 끊긴 것, Admin down = 누가 일부러 내린 것. 고객 회선은 줄마다 장비·고객사·속도(1G/10G)가 같이 보입니다. 장비에 따라 descriptions로 up/down이 안 보이면 brief로 확인합니다.</li>
       <li><b>로그 확인</b>: Cisco <code>show logging last 100</code>, Juniper <code>show log messages | last 20</code>, Huawei <code>display logbuffer</code>.</li>
       <li><b>트래픽 전/후 확인</b>: 관제 그래프에서 장애 시작 전·후 값을 비교합니다. Down이면 5분 전 값만 보고 이후는 0으로 적습니다(OUT 기준). 경과 문자가 나가기 전에 트래픽을 먼저 전달합니다. 트래픽이 오르면 DDoS인지 아닌지 확인하고, 클린존 가입 고객사는 가입한 IP 말고 다른 IP로 오는 공격을 절차대로 먼저 차단합니다.</li>
       <li><b>광값·CRC</b>: <code>show interfaces diagnostics optics</code>, <code>show interfaces extensive 포트 | match CRC</code>. 전 회선은 <code>show interfaces extensive | match "CRC|physical interface"</code>. 광 케이블 접촉 불량이나 SFP 불량이 많아서 CRC 오류를 잘 봐야 합니다.</li>
