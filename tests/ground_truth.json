@@ -38,7 +38,7 @@
  "must_alert_room": [
   {
    "id": "COOL1",
-   "rack": "IDC_B_R03",
+   "rack": "IDC_B_R07",
    "start": "2026-10-26 14:30",
    "end": "2026-10-26 17:15",
    "min_peak_c": 33,

@@ -2,14 +2,15 @@
    이 파일이 센터·장비·연결·고객사의 기준입니다. 관제(그래프 회선), 서버실(랙), 터미널(장비)과 설계도 표가 모두 여기에 맞춰 보입니다.
    이름 규칙: IDC_<센터 코드>_<종류><번호>
      센터 코드: B 분당, S 서초, G 구로, A 안산
-     종류: FS = Juniper 계열, FR = Cisco 계열 (FS·FR이 무슨 약자인지는 모름). 화웨이는 쓰지 않는다.
+     종류: FS = Juniper 계열, FR = Cisco 계열, AS = Huawei 계열 (FS·FR·AS가 무슨 약자인지는 모름)
    랙 이름: IDC_<센터 코드>_R<번호>. 랙에는 네트워크 장비만 들어간다 (서버는 다루지 않음).
-   랙 규칙: Cisco 대형 장비는 랙 하나를 혼자 쓴다 (랙당 1대). Juniper는 랙당 최대 2대. 중앙 백본은 대형이라 랙당 1대.
+   랙 규칙: Cisco 대형 장비는 랙 하나를 혼자 쓴다 (랙당 1대). Juniper는 랙당 최대 2대. Huawei는 소형이라 랙당 최대 8대(제가 정한 가정).
+   센터별 장비 수(사용자가 정한 값): 분당 FR4·FS8·AS10, 서초 FR6·FS12·AS30, 구로 FR2·FS4·AS20, 안산 FR4·FS10·AS10.
    구조: 서초에 대형 중앙 백본 2대(IDC_S_FS1, IDC_S_FS2)가 있고, 센터 4곳이 거기에 이중화로 붙는다.
-   분당은 장비가 가장 많다. Cisco는 모두 4대. 고객사 13곳은 센터마다 '고객 접속 장비'(Juniper)에 나뉘어 붙는다.
+   서초가 장비가 가장 많다. 고객사 13곳은 센터마다 '고객 접속 장비'(Juniper)에 나뉘어 붙는다.
    - centers: 센터 코드와 이름
    - customers: 고객사 (전부 가상). links = 이 고객사가 쓰는 그래프 회선, 접속 장비는 devices의 customers에 적혀 있다
-   - devices: 장비 (vendor: juniper / cisco, rack: 들어 있는 랙, tier: core면 중앙 백본, customers: 이 장비에 붙은 고객사)
+   - devices: 장비 (vendor: juniper / cisco / huawei, rack: 들어 있는 랙, tier: core면 중앙 백본, customers: 이 장비에 붙은 고객사)
    - links: 연결 (a장비 a포트 <-> b장비 b포트). b가 장비 목록에 없으면 외부(IX·해외 등). link는 그래프의 회선 이름.
             회선이 어느 센터 소속인지는 이름의 센터 코드(= a장비가 있는 센터)로 정한다.
    - faults: 포트에 심어 둔 이상 ("장비|포트": crc 오류 수, rx 광 수신값 dBm). 고객사·회선 배정은 제가 임의로 정한 것입니다. */
@@ -34,33 +35,40 @@
     { name: "가상모빌리티", key: "gasang-mobility", links: ["IDC_A_FS1_UP1", "IDC_A_FR1_UP1"] },
     { name: "예시금융", key: "yesi-finance", links: ["IDC_B_FS2_INTL1"] }
   ];
-  const dev = (id, vendor, role, center, rack, extra) => Object.assign({ id, vendor, role, center, rack }, extra || {});
-  const devices = [
-    // 분당 (장비 9대, 랙 6개): Juniper 7 + Cisco 2
-    dev("IDC_B_FS1", "juniper", "분당 센터 백본", B, "IDC_B_R01"),
-    dev("IDC_B_FS2", "juniper", "분당 연동 장비 (IX·해외·CDN)", B, "IDC_B_R01"),
-    dev("IDC_B_FS3", "juniper", "분당 CDN 연결 장비", B, "IDC_B_R02"),
-    dev("IDC_B_FS4", "juniper", "분당 고객 접속 1 (가상물산·가상은행)", B, "IDC_B_R02", { customers: ["gasang", "gasang-bank"] }),
-    dev("IDC_B_FS5", "juniper", "분당 고객 접속 2 (예시미디어·샘플방송)", B, "IDC_B_R03", { customers: ["yesi-media", "sample-broadcast"] }),
-    dev("IDC_B_FS6", "juniper", "분당 고객 접속 3 (데모스트리밍·예시금융)", B, "IDC_B_R03", { customers: ["demo-streaming", "yesi-finance"] }),
-    dev("IDC_B_FS7", "juniper", "분당 고객 접속 4 (모의커머스)", B, "IDC_B_R04", { customers: ["mock-commerce"] }),
-    dev("IDC_B_FR1", "cisco", "분당 센터 백본 (Cisco) 1", B, "IDC_B_R05"),
-    dev("IDC_B_FR2", "cisco", "분당 센터 백본 (Cisco) 2", B, "IDC_B_R06"),
-    // 서초 (장비 5대, 랙 4개): 대형 중앙 백본 2대와 Cisco 1대는 랙을 혼자 쓴다
-    dev("IDC_S_FS1", "juniper", "서초 중앙 백본 1 (대형)", S, "IDC_S_R01", { tier: "core" }),
-    dev("IDC_S_FS2", "juniper", "서초 중앙 백본 2 (대형)", S, "IDC_S_R02", { tier: "core" }),
-    dev("IDC_S_FR1", "cisco", "서초 센터 백본 (Cisco)", S, "IDC_S_R03"),
-    dev("IDC_S_FS3", "juniper", "서초 고객 접속 1 (테스트클라우드)", S, "IDC_S_R04", { customers: ["test-cloud"] }),
-    dev("IDC_S_FS4", "juniper", "서초 고객 접속 2 (데모헬스)", S, "IDC_S_R04", { customers: ["demo-health"] }),
-    // 구로 (장비 3대, 랙 2개)
-    dev("IDC_G_FS1", "juniper", "구로 센터 백본", G, "IDC_G_R01"),
-    dev("IDC_G_FS2", "juniper", "구로 고객 접속 1 (샘플게임즈)", G, "IDC_G_R01", { customers: ["sample-games"] }),
-    dev("IDC_G_FS3", "juniper", "구로 고객 접속 2 (예제교육)", G, "IDC_G_R02", { customers: ["yeje-edu"] }),
-    // 안산 (장비 3대, 랙 2개)
-    dev("IDC_A_FS1", "juniper", "안산 센터 백본", A, "IDC_A_R01"),
-    dev("IDC_A_FS2", "juniper", "안산 고객 접속 (시험물류·가상모빌리티)", A, "IDC_A_R01", { customers: ["test-logistics", "gasang-mobility"] }),
-    dev("IDC_A_FR1", "cisco", "안산 센터 백본 (Cisco)", A, "IDC_A_R02")
-  ];
+  // 센터별 장비 수 (사용자가 정한 값): FR = Cisco, FS = Juniper, AS = Huawei
+  const COUNTS = { B: { FR: 4, FS: 8, AS: 10 }, S: { FR: 6, FS: 12, AS: 30 }, G: { FR: 2, FS: 4, AS: 20 }, A: { FR: 4, FS: 10, AS: 10 } };
+  // 랙 규칙: Cisco 대형은 랙당 1대, Juniper는 랙당 최대 2대 (사용자가 알려 준 값). Huawei는 소형이라 랙당 최대 8대 (제가 정한 가정)
+  const PER_RACK = { FR: 1, FS: 2, AS: 8 };
+  const VENDOR = { FR: "cisco", FS: "juniper", AS: "huawei" };
+  // 역할이 정해진 장비. 나머지는 종류별 기본 역할을 붙인다.
+  const ROLE = {
+    IDC_B_FS1: "분당 센터 백본", IDC_B_FS2: "분당 연동 장비 (IX·해외·CDN)", IDC_B_FS3: "분당 CDN 연결 장비",
+    IDC_B_FS4: "분당 고객 접속 1 (가상물산·가상은행)", IDC_B_FS5: "분당 고객 접속 2 (예시미디어·샘플방송)",
+    IDC_B_FS6: "분당 고객 접속 3 (데모스트리밍·예시금융)", IDC_B_FS7: "분당 고객 접속 4 (모의커머스)",
+    IDC_B_FR1: "분당 센터 백본 (Cisco) 1", IDC_B_FR2: "분당 센터 백본 (Cisco) 2",
+    IDC_S_FS1: "서초 중앙 백본 1 (대형)", IDC_S_FS2: "서초 중앙 백본 2 (대형)", IDC_S_FR1: "서초 센터 백본 (Cisco)",
+    IDC_S_FS3: "서초 고객 접속 1 (테스트클라우드)", IDC_S_FS4: "서초 고객 접속 2 (데모헬스)",
+    IDC_G_FS1: "구로 센터 백본", IDC_G_FS2: "구로 고객 접속 1 (샘플게임즈)", IDC_G_FS3: "구로 고객 접속 2 (예제교육)",
+    IDC_A_FS1: "안산 센터 백본", IDC_A_FS2: "안산 고객 접속 (시험물류·가상모빌리티)", IDC_A_FR1: "안산 센터 백본 (Cisco)"
+  };
+  const EXTRA = {
+    IDC_B_FS4: { customers: ["gasang", "gasang-bank"] }, IDC_B_FS5: { customers: ["yesi-media", "sample-broadcast"] },
+    IDC_B_FS6: { customers: ["demo-streaming", "yesi-finance"] }, IDC_B_FS7: { customers: ["mock-commerce"] },
+    IDC_S_FS1: { tier: "core" }, IDC_S_FS2: { tier: "core" },
+    IDC_S_FS3: { customers: ["test-cloud"] }, IDC_S_FS4: { customers: ["demo-health"] },
+    IDC_G_FS2: { customers: ["sample-games"] }, IDC_G_FS3: { customers: ["yeje-edu"] },
+    IDC_A_FS2: { customers: ["test-logistics", "gasang-mobility"] }
+  };
+  const DEFAULT_ROLE = { FR: "센터 장비 (Cisco)", FS: "집선 장비 (Juniper)", AS: "랙 접속 스위치 (Huawei)" };
+  const devices = [];
+  Object.keys(centers).forEach(c => {
+    const n = COUNTS[c], nFR = n.FR, nFS = Math.ceil(n.FS / PER_RACK.FS);
+    const rackNo = (k, i) => k === "FR" ? i : k === "FS" ? nFR + Math.ceil(i / PER_RACK.FS) : nFR + nFS + Math.ceil(i / PER_RACK.AS);
+    ["FR", "FS", "AS"].forEach(k => { for (let i = 1; i <= n[k]; i++) {
+      const id = `IDC_${c}_${k}${i}`, rack = `IDC_${c}_R${String(rackNo(k, i)).padStart(2, "0")}`;
+      devices.push(Object.assign({ id, vendor: VENDOR[k], role: ROLE[id] || `${centers[c]} ${DEFAULT_ROLE[k]} ${i}`, center: centers[c], rack }, EXTRA[id] || {}));
+    } });
+  });
 
   const L = (link, a, ap, b, bp, kind, gbps) => ({ link, a, ap, b, bp, kind, gbps });
   const links = [
@@ -96,6 +104,19 @@
     L("IDC_G_FS1_DN2", "IDC_G_FS1", "xe-0/0/11", "IDC_G_FS3", "xe-0/0/10", "고객 접속 업링크", 10),
     L("IDC_A_FS1_DN1", "IDC_A_FS1", "xe-0/0/10", "IDC_A_FS2", "xe-0/0/10", "고객 접속 업링크", 10)
   ];
+  // 나머지 장비는 모두 같은 센터의 백본(허브)에 업링크 한 줄로 붙는다. 허브 포트는 시작 번호부터 차례로 쓴다.
+  (function addUplinks() {
+    const hub = { B: ["IDC_B_FS1", 14, 5], S: ["IDC_S_FR1", 12, 3], G: ["IDC_G_FS1", 12, 3], A: ["IDC_A_FS1", 11, 2] };   // [허브, 첫 포트 번호, 첫 링크 번호]
+    const port = (v, n) => v === "cisco" ? `Te1/${Math.floor(n / 48)}/${n % 48}` : v === "huawei" ? `XGigabitEthernet0/${1 + Math.floor(n / 48)}/${n % 48}` : `xe-0/${Math.floor(n / 48)}/${n % 48}`;
+    const linked = new Set(); links.forEach(l => { linked.add(l.a); linked.add(l.b); });
+    const by = Object.fromEntries(devices.map(d => [d.id, d]));
+    Object.keys(centers).forEach(c => {
+      const h = hub[c]; let n = h[1], k = h[2];
+      devices.filter(d => d.id.split("_")[1] === c && !linked.has(d.id)).forEach(d => {
+        links.push(L(`${h[0]}_DN${k++}`, h[0], port(by[h[0]].vendor, n++), d.id, port(d.vendor, 10), d.vendor === "huawei" ? "랙 업링크" : "장비 업링크", 10));
+      });
+    });
+  })();
 
   // 심어 둔 포트 이상 (가상)
   const faults = {

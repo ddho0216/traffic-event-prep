@@ -147,7 +147,7 @@
     <span class="sp"></span>
     <span class="muted">빠른 이동</span>
     <button class="btn" data-sr="2026-10-22T21:00">평소 저녁</button>
-    <button class="btn" data-sr="2026-10-26T15:55" data-center="B">냉각 이상 (IDC_B_R03)</button>
+    <button class="btn" data-sr="2026-10-26T15:55" data-center="B">냉각 이상 (IDC_B_R07)</button>
     <button class="btn" data-sr="2026-10-26T16:15" data-center="B">장비 꺼짐</button>
   </div>
   <div class="card" id="cfgPanel" hidden style="margin-bottom:12px">
@@ -188,7 +188,7 @@
           <span>랙</span><select id="inRack"></select>
           <span>판정</span><select id="inResult"><option>이상 없음</option><option>이상 있음</option></select>
           <span>점검자</span><input type="text" id="inWho" placeholder="관제 담당">
-          <span>메모</span><input type="text" id="inMemo" placeholder="예: IDC_B_R03 냉각기 확인 요청">
+          <span>메모</span><input type="text" id="inMemo" placeholder="예: IDC_B_R07 냉각기 확인 요청">
         </div>
         <p class="note" id="inHint" style="margin:8px 0 0"></p>
         <div class="toolbar" style="margin:8px 0 0"><button class="btn primary" id="inAdd">기록 남기기</button><button class="btn" id="inCsv">기록 CSV</button></div>
@@ -200,25 +200,28 @@
 
 <!-- 4. 방문 신청 -->
 <section class="tab" id="tab-room3d">
-  <p class="note">서버실을 위에서 내려다본 배치도입니다. <b>드래그로 회전, 휠로 확대·축소</b>, 랙을 누르면 오른쪽에 정면도가 나옵니다. 정면도의 장비를 누르면 그 장비의 가상 터미널이 새 창으로 열립니다. 랙 색은 입구 온도(주의·경고·위험), 랙 정면의 막대는 장비 LED 상태입니다. 배치와 크기(Cisco 21U, Juniper 6U)는 제가 만든 가상 그림입니다.</p>
+  <p class="note">서버실 랙의 <b>정면도</b>입니다 (한 화면에 랙 8개). 랙 색은 입구 온도, 랙 위의 숫자 3개는 위·중간·아래 온도(제가 만든 보정값: 위 +1.2°C, 아래 -0.4°C), 장비의 작은 칸은 포트이고 초록은 연결됨·빨강은 이상입니다. <b>장비를 누르면</b> 포트와 꽂혀 있는 광케이블을 자세히 보고, <b>화면을 드래그</b>하면 각도가 바뀝니다(슬라이더·정면 버튼으로 되돌림). 장비 크기(Cisco 21U, Juniper 6U, Huawei 2U)는 제가 만든 가상 그림입니다.</p>
   <div class="toolbar">
     <label>기준 시각 <input type="datetime-local" id="r3Time"></label>
     <button class="btn" id="r3Prev">&lsaquo; 이전</button>
     <button class="btn" id="r3Next">다음 &rsaquo;</button>
-    <button class="btn" id="r3Reset">기본 시점</button>
-    <button class="btn" id="r3Top">위에서 보기</button>
+    <label>열 <select id="r3RowSel"></select></label>
+    <label>좌우 <input type="range" id="r3Yaw" min="-50" max="50" value="0"></label>
+    <label>상하 <input type="range" id="r3Tilt" min="-10" max="25" value="0"></label>
+    <button class="btn" id="r3Front">정면</button>
     <span class="sp"></span>
     <span class="muted">빠른 이동</span>
     <button class="btn" data-r3="2026-10-22T21:00">평소 저녁</button>
-    <button class="btn" data-r3="2026-10-26T15:55" data-center="B" data-rack="IDC_B_R03">냉각 이상</button>
-    <button class="btn" data-r3="2026-10-26T16:15" data-center="B" data-rack="IDC_B_R03">장비 꺼짐</button>
+    <button class="btn" data-r3="2026-10-26T15:55" data-center="B" data-rack="IDC_B_R07">냉각 이상</button>
+    <button class="btn" data-r3="2026-10-26T16:15" data-center="B" data-rack="IDC_B_R07">장비 꺼짐</button>
   </div>
   <p class="note" id="r3Sum" style="color:var(--text);margin:0 0 8px"></p>
   <div class="r3grid">
-    <div class="r3stage" id="r3Stage"><div class="r3world" id="r3World"></div>
+    <div class="card r3list" style="padding:0"><table id="r3List"></table></div>
+    <div class="r3stage" id="r3Stage"><div class="r3row" id="r3Row3d"></div>
       <div class="r3legend"><span class="sw ok"></span>정상 <span class="sw warn"></span>주의 <span class="sw hot"></span>경고 <span class="sw crit"></span>위험</div></div>
-    <div class="card r3elev" id="r3Elev"></div>
   </div>
+  <div class="r3detail" id="r3Detail" hidden><div class="r3panel" id="r3DBody"></div></div>
 </section>
 <section class="tab" id="tab-visit">
   <p class="note">방문 신청 메일을 받아 방문 등록(주차, 서버실 키 포함)을 하고 회신하는 일. 이름·메일은 모두 가상입니다. 입력한 내용은 이 브라우저에만 저장됩니다.</p>

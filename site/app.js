@@ -552,7 +552,7 @@ function renderVisits() {
 
 /* ---------- 5. 장비 터미널 (가상) ---------- */
 // 설계도(topology.js)에서 가상 장비를 만든다. 포트는 연결표에서 가져온다.
-const PROMPT = { juniper: id => `admin@${id}>`, cisco: id => `${id}#` };
+const PROMPT = { juniper: id => `admin@${id}>`, cisco: id => `${id}#`, huawei: id => `<${id}>` };
 const DEVICES = TOPOLOGY.devices.map(d => Object.assign({}, d, { prompt: PROMPT[d.vendor](d.id), ifs: [] }));
 const DEV = Object.fromEntries(DEVICES.map(d => [d.id, d]));
 // 포트 한 칸: [포트 이름, 상대(장비·외부), CRC 오류 수, 광 수신값 dBm, 연결 정보]
@@ -575,10 +575,21 @@ const DEV_CMDS = {
   ],
   cisco: [
     [/^show interfaces? (\S+) \| include CRC$/i, (d, m) => { const f = findIf(d, m[1]); return f ? `     ${f[2]} input errors, ${f[2]} CRC, 0 frame, 0 overrun, 0 ignored` : `% Invalid input detected at '^' marker.`; }]
+  ],
+  huawei: [
+    [/^display interface (.+?) \| include CRC$/i, (d, m) => {
+      const f = findIf(d, m[1].replace(/\s+/g, "")); if (!f) return "Error: Wrong parameter found at '^' position.";
+      return `    CRC: ${f[2]} packets, Giants: 0 packets, Jabbers: 0 packets`;
+    }],
+    [/^display transceiver interface (.+?) verbose$/i, (d, m) => {
+      const f = findIf(d, m[1].replace(/\s+/g, "")); if (!f) return "Error: Wrong parameter found at '^' position.";
+      const bad = f[3] < -9;
+      return `${f[0]} transceiver information:\n-------------------------------------------------------------\nCommon information:\n  Transceiver Type                      :10G_BASE_LR_SFP\n  Wavelength(nm)                        :1310\n  Transmission Distance(m)              :10000\nDiagnostic information:\n  Temperature(C)                        :39\n  Voltage(V)                            :3.30\n  TX Power(dBm)                         :-2.80\n  RX Power(dBm)                         :${f[3].toFixed(2)}\nAlarm information:\n  ${bad ? "RX power is low (warning)" : "None"}`;
+    }]
   ]
 };
 function findIf(d, name) { return d.ifs.find(f => f[0].toLowerCase() === String(name).toLowerCase()); }
-const VENDOR_ERR = { juniper: "                     ^\nunknown command.", cisco: "% Invalid input detected at '^' marker." };
+const VENDOR_ERR = { juniper: "                     ^\nunknown command.", cisco: "% Invalid input detected at '^' marker.", huawei: "Error: Unrecognized command found at '^' position." };
 const devNow = () => DEV[$("#devSel").value] || DEVICES[0];
 function runCmd(raw, dev) {
   const d = dev || devNow(), cmd = raw.trim().replace(/\s+/g, " ");
@@ -591,7 +602,8 @@ function quickCmds() {
   const d = devNow(), bad = d.ifs.find(f => f[2] > 50 || f[3] < -9) || d.ifs[0], ok = d.ifs[0];
   const list = {
     juniper: [`show interfaces diagnostics optics ${bad[0]}`, `show interfaces extensive ${bad[0]} | match CRC`, `show interfaces extensive | match "CRC|physical interface"`],
-    cisco: [`show interface ${bad[0]} | include CRC`, `show interface ${ok[0]} | include CRC`]
+    cisco: [`show interface ${bad[0]} | include CRC`, `show interface ${ok[0]} | include CRC`],
+    huawei: [`display transceiver interface ${bad[0].replace("XGigabitEthernet", "XGigabitEthernet ")} verbose`, `display interface ${bad[0].replace("XGigabitEthernet", "XGigabitEthernet ")} | include CRC`]
   }[d.vendor];
   $("#qcmd").innerHTML = [...new Set(list)].map(c => `<button data-c="${esc(c)}">${esc(c)}</button>`).join("");   // 포트가 하나뿐인 장비는 같은 명령이 두 번 나오지 않게
 }
@@ -604,7 +616,7 @@ function termBanner() {
   $("#termTarget").textContent = `${d.id} · ${d.rack}`;
   quickCmds();
 }
-const VENDORS = [["juniper", "Juniper · FS 계열"], ["cisco", "Cisco · FR 계열"]];
+const VENDORS = [["juniper", "Juniper · FS 계열"], ["cisco", "Cisco · FR 계열"], ["huawei", "Huawei · AS 계열"]];
 function fillVendors(keep) {   // 센터 선택에 맞는 장비 수를 보여 주고, 장비가 없는 제조사는 고를 수 없게 한다
   const cnt = v => DEVICES.filter(d => d.vendor === v).length;
   $("#vendorSel").innerHTML = VENDORS.map(([v, n]) => `<option value="${v}" ${cnt(v) ? "" : "disabled"}>${n} (${cnt(v)}대)</option>`).join("");
@@ -872,8 +884,8 @@ function buildScenarios() {
     { at: kt(125), kind: "결과", title: `사후 정리: ${OA} 예상 ${A.exp.toFixed(0)}G, 실제 최대 ${A.act.toFixed(0)}G (${((A.act / A.exp - 1) * 100).toFixed(0)}%). 다음에는 배율을 ×${(1 + (A.act - A.base) / refPeak(A.l)).toFixed(1)}로`, focus: [] }
   ] };
 
-  // 4) 서버실 온도 변화: IDC_B_R03 냉각 이상
-  const COOL = "IDC_B_R03", R3 = RACKS.find(r => r.id === COOL), al = Lib.detectRoom(RACKS, TD).find(a => a.rack === COOL);
+  // 4) 서버실 온도 변화: IDC_B_R07 냉각 이상
+  const COOL = "IDC_B_R07", R3 = RACKS.find(r => r.id === COOL), al = Lib.detectRoom(RACKS, TD).find(a => a.rack === COOL);
   const fc = R3.temp.findIndex((t, i) => i >= al.s && t >= TD.crit), dv = R3.devices.find(x => x.downStart);
   const dMs = parseT(dv.downStart), tAt = i => g1(R3.temp[i]);
   const lk = TOPOLOGY.links.find(l => l.b === dv.id && DEV[l.a]), peer = DEV[lk.a], pif = peer.ifs.find(x => x[0] === lk.ap);   // 꺼진 장비와 이어진 상대 쪽 포트
@@ -889,7 +901,7 @@ function buildScenarios() {
 
   return { calm, drop, surge, temp };
 }
-const SCN_LIST = [["calm", "평일 오후 7시", "저녁 피크 전 평소 점검 (이상 없음)"], ["drop", "트래픽 급감", "국내 연동(IX)이 갑자기 빠짐: 원인 확인과 조치"], ["surge", "트래픽 폭주", "월드컵 8강: 사전 연락·분산·모니터링"], ["temp", "서버실 온도 변화", "분당 IDC_B_R03 냉각 이상: 육안점검·터미널 확인·복구"]];
+const SCN_LIST = [["calm", "평일 오후 7시", "저녁 피크 전 평소 점검 (이상 없음)"], ["drop", "트래픽 급감", "국내 연동(IX)이 갑자기 빠짐: 원인 확인과 조치"], ["surge", "트래픽 폭주", "월드컵 8강: 사전 연락·분산·모니터링"], ["temp", "서버실 온도 변화", "분당 IDC_B_R07 냉각 이상: 육안점검·터미널 확인·복구"]];
 let scn = null;
 function stopScn() { if (scn && scn.timer) clearInterval(scn.timer); scn = null; HL.clear(); }
 function scnSetView() {
@@ -950,82 +962,142 @@ function startScn(id) {
   syncHdr(); window.addEventListener("resize", syncHdr);
 })();
 
-/* ---------- 서버실-3D: 바닥 배치도(CSS 3D) + 랙 정면도 ---------- */
-// 랙 크기와 U 높이는 제가 정한 가정입니다 (Cisco 대형은 21U, Juniper는 6U로 그림).
-const R3 = { rx: 56, rz: -24, zoom: 1, sel: null };
-const U_PX = 10, RACK_U = 42, DEV_U = { cisco: 21, juniper: 6 };
-function r3Layout(vr) {   // 센터마다 한 줄씩, 랙은 왼쪽부터
-  const codes = [...new Set(vr.map(r => codeOf(r.id)))], pos = {};
-  codes.forEach((c, row) => vr.filter(r => codeOf(r.id) === c).forEach((r, k) => { pos[r.id] = { x: k * 100, y: row * 190 }; }));
-  return { pos, codes, cols: Math.max(...codes.map(c => vr.filter(r => codeOf(r.id) === c).length)) };
+/* ---------- 서버실-3D: 랙 정면도(기본) + 장비 상세(포트·광케이블) ---------- */
+// 랙·장비의 크기(Cisco 21U, Juniper 6U, Huawei 2U)와 포트 배치는 제가 만든 가상 그림입니다.
+const R3 = { yaw: 0, tilt: 0, row: 0, sel: null, jump: false, center: null, dev: null, port: null };
+const U_PX = 9, RACK_U = 42, DEV_U = { cisco: 21, juniper: 6, huawei: 2 }, ROW_N = 8, RW = 118, RD = 70, RG = 24, RH = RACK_U * U_PX;
+const portIdx = (d, name) => { const m = String(name).match(/(\d+)\/(\d+)\/(\d+)$/); return m ? (+m[2] - (d.vendor === "huawei" ? 1 : 0)) * 48 + (+m[3]) : -1; };
+const portBad = f => f[2] > 50 || f[3] < -9;
+function portPlan(d) {   // 포트 번호 -> 연결 정보. 포트는 위아래 2줄, 왼쪽부터 번호순으로 배치
+  const mx = Math.max(0, ...d.ifs.map(f => portIdx(d, f[0])));
+  const total = d.vendor === "cisco" ? Math.max(48, Math.ceil((mx + 1) / 12) * 12) : (mx > 23 ? 48 : 24);
+  return { total, cols: total / 2, map: new Map(d.ifs.map(f => [portIdx(d, f[0]), f])) };
 }
-function r3Cab(r, i, p) {
-  const W = 44, D = 66, H = 96, lv = tempCls(r.temp[i]);
-  const bars = r.devices.map(dv => { const st = devState(r, dv, i); const big = dv.vendor === "cisco";
-    return `<i class="b ${st.power ? st.status : "off"}${big ? " big" : ""}"></i>`; }).join("");
-  const face = (cls, w, h, tf, inner) => `<div class="f ${cls}" style="width:${w}px;height:${h}px;transform:${tf}">${inner || ""}</div>`;
-  return `<div class="cab ${lv}${R3.sel === r.id ? " sel" : ""}${HL.has(r.id) ? " hl" : ""}" data-rack="${r.id}" style="transform:translate3d(${p.x}px,${p.y}px,0)">` +
-    face("top", W, D, `translateZ(${H}px)`) +
-    face("front", W, H, `translate3d(0,${D}px,${H}px) rotateX(-90deg)`, `<span class="bars">${bars}</span>`) +
-    face("back", W, H, `translate3d(0,0,${H}px) rotateX(-90deg)`) +
-    face("left", D, H, `translate3d(0,0,${H}px) rotateZ(90deg) rotateX(-90deg)`) +
-    face("right", D, H, `translate3d(${W}px,0,${H}px) rotateZ(90deg) rotateX(-90deg)`) +
-    `<div class="lbl3" style="transform:translate3d(${W / 2}px,${D / 2}px,${H + 8}px)"><span><b>${r.id.slice(4)}</b> <em class="${lv}">${r.temp[i].toFixed(1)}°</em></span></div></div>`;
-}
-function r3Elevation(r, i) {
-  const lv = tempCls(r.temp[i]);
-  let used = 0, html = "";
-  r.devices.forEach(dv => {
-    const u = DEV_U[dv.vendor], st = devState(r, dv, i), d = DEV[dv.id]; used += u;
-    const cust = (d.customers || []).map(k => CUSTOMERS.find(c => c.key === k).name).join(" · ");
-    html += `<div class="edev ${dv.vendor}" data-dev="${dv.id}" role="button" tabindex="0" style="height:${u * U_PX}px" title="누르면 이 장비의 터미널이 새 창으로 열립니다 (가상)">` +
-      `<div class="eh">${ledHtml(st)}<b>${dv.id}</b><span class="muted">${dv.vendor === "cisco" ? "Cisco · " + u + "U (랙 전용)" : "Juniper · " + u + "U"}</span></div>` +
-      `<div class="ep">${d.ifs.slice(0, dv.vendor === "cisco" ? 8 : 4).map(f => `<s class="${f[2] > 50 || f[3] < -9 ? "bad" : ""}"></s>`).join("")}</div>` +
-      `<div class="muted ec">${esc(d.role)}${cust ? "" : ""}</div></div>`;
+function r3Rows(vr) {   // 한 화면에 랙 8개씩 (센터별 열)
+  const rows = [];
+  [...new Set(vr.map(r => codeOf(r.id)))].forEach(c => {
+    const rs = vr.filter(r => codeOf(r.id) === c);
+    for (let k = 0; k < rs.length; k += ROW_N) { const part = rs.slice(k, k + ROW_N);
+      rows.push({ label: `${TOPOLOGY.centers[c]} ${Math.floor(k / ROW_N) + 1}열 (${part[0].id.slice(4)}~${part[part.length - 1].id.slice(4)})`, racks: part }); }
   });
-  const free = RACK_U - used;
-  return `<div class="ehd"><b>${r.id}</b><span class="tmp ${lv}">${r.temp[i].toFixed(1)}°C</span></div>` +
-    `<div class="note" style="margin:0 0 6px">${viewLabelOf(r.id)} · 장비 ${r.devices.length}대 · 사용 ${used}U / ${RACK_U}U (빈 ${free}U)</div>` +
-    `<div class="elev">${html}<div class="efree" style="height:${free * U_PX}px"></div></div>` +
-    spark(r.temp, Math.max(0, i - (cfg.range * 12 - 1)), i);
+  return rows;
 }
-const viewLabelOf = id => TOPOLOGY.centers[codeOf(id)];
+function r3DevFront(r, dv, i) {
+  const d = DEV[dv.id], st = devState(r, dv, i), pl = portPlan(d), h = DEV_U[dv.vendor] * U_PX - 2;
+  const ports = (a, b) => { let s = ""; for (let k = a; k < b; k++) { const f = pl.map.get(k); s += `<i class="${f ? (portBad(f) ? "x" : "u") : ""}"></i>`; } return s; };
+  const body = dv.vendor === "cisco"
+    ? `<div class="sup"></div><div class="sup"></div>` + Array.from({ length: pl.total / 12 }, (_, c) => `<div class="lc"><div class="pp" style="grid-template-columns:repeat(6,1fr)">${ports(c * 12, c * 12 + 12)}</div></div>`).join("") + `<div class="fan"></div>`
+    : `<div class="pp" style="grid-template-columns:repeat(${pl.cols},1fr)">${ports(0, pl.total)}</div>`;
+  return `<div class="dv ${dv.vendor}${st.power ? "" : " dead"}" data-dev="${dv.id}" style="height:${h}px" title="${dv.id}: 누르면 포트와 광케이블을 자세히 봅니다"><div class="dh">${ledHtml(st)}<b>${dv.id.slice(4)}</b></div><div class="db">${body}</div></div>`;
+}
+function r3Rack(r, k, i) {
+  const t = r.temp[i], lv = tempCls(t), used = r.devices.reduce((n, dv) => n + DEV_U[dv.vendor], 0);
+  const tb = (y, off) => { const v = t + off; return `<span class="tb ${tempCls(v)}" style="top:${y}px">${v.toFixed(1)}<small>°C</small></span>`; };
+  return `<div class="rk ${lv}${R3.sel === r.id ? " sel" : ""}${HL.has(r.id) ? " hl" : ""}" data-rack="${r.id}" style="left:${k * (RW + RG)}px">` +
+    `<div class="rtag"><b>${r.id.slice(4)}</b><small>장비 ${r.devices.length}대 · ${used}U/${RACK_U}U</small></div>` +
+    `<div class="cube"><div class="face front"><div class="devs">${r.devices.map(dv => r3DevFront(r, dv, i)).join("")}</div>${tb(6, 1.2)}${tb(RH / 2 - 10, 0.4)}${tb(RH - 26, -0.4)}</div>` +
+    `<div class="face sd l"></div><div class="face sd r"></div><div class="face topf"></div></div></div>`;
+}
+function r3Apply() {
+  const w = $("#r3Row3d"); if (!w) return;
+  w.style.setProperty("--yaw", R3.yaw + "deg"); w.style.setProperty("--tilt", R3.tilt + "deg");
+  $("#r3Yaw").value = R3.yaw; $("#r3Tilt").value = R3.tilt;
+}
 function render3d() {
   if (!$("#tab-room3d").classList.contains("on")) return;
-  const i = clamp(sr.end, 0, N - 1), vr = visibleRacks();
+  const i = clamp(sr.end, 0, N - 1), vr = visibleRacks(), rows = r3Rows(vr);
   $("#r3Time").value = isoLocal(msOf(i));
-  if (!vr.some(r => r.id === R3.sel)) R3.sel = vr[0].id;
-  const { pos, codes, cols } = r3Layout(vr); R3.codes = codes.length;
-  $("#r3Sum").textContent = `${viewLabel()} · 랙 ${vr.length}개 · 장비 ${vr.reduce((n, r) => n + r.devices.length, 0)}대`;
-  const w = (cols - 1) * 100 + 44, h = (codes.length - 1) * 190 + 66;
-  $("#r3World").style.cssText = `--rx:${R3.rx}deg;--rz:${R3.rz}deg;--z:${R3.zoom * (codes.length > 1 ? 0.8 : 1)};width:${w}px;height:${h}px;margin:${-h / 2}px 0 0 ${-w / 2}px`;
-  $("#r3World").innerHTML = `<div class="floor" style="left:-40px;top:-40px;width:${w + 80}px;height:${h + 80}px"></div>` +
-    codes.map((c, row) => `<div class="clbl" style="transform:translate3d(-30px,${row * 190 + 33}px,2px)"><span>${TOPOLOGY.centers[c]}</span></div>`).join("") +
-    vr.map(r => r3Cab(r, i, pos[r.id])).join("");
-  const rk = vr.find(r => r.id === R3.sel);
-  $("#r3Elev").innerHTML = r3Elevation(rk, i);
+  if (R3.center !== view.center) { R3.center = view.center; R3.row = 0; R3.sel = null; }
+  if (R3.sel && !vr.some(r => r.id === R3.sel)) R3.sel = null;
+  if (R3.jump && R3.sel) R3.row = Math.max(0, rows.findIndex(x => x.racks.some(r => r.id === R3.sel)));
+  R3.jump = false; R3.row = clamp(R3.row, 0, rows.length - 1);
+  const row = rows[R3.row], n = row.racks.length, rowW = n * RW + (n - 1) * RG;
+  $("#r3Sum").textContent = `${viewLabel()} · 랙 ${vr.length}개 · 장비 ${vr.reduce((a, r) => a + r.devices.length, 0)}대`;
+  $("#r3RowSel").innerHTML = rows.map((x, k) => `<option value="${k}" ${k === R3.row ? "selected" : ""}>${x.label}</option>`).join("");
+  const fit = Math.min(1, ($("#r3Stage").clientWidth - 30) / rowW);
+  const w = $("#r3Row3d");
+  w.style.cssText = `width:${rowW}px;margin-left:${-rowW / 2}px;--fit:${fit}`;
+  w.innerHTML = `<div class="floorp" style="left:-60px;width:${rowW + 120}px"></div>` + row.racks.map((r, k) => r3Rack(r, k, i)).join("");
+  r3Apply();
+  $("#r3List").innerHTML = `<tr><th>랙</th><th class="n">입구 온도</th><th class="n">장비</th></tr>` + vr.map(r => `<tr class="click${r.id === R3.sel ? " on" : ""}" data-rack="${r.id}"><td>${r.id}</td><td class="n"><span class="dot ${tempCls(r.temp[i])}"></span>${r.temp[i].toFixed(1)}°C</td><td class="n">${r.devices.length}</td></tr>`).join("");
+  if (R3.dev) r3Detail();
 }
+/* 장비 상세: 포트 배치와 꽂혀 있는 광케이블 (위줄 포트의 케이블은 위로, 아래줄은 아래로) */
+function r3Detail() {
+  const d = DEV[R3.dev], rack = RACKS.find(r => r.id === d.rack), i = clamp(sr.end, 0, N - 1), dv = rack.devices.find(x => x.id === d.id), st = devState(rack, dv, i);
+  const pl = portPlan(d), PX = 26, PAD = 20, CARD = d.vendor === "cisco" ? 6 : 0, GAPW = 16, ZONE = 150, HEAD = 26;
+  const colX = c => PAD + c * PX + (CARD ? Math.floor(c / CARD) * GAPW : 0);
+  const W = colX(pl.cols - 1) + PX + PAD, plateH = HEAD + 2 * 30 + PAD, H = ZONE * 2 + plateH;
+  const pos = k => ({ x: colX(Math.floor(k / 2)) + 10, row: k % 2, y: ZONE + HEAD + (k % 2) * 30 });
+  const used = [...pl.map.keys()].sort((a, b) => a - b);
+  const sel = R3.port != null && pl.map.has(R3.port) ? R3.port : null;
+  const peerOf = f => { const lk = f[4]; return { dev: f[1], port: lk ? (lk.a === d.id ? lk.bp : lk.ap) : "", kind: lk ? lk.kind : "", gbps: lk ? lk.gbps : "" }; };
+  let svg = "", tags = "", plate = "";
+  for (let k = 0; k < pl.total; k++) { const p = pos(k), f = pl.map.get(k);
+    plate += `<button class="pt${f ? (portBad(f) ? " x" : " u") : ""}${k === sel ? " sel" : ""}" data-i="${k}" style="left:${p.x - 10}px;top:${p.y}px" title="포트 ${k}${f ? " → " + f[1] : " (비어 있음)"}">${k}</button>`; }
+  [0, 1].forEach(rw => {   // rw 0 = 위줄(케이블 위로), 1 = 아래줄(케이블 아래로)
+    const mine = used.filter(k => k % 2 === rw);
+    const want = mine.filter(k => k === sel || portBad(pl.map.get(k)));
+    (mine.length <= 6 ? mine : want).forEach(k => { if (!want.includes(k)) want.push(k); });
+    const tagged = [...new Set(want)].slice(0, 7).sort((a, b) => a - b);
+    mine.forEach(k => { const f = pl.map.get(k), p = pos(k), up = rw === 0, y0 = up ? p.y : p.y + 20, yEdge = up ? ZONE - 6 : ZONE + plateH + 6;
+      const bad = portBad(f), col = bad ? "#e5604d" : "#e3c34a", sw = k === sel ? 3.2 : 1.8, ti = tagged.indexOf(k);
+      if (ti < 0) { svg += `<path d="M${p.x},${y0} L${p.x},${up ? yEdge - 40 : yEdge + 40}" stroke="${col}" stroke-width="1.6" opacity=".45" fill="none"/>`; return; }
+      const slot = (W - 40) / tagged.length, tx = 20 + slot * (ti + 0.5), ty = up ? ZONE - 54 : ZONE + plateH + 54;
+      svg += `<path d="M${p.x},${y0} C${p.x},${up ? y0 - 50 : y0 + 50} ${tx},${up ? ty + 50 : ty - 50} ${tx},${ty}" stroke="${col}" stroke-width="${sw}" fill="none"/>`;
+      const pe = peerOf(f);
+      tags += `<div class="ctag${bad ? " x" : ""}${k === sel ? " sel" : ""}" style="left:${tx - 72}px;top:${up ? ty - 46 : ty + 2}px"><b>${esc(pe.dev)}</b> ${esc(pe.port === "-" ? "" : pe.port)}<br><span>${esc(pe.kind || "외부 연결")}${pe.gbps ? " · " + pe.gbps + "G" : ""} · 수신 ${f[3].toFixed(1)} dBm${f[2] ? " · CRC " + f[2] : ""}</span></div>`;
+    });
+  });
+  const rows = used.map(k => { const f = pl.map.get(k), pe = peerOf(f);
+    return `<tr class="click${k === sel ? " on" : ""}" data-i="${k}"><td>${f[0]}</td><td>${esc(pe.dev)}${pe.port && pe.port !== "-" ? " " + esc(pe.port) : ""}</td><td>${esc(pe.kind || "외부 연결")}</td><td class="n">${pe.gbps}</td><td class="n ${f[3] < -9 ? "crit-t" : ""}">${f[3].toFixed(2)}</td><td class="n ${f[2] > 50 ? "crit-t" : ""}">${f[2]}</td></tr>`; }).join("");
+  const label = { ok: "정상", warn: "주의", crit: "장애", off: "꺼짐" };
+  $("#r3Detail").hidden = false;
+  $("#r3DBody").innerHTML = `<div class="dhd"><b>${d.id}</b><span class="tag">${{ juniper: "Juniper", cisco: "Cisco", huawei: "Huawei" }[d.vendor]}</span><span class="muted">${esc(d.role)} · ${d.rack} · 입구 ${rack.temp[i].toFixed(1)}°C</span>${ledHtml(st)}<span class="muted">전원 ${st.power ? "켜짐" : "꺼짐"} · 상태 ${label[st.status]} · 팬 ${label[st.fan]}</span><span class="sp"></span><button class="btn" id="r3DTerm">이 장비 터미널 열기</button><button class="btn" id="r3DClose">닫기</button></div>` +
+    `<p class="note">노란 선이 꽂혀 있는 광케이블(가상, 단일모드로 가정)이고 빨간 선은 광 수신이 약하거나 CRC 오류가 많은 포트입니다. 위줄 포트의 케이블은 위로, 아래줄은 아래로 나갑니다. 포트를 누르면 표시됩니다.</p>` +
+    `<div class="dscroll"><div class="dwrap" style="width:${W}px;height:${H}px"><svg width="${W}" height="${H}">${svg}</svg>` +
+    `<div class="plate ${d.vendor}" style="left:0;top:${ZONE}px;width:${W}px;height:${plateH}px"><span class="pl">${d.id} · ${d.vendor === "cisco" ? "Cisco 대형 섀시" : d.vendor === "juniper" ? "Juniper" : "Huawei"}</span></div>${plate}${tags}</div></div>` +
+    `<div class="card" style="padding:0;margin-top:10px;max-height:240px;overflow:auto"><table><tr><th>포트</th><th>연결 상대</th><th>종류</th><th class="n">Gbps</th><th class="n">수신 dBm</th><th class="n">CRC</th></tr>${rows || `<tr><td colspan="6" class="muted">연결된 포트가 없습니다.</td></tr>`}</table></div>`;
+}
+function r3Open(id) { R3.dev = id; R3.port = null; r3Detail(); }
+function r3Close() { R3.dev = null; $("#r3Detail").hidden = true; }
 (function init3d() {
-  const world = () => $("#r3World"), apply = () => world().style.cssText = world().style.cssText.replace(/--rx:[^;]*;--rz:[^;]*;--z:[^;]*;/, `--rx:${R3.rx}deg;--rz:${R3.rz}deg;--z:${R3.zoom * (R3.codes > 1 ? 0.8 : 1)};`);
   const stage = $("#r3Stage"); let drag = null;
-  stage.addEventListener("pointerdown", e => { drag = { x: e.clientX, y: e.clientY, rx: R3.rx, rz: R3.rz, moved: false }; });
-  window.addEventListener("pointermove", e => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
-    R3.rz = drag.rz + dx * 0.4; R3.rx = clamp(drag.rx - dy * 0.3, 20, 88); apply(); });
-  window.addEventListener("pointerup", () => { setTimeout(() => { drag = null; }, 0); });
-  stage.addEventListener("click", e => { if (drag && drag.moved) return; const c = e.target.closest(".cab"); if (c) { R3.sel = c.dataset.rack; render3d(); } });
-  stage.addEventListener("wheel", e => { e.preventDefault(); R3.zoom = clamp(R3.zoom * (e.deltaY < 0 ? 1.1 : 0.9), 0.5, 2.2); apply(); }, { passive: false });
-  $("#r3Reset").onclick = () => { Object.assign(R3, { rx: 56, rz: -24, zoom: 1 }); render3d(); };
-  $("#r3Top").onclick = () => { Object.assign(R3, { rx: 88, rz: 0 }); render3d(); };
-  $("#r3Elev").addEventListener("click", ev => { const el = ev.target.closest(".edev"); if (el) openDeviceTerminal(el.dataset.dev); });
+  stage.addEventListener("pointerdown", e => { drag = { x: e.clientX, y: e.clientY, yaw: R3.yaw, tilt: R3.tilt, moved: false, id: e.pointerId }; });
+  stage.addEventListener("pointermove", e => {
+    if (!drag) return; if (e.buttons === 0) { drag = null; return; }
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.moved && Math.abs(dx) + Math.abs(dy) > 6) { drag.moved = true; try { stage.setPointerCapture(drag.id); } catch (er) { /* 무시 */ } }
+    if (drag.moved) { R3.yaw = clamp(drag.yaw + dx * 0.15, -50, 50); R3.tilt = clamp(drag.tilt - dy * 0.1, -10, 25); r3Apply(); }
+  });
+  const end = () => { R3.dragged = !!(drag && drag.moved); drag = null; setTimeout(() => { R3.dragged = false; }, 0); };
+  stage.addEventListener("pointerup", end); stage.addEventListener("pointercancel", end); stage.addEventListener("lostpointercapture", () => { drag = null; });
+  stage.addEventListener("click", e => {
+    if (R3.dragged) return;
+    const dv = e.target.closest(".dv"); if (dv) { r3Open(dv.dataset.dev); return; }
+    const rk = e.target.closest(".rk"); if (rk) { R3.sel = rk.dataset.rack; render3d(); }
+  });
+  $("#r3Yaw").oninput = e => { R3.yaw = +e.target.value; r3Apply(); };
+  $("#r3Tilt").oninput = e => { R3.tilt = +e.target.value; r3Apply(); };
+  $("#r3Front").onclick = () => { R3.yaw = 0; R3.tilt = 0; r3Apply(); };
+  $("#r3RowSel").onchange = e => { R3.row = +e.target.value; R3.sel = null; render3d(); };
+  $("#r3List").addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { R3.sel = tr.dataset.rack; R3.jump = true; render3d(); } });
+  $("#r3Detail").addEventListener("click", ev => {
+    if (ev.target.id === "r3Detail" || ev.target.id === "r3DClose") { r3Close(); return; }
+    if (ev.target.id === "r3DTerm") { openDeviceTerminal(R3.dev); return; }
+    const pt = ev.target.closest("[data-i]"); if (pt) { R3.port = +pt.dataset.i; r3Detail(); }
+  });
+  window.addEventListener("keydown", e => { if (e.key === "Escape" && R3.dev) r3Close(); });
   $("#r3Time").addEventListener("change", e => { if (e.target.value) { sr.end = idxOf(parseT(e.target.value)); render3d(); } });
   $("#r3Prev").onclick = () => { sr.end -= cfg.step; render3d(); };
   $("#r3Next").onclick = () => { sr.end += cfg.step; render3d(); };
   $$("[data-r3]").forEach(b => b.onclick = () => {
     sr.end = idxOf(parseT(b.dataset.r3));
     if (b.dataset.center && view.center !== "ALL" && view.center !== b.dataset.center) setCenter(b.dataset.center);
-    if (b.dataset.rack) R3.sel = b.dataset.rack;
+    if (b.dataset.rack) { R3.sel = b.dataset.rack; R3.jump = true; }
     render3d();
   });
+  window.addEventListener("resize", () => { if ($("#tab-room3d").classList.contains("on")) render3d(); });
 })();
 
 /* ---------- 시작 ---------- */

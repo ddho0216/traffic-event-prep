@@ -63,22 +63,36 @@ DROPS = [
 SHIFT = ("IDC_B_FS2_IX1", "IDC_B_FS2_INTL1", 0.6)
 
 # 서버실: 센터마다 랙이 있고, 랙에는 네트워크 장비만 들어간다. 랙 입구 온도(inlet)를 5분 간격으로 만든다. 전부 가상.
-# 랙 규칙: Cisco 대형 장비는 랙을 혼자 쓴다(랙당 1대), Juniper는 랙당 최대 2대. 중앙 백본(대형)도 랙당 1대.
-# 이름 규칙: 랙 = IDC_<센터 코드>_R<번호>, 장비 = IDC_<센터 코드>_<FS|FR><번호>. 센터 코드 B 분당, S 서초, G 구로, A 안산.
-# 장비 목록은 site/topology.js가 기준이다. 아래는 같은 배치를 데이터 생성용으로 적은 것 (tests가 서로 같은지 확인한다).
-RACK_DEVICES = {
-    "IDC_B_R01": ["IDC_B_FS1", "IDC_B_FS2"], "IDC_B_R02": ["IDC_B_FS3", "IDC_B_FS4"],
-    "IDC_B_R03": ["IDC_B_FS5", "IDC_B_FS6"], "IDC_B_R04": ["IDC_B_FS7"],
-    "IDC_B_R05": ["IDC_B_FR1"], "IDC_B_R06": ["IDC_B_FR2"],
-    "IDC_S_R01": ["IDC_S_FS1"], "IDC_S_R02": ["IDC_S_FS2"], "IDC_S_R03": ["IDC_S_FR1"],
-    "IDC_S_R04": ["IDC_S_FS3", "IDC_S_FS4"],
-    "IDC_G_R01": ["IDC_G_FS1", "IDC_G_FS2"], "IDC_G_R02": ["IDC_G_FS3"],
-    "IDC_A_R01": ["IDC_A_FS1", "IDC_A_FS2"], "IDC_A_R02": ["IDC_A_FR1"],
-}
+# 센터별 장비 수(사용자가 정한 값): FR = Cisco, FS = Juniper, AS = Huawei
+COUNTS = {"B": {"FR": 4, "FS": 8, "AS": 10}, "S": {"FR": 6, "FS": 12, "AS": 30},
+          "G": {"FR": 2, "FS": 4, "AS": 20}, "A": {"FR": 4, "FS": 10, "AS": 10}}
+# 랙 규칙: Cisco 대형은 랙당 1대, Juniper는 랙당 최대 2대 (사용자가 알려 준 값). Huawei는 소형이라 랙당 최대 8대 (제가 정한 가정)
+PER_RACK = {"FR": 1, "FS": 2, "AS": 8}
+VENDOR = {"FR": "cisco", "FS": "juniper", "AS": "huawei"}
+
+
+def build_rack_devices() -> dict:
+    """랙마다 들어 있는 장비. 랙 번호는 Cisco 랙, Juniper 랙, Huawei 랙 순서. site/topology.js와 같은 규칙 (tests가 같은지 확인한다)."""
+    racks: dict = {}
+    for c, n in COUNTS.items():
+        n_fs_racks = -(-n["FS"] // PER_RACK["FS"])
+        for k in ("FR", "FS", "AS"):
+            for i in range(1, n[k] + 1):
+                if k == "FR":
+                    r = i
+                elif k == "FS":
+                    r = n["FR"] + -(-i // PER_RACK["FS"])
+                else:
+                    r = n["FR"] + n_fs_racks + -(-i // PER_RACK["AS"])
+                racks.setdefault(f"IDC_{c}_R{r:02d}", []).append(f"IDC_{c}_{k}{i}")
+    return racks
+
+
+RACK_DEVICES = build_rack_devices()
 RACKS = list(RACK_DEVICES)
 CENTER_TEMP_OFFSET = {"B": 0.0, "S": 0.4, "G": -0.2, "A": 0.1}   # 센터마다 평소 온도가 조금씩 다르다
-# 냉각 이상: 분당 IDC_B_R03 랙, 14:30에 오르기 시작 -> 15:30 최고 -> 16:30까지 유지 -> 17:15에 복구
-COOLING = ("IDC_B_R03", "2026-10-26 14:30", "2026-10-26 15:30", "2026-10-26 16:30", "2026-10-26 17:15", 11.5)
+# 냉각 이상: 분당 IDC_B_R07 랙(IDC_B_FS5·FS6), 14:30에 오르기 시작 -> 15:30 최고 -> 16:30까지 유지 -> 17:15에 복구
+COOLING = ("IDC_B_R07", "2026-10-26 14:30", "2026-10-26 15:30", "2026-10-26 16:30", "2026-10-26 17:15", 11.5)
 # 과열로 장비 한 대가 꺼짐(보호 종료): IDC_B_FS6, 16:05~16:25
 DEVICE_DOWN = ("IDC_B_FS6", "2026-10-26 16:05", "2026-10-26 16:25")
 # 팬 경고가 계속 켜져 있는 장비(교체 대기): IDC_B_FS4
@@ -131,7 +145,7 @@ def write_server_room(times: pd.DatetimeIndex, hours: np.ndarray) -> None:
     mins = lambda ts: (pd.Timestamp(ts) - times[0]) / pd.Timedelta(minutes=1)
     rows = []
     for rack in RACKS:
-        code, local = rack.split("_")[1], int(rack.split("_R")[1]) - 1   # 센터 코드, 센터 안 번호(0부터)
+        code, local = rack.split("_")[1], (int(rack.split("_R")[1]) - 1) % 6   # 센터 코드, 센터 안 번호(0부터)
         temp = 21.5 + 0.3 * local + CENTER_TEMP_OFFSET[code] + 1.5 * shape + rng.normal(0, 0.12, len(times))
         if rack == COOLING[0]:
             _r, a, pk, hold, end, add = COOLING
@@ -149,7 +163,7 @@ def write_server_room(times: pd.DatetimeIndex, hours: np.ndarray) -> None:
     dev = []
     for rack, devs in RACK_DEVICES.items():
         for slot, name in enumerate(devs, 1):
-            vendor = "cisco" if "_FR" in name else "juniper"
+            vendor = VENDOR[name.split("_")[2][:2]]
             down = DEVICE_DOWN if name == DEVICE_DOWN[0] else None
             dev.append((rack, slot, name, vendor, int(name == FAN_WARN),
                         down[1] if down else "", down[2] if down else ""))
