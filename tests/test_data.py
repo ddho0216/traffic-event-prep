@@ -100,33 +100,46 @@ class ServerRoomData(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temps = pd.read_csv(DATA / "temps.csv", parse_dates=["time"])
-        cls.servers = pd.read_csv(DATA / "servers.csv")
+        cls.devs = pd.read_csv(DATA / "rack_devices.csv")
 
     def test_counts(self):
-        self.assertEqual(self.temps.rack.nunique(), 20)
-        self.assertEqual(len(self.servers), 80)
+        self.assertEqual(self.temps.rack.nunique(), 14)
+        self.assertEqual(len(self.devs), 20)
+        self.assertEqual(self.devs.vendor.eq("cisco").sum(), 4)
+        self.assertNotIn("huawei", set(self.devs.vendor))
 
     def test_racks_per_center_and_naming(self):
         racks = sorted(self.temps.rack.unique())
-        for code, n in {"B": 6, "S": 6, "G": 4, "A": 4}.items():
+        for code, n in {"B": 6, "S": 4, "G": 2, "A": 2}.items():
             mine = [r for r in racks if r.startswith(f"IDC_{code}_R")]
             self.assertEqual(len(mine), n, code)
         self.assertTrue(all(__import__("re").fullmatch(r"IDC_[BSGA]_R\d\d", r) for r in racks))
-        for row in self.servers.itertuples():
-            self.assertEqual(row.name, f"{row.rack}_S{row.slot}")
+        for row in self.devs.itertuples():
+            self.assertEqual(row.device.split("_")[1], row.rack.split("_")[1], row.device)   # 장비와 랙의 센터 코드가 같다
+            self.assertEqual(row.vendor, "cisco" if "_FR" in row.device else "juniper")
+
+    def test_rack_capacity_rule(self):
+        """Cisco 대형 장비는 랙을 혼자 쓰고, Juniper는 랙당 최대 2대."""
+        for rack, g in self.devs.groupby("rack"):
+            if (g.vendor == "cisco").any():
+                self.assertEqual(len(g), 1, f"{rack}: Cisco는 랙 하나를 혼자 써야 함")
+            self.assertLessEqual(len(g), 2, f"{rack}: 랙당 최대 2대")
+        self.assertEqual(self.devs.device.nunique(), len(self.devs), "한 장비는 랙 하나에만")
 
     def test_normal_racks_stay_below_27(self):
         normal = self.temps[self.temps.rack != "IDC_B_R03"]
         self.assertLess(normal.inlet_c.max(), 27)
 
-    def test_cooling_incident_only_in_a03(self):
-        a03 = self.temps[self.temps.rack == "IDC_B_R03"].set_index("time").inlet_c
-        self.assertGreaterEqual(a03["2026-10-26 15:55"], 33)
-        self.assertLess(a03["2026-10-27 12:00"], 27)
+    def test_cooling_incident_only_in_b03(self):
+        b03 = self.temps[self.temps.rack == "IDC_B_R03"].set_index("time").inlet_c
+        self.assertGreaterEqual(b03["2026-10-26 15:55"], 33)
+        self.assertLess(b03["2026-10-27 12:00"], 27)
 
-    def test_one_server_down_and_one_disk_warning(self):
-        self.assertEqual(self.servers.hdd_warn.sum(), 1)
-        self.assertEqual(self.servers.down_start.notna().sum(), 1)
+    def test_one_device_down_and_one_fan_warning(self):
+        self.assertEqual(self.devs.fan_warn.sum(), 1)
+        down = self.devs[self.devs.down_start.notna()]
+        self.assertEqual(list(down.device), ["IDC_B_FS6"])
+        self.assertEqual(list(down.rack), ["IDC_B_R03"])   # 냉각 이상이 난 랙 안의 장비
 
 
 if __name__ == "__main__":

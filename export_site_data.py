@@ -29,12 +29,12 @@ for r in links.itertuples():
     out["links"].append({"id": r.link, "desc": r.description, "cap": int(r.capacity_gbps),
                          "in": d.in_gbps.round(2).tolist(), "out": d.out_gbps.round(2).tolist()})
 temps = pd.read_csv(ROOT / "data/temps.csv")
-servers = pd.read_csv(ROOT / "data/servers.csv").fillna("")
+devs = pd.read_csv(ROOT / "data/rack_devices.csv").fillna("")
 out["racks"] = []
-for rack, g in servers.groupby("rack", sort=False):
+for rack, g in devs.groupby("rack", sort=False):
     out["racks"].append({
         "id": rack,
-        "servers": [{"slot": int(r.slot), "name": r.name, "role": r.role, "hddWarn": bool(r.hdd_warn),
+        "devices": [{"slot": int(r.slot), "id": r.device, "vendor": r.vendor, "fanWarn": bool(r.fan_warn),
                      "downStart": str(r.down_start).replace(" ", "T"), "downEnd": str(r.down_end).replace(" ", "T")}
                     for r in g.itertuples()],
         "temp": temps[temps.rack == rack].sort_values("time").inlet_c.tolist(),

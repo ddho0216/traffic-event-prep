@@ -62,18 +62,27 @@ DROPS = [
 # IDC_B_FS2_IX1에서 빠진 트래픽의 60%가 IDC_B_FS2_INTL1로 돌아간다 (한쪽이 빠지면 다른 쪽이 튄다)
 SHIFT = ("IDC_B_FS2_IX1", "IDC_B_FS2_INTL1", 0.6)
 
-# 서버실: 센터마다 랙이 있고, 랙 하나에 서버 4대. 랙 입구 온도(inlet)를 5분 간격으로 만든다. 전부 가상.
-# 이름 규칙: 랙 = IDC_<센터 코드>_R<번호>, 서버 = <랙 이름>_S<번호>. 센터 코드 B 분당, S 서초, G 구로, A 안산.
-CENTER_RACKS = [("B", 6), ("S", 6), ("G", 4), ("A", 4)]   # (센터 코드, 랙 수): 분당 6, 서초 6, 구로 4, 안산 4
-RACKS = [f"IDC_{c}_R{n:02d}" for c, k in CENTER_RACKS for n in range(1, k + 1)]
+# 서버실: 센터마다 랙이 있고, 랙에는 네트워크 장비만 들어간다. 랙 입구 온도(inlet)를 5분 간격으로 만든다. 전부 가상.
+# 랙 규칙: Cisco 대형 장비는 랙을 혼자 쓴다(랙당 1대), Juniper는 랙당 최대 2대. 중앙 백본(대형)도 랙당 1대.
+# 이름 규칙: 랙 = IDC_<센터 코드>_R<번호>, 장비 = IDC_<센터 코드>_<FS|FR><번호>. 센터 코드 B 분당, S 서초, G 구로, A 안산.
+# 장비 목록은 site/topology.js가 기준이다. 아래는 같은 배치를 데이터 생성용으로 적은 것 (tests가 서로 같은지 확인한다).
+RACK_DEVICES = {
+    "IDC_B_R01": ["IDC_B_FS1", "IDC_B_FS2"], "IDC_B_R02": ["IDC_B_FS3", "IDC_B_FS4"],
+    "IDC_B_R03": ["IDC_B_FS5", "IDC_B_FS6"], "IDC_B_R04": ["IDC_B_FS7"],
+    "IDC_B_R05": ["IDC_B_FR1"], "IDC_B_R06": ["IDC_B_FR2"],
+    "IDC_S_R01": ["IDC_S_FS1"], "IDC_S_R02": ["IDC_S_FS2"], "IDC_S_R03": ["IDC_S_FR1"],
+    "IDC_S_R04": ["IDC_S_FS3", "IDC_S_FS4"],
+    "IDC_G_R01": ["IDC_G_FS1", "IDC_G_FS2"], "IDC_G_R02": ["IDC_G_FS3"],
+    "IDC_A_R01": ["IDC_A_FS1", "IDC_A_FS2"], "IDC_A_R02": ["IDC_A_FR1"],
+}
+RACKS = list(RACK_DEVICES)
 CENTER_TEMP_OFFSET = {"B": 0.0, "S": 0.4, "G": -0.2, "A": 0.1}   # 센터마다 평소 온도가 조금씩 다르다
-ROLES = ["웹", "DB", "캐시", "스토리지"]
 # 냉각 이상: 분당 IDC_B_R03 랙, 14:30에 오르기 시작 -> 15:30 최고 -> 16:30까지 유지 -> 17:15에 복구
 COOLING = ("IDC_B_R03", "2026-10-26 14:30", "2026-10-26 15:30", "2026-10-26 16:30", "2026-10-26 17:15", 11.5)
-# 과열로 서버 한 대가 꺼짐: IDC_B_R03의 2번 서버, 16:05~16:25
-SERVER_DOWN = ("IDC_B_R03", 2, "2026-10-26 16:05", "2026-10-26 16:25")
-# 디스크 경고가 계속 켜져 있는 서버(교체 대기): IDC_B_R02의 3번 서버
-HDD_WARN = ("IDC_B_R02", 3)
+# 과열로 장비 한 대가 꺼짐(보호 종료): IDC_B_FS6, 16:05~16:25
+DEVICE_DOWN = ("IDC_B_FS6", "2026-10-26 16:05", "2026-10-26 16:25")
+# 팬 경고가 계속 켜져 있는 장비(교체 대기): IDC_B_FS4
+FAN_WARN = "IDC_B_FS4"
 
 
 def daily_shape(hours: np.ndarray, weekend: bool) -> np.ndarray:
@@ -115,7 +124,7 @@ def match_profile(k: int):
 
 
 def write_server_room(times: pd.DatetimeIndex, hours: np.ndarray) -> None:
-    """랙 입구 온도(temps.csv)와 서버 목록(servers.csv)을 만든다."""
+    """랙 입구 온도(temps.csv)와 랙 안 장비 목록(rack_devices.csv)을 만든다."""
     rng = np.random.default_rng(SEED + 100)   # 트래픽 난수와 분리 (트래픽 데이터는 그대로)
     shape = daily_shape(hours, False)
     tm = np.asarray((times - times[0]) / pd.Timedelta(minutes=1))
@@ -137,15 +146,15 @@ def write_server_room(times: pd.DatetimeIndex, hours: np.ndarray) -> None:
         rows.append(pd.DataFrame({"time": times, "rack": rack, "inlet_c": temp.round(1)}))
     pd.concat(rows).to_csv(OUT / "temps.csv", index=False)
 
-    srv = []
-    for rack in RACKS:
-        for slot in range(1, 5):
-            down = SERVER_DOWN if (rack, slot) == SERVER_DOWN[:2] else None
-            srv.append((rack, slot, f"{rack}_S{slot}", ROLES[slot - 1],
-                        int((rack, slot) == HDD_WARN),
-                        down[2] if down else "", down[3] if down else ""))
-    pd.DataFrame(srv, columns=["rack", "slot", "name", "role", "hdd_warn", "down_start", "down_end"]
-                 ).to_csv(OUT / "servers.csv", index=False)
+    dev = []
+    for rack, devs in RACK_DEVICES.items():
+        for slot, name in enumerate(devs, 1):
+            vendor = "cisco" if "_FR" in name else "juniper"
+            down = DEVICE_DOWN if name == DEVICE_DOWN[0] else None
+            dev.append((rack, slot, name, vendor, int(name == FAN_WARN),
+                        down[1] if down else "", down[2] if down else ""))
+    pd.DataFrame(dev, columns=["rack", "slot", "device", "vendor", "fan_warn", "down_start", "down_end"]
+                 ).to_csv(OUT / "rack_devices.csv", index=False)
 
 
 def main() -> None:

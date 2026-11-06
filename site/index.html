@@ -136,7 +136,7 @@
 
 <!-- 서버실 -->
 <section class="tab" id="tab-room">
-  <p class="note">서버실 점검 업무: 랙 입구 온도 확인과 육안점검(서버 불빛을 보고 판단). 랙·서버·온도는 모두 가상 데이터이고, 온도 기준은 ⚙ 설정에서 바꿀 수 있고, 기본값(27·30·33°C)은 제가 가정한 값입니다. <b>서버 칸을 누르면</b> 그 서버가 연결된 스위치의 가상 터미널이 새 창으로 열립니다.</p>
+  <p class="note">서버실 점검 업무: 랙 입구 온도 확인과 육안점검(장비 불빛을 보고 판단). 랙·장비·온도는 모두 가상 데이터이고, 온도 기준은 ⚙ 설정에서 바꿀 수 있고, 기본값(27·30·33°C)은 제가 가정한 값입니다. 랙에는 네트워크 장비만 들어갑니다(Cisco 대형 장비는 랙 하나를 혼자, Juniper는 랙당 최대 2대). <b>장비 칸을 누르면</b> 그 장비의 가상 터미널이 새 창으로 열립니다.</p>
   <div class="toolbar">
     <label>기준 시각 <input type="datetime-local" id="srTime"></label>
     <button class="btn" id="srPrev">&lsaquo; 이전 1시간</button>
@@ -147,7 +147,7 @@
     <span class="muted">빠른 이동</span>
     <button class="btn" data-sr="2026-10-22T21:00">평소 저녁</button>
     <button class="btn" data-sr="2026-10-26T15:55" data-center="B">냉각 이상 (IDC_B_R03)</button>
-    <button class="btn" data-sr="2026-10-26T16:15" data-center="B">서버 꺼짐</button>
+    <button class="btn" data-sr="2026-10-26T16:15" data-center="B">장비 꺼짐</button>
   </div>
   <div class="card" id="cfgPanel" hidden style="margin-bottom:12px">
     <h3>서버실 화면 설정 <span class="muted">(이 브라우저에 저장됩니다)</span></h3>
@@ -162,7 +162,7 @@
     <p class="note" id="cfgMsg" style="margin:8px 0 0;color:var(--crit)"></p>
     <div class="toolbar" style="margin:8px 0 0"><button class="btn" id="cfgReset">기본값으로</button></div>
   </div>
-  <p class="note">LED(왼쪽부터 전원 · 상태 · 디스크): 초록 = 정상, 주황 = 주의, 빨강 깜박임 = 장애, 꺼짐 = 전원 없음</p>
+  <p class="note">LED(왼쪽부터 전원 · 상태 · 팬): 초록 = 정상, 주황 = 주의, 빨강 깜박임 = 장애, 꺼짐 = 전원 없음</p>
   <p class="note" id="roomSum" style="margin:0 0 8px;color:var(--text)"></p>
   <div class="racks" id="racks"></div>
   <div class="cols">
@@ -246,14 +246,17 @@
     <div class="card">
       <h3>자주 쓰던 명령</h3>
       <div class="qcmd" id="qcmd"></div>
-      <p class="note">누르면 입력창에 채워집니다. 장비 종류에 맞는 명령만 동작합니다. <span class="crit-t">IDC_B_FS2 xe-0/0/3(해외 연동), IDC_A_FR1 Te1/0/1(안산 Cisco 백본), IDC_B_AS5 업링크 등에 CRC와 광 수신값 이상이 심어져 있습니다.</span></p>
+      <p class="note">누르면 입력창에 채워집니다. 장비 종류에 맞는 명령만 동작합니다. <span class="crit-t">IDC_B_FS2 xe-0/0/3(해외 연동), IDC_A_FR1 Te1/0/1(안산 Cisco 백본), IDC_B_FS7 업링크 등에 CRC와 광 수신값 이상이 심어져 있습니다.</span></p>
     </div>
   </div>
   <h2>설계도 (가상) <small>제가 만든 초안입니다. 행을 누르면 그 장비로 연결됩니다. 전체 장비와 연결이 보입니다.</small></h2>
   <p class="note" id="designSum" style="margin:0 0 8px;color:var(--text)"></p>
   <div class="cols">
     <div class="card" style="padding:0"><table id="devTbl"></table></div>
-    <div class="card" style="padding:0"><table id="linkTbl"></table></div>
+    <div>
+      <div class="card" style="padding:0;margin-bottom:12px"><table id="custTbl"></table></div>
+      <div class="card" style="padding:0"><table id="linkTbl"></table></div>
+    </div>
   </div>
 </section>
 </main>

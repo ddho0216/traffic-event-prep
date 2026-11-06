@@ -63,21 +63,7 @@ function makeZip(files) {
 }
 
 /* ---------- 가상 고객사·센터 ---------- */
-const CUSTOMERS = [   // 전부 가상 고객사. 회선은 제가 임의로 나눈 것
-  { name: "가상물산", key: "gasang", links: ["IDC_B_FS1_UP1", "IDC_B_FS1_UP2"] },
-  { name: "예시미디어", key: "yesi-media", links: ["IDC_B_FS1_UP1", "IDC_A_FS1_UP1", "IDC_B_FS2_IX1"] },
-  { name: "샘플게임즈", key: "sample-games", links: ["IDC_G_FS1_UP1", "IDC_S_FR1_UP1"] },
-  { name: "테스트클라우드", key: "test-cloud", links: ["IDC_S_FR1_UP1"] },
-  { name: "데모스트리밍", key: "demo-streaming", links: ["IDC_B_FS2_IX1", "IDC_B_FS2_INTL1"] },
-  { name: "모의커머스", key: "mock-commerce", links: ["IDC_B_FS1_UP2", "IDC_A_FR1_UP1"] },
-  { name: "가상은행", key: "gasang-bank", links: ["IDC_B_FS1_UP1", "IDC_B_FS1_UP2"] },
-  { name: "예제교육", key: "yeje-edu", links: ["IDC_G_FS1_UP1"] },
-  { name: "샘플방송", key: "sample-broadcast", links: ["IDC_B_FS2_IX1", "IDC_A_FS1_UP1"] },
-  { name: "시험물류", key: "test-logistics", links: ["IDC_A_FR1_UP1"] },
-  { name: "데모헬스", key: "demo-health", links: ["IDC_S_FR1_UP1", "IDC_G_FS1_UP1"] },
-  { name: "가상모빌리티", key: "gasang-mobility", links: ["IDC_A_FS1_UP1", "IDC_A_FR1_UP1"] },
-  { name: "예시금융", key: "yesi-finance", links: ["IDC_B_FS2_INTL1"] }
-];
+const CUSTOMERS = TOPOLOGY.customers;   // 전부 가상 고객사. 설계도(topology.js)에서 읽는다 (회선 배정은 제가 임의로 정한 것)
 const CENTER_NAME = TOPOLOGY.centers;   // 이름의 센터 코드: IDC_<코드>_... (센터 목록은 설계도에서)
 const CENTER = id => /_(IX|INTL)\d/.test(id) ? "연동" : (CENTER_NAME[id.split("_")[1]] || "연동");
 
@@ -564,27 +550,16 @@ function renderVisits() {
 })();
 
 /* ---------- 5. 장비 터미널 (가상) ---------- */
-// 설계도(topology.js)에서 가상 장비를 만든다. 포트는 연결표와 랙 서버에서 가져온다.
-const PROMPT = { juniper: id => `admin@${id}>`, cisco: id => `${id}#`, huawei: id => `<${id}>` };
+// 설계도(topology.js)에서 가상 장비를 만든다. 포트는 연결표에서 가져온다.
+const PROMPT = { juniper: id => `admin@${id}>`, cisco: id => `${id}#` };
 const DEVICES = TOPOLOGY.devices.map(d => Object.assign({}, d, { prompt: PROMPT[d.vendor](d.id), ifs: [] }));
 const DEV = Object.fromEntries(DEVICES.map(d => [d.id, d]));
-// 포트 한 칸: [포트 이름, 상대(장비·서버·외부), CRC 오류 수, 광 수신값 dBm, 연결 정보]
+// 포트 한 칸: [포트 이름, 상대(장비·외부), CRC 오류 수, 광 수신값 dBm, 연결 정보]
 const addPort = (dev, port, peer, link) => {
   const f = TOPOLOGY.faults[`${dev}|${port}`] || {}, d = DEV[dev];
   d.ifs.push([port, peer, f.crc || 0, f.rx != null ? f.rx : -3.0 - (d.ifs.length % 4) * 0.15, link]);
 };
 TOPOLOGY.links.forEach(l => { addPort(l.a, l.ap, l.b, l); if (DEV[l.b]) addPort(l.b, l.bp, l.a, l); });
-// 랙 서버: 랙 스위치 포트 하나에 서버 한 대 (A 랙은 Juniper, B 랙은 Huawei)
-DATA.racks.forEach((r, ri) => {
-  const tor = DEVICES.find(d => d.rack === r.id); if (!tor) return;
-  r.servers.forEach(sv => {
-    const port = tor.vendor === "juniper" ? `xe-0/0/${sv.slot - 1}` : `XGigabitEthernet0/1/${sv.slot}`;
-    let crc = 0, rx = -3 - ((sv.slot + ri) % 4) * 0.15;
-    if (sv.name === "IDC_B_R03_S2") rx = -40;                 // 꺼진 서버: 빛이 안 들어옴
-    if (sv.name === "IDC_B_R02_S3") { crc = 12; rx = -9.8; }  // 디스크 경고 서버: 작은 CRC 오류와 약한 광 수신
-    tor.ifs.push([port, sv.name, crc, rx, null]);
-  });
-});
 const dBm = v => (Math.pow(10, v / 10)).toFixed(4);
 function jOptics(f) {
   const bad = f[3] < -11;
@@ -599,21 +574,10 @@ const DEV_CMDS = {
   ],
   cisco: [
     [/^show interfaces? (\S+) \| include CRC$/i, (d, m) => { const f = findIf(d, m[1]); return f ? `     ${f[2]} input errors, ${f[2]} CRC, 0 frame, 0 overrun, 0 ignored` : `% Invalid input detected at '^' marker.`; }]
-  ],
-  huawei: [
-    [/^display interface (.+?) \| include CRC$/i, (d, m) => {
-      const f = findIf(d, m[1].replace(/\s+/g, "")); if (!f) return "Error: Wrong parameter found at '^' position.";
-      return `    CRC: ${f[2]} packets, Giants: 0 packets, Jabbers: 0 packets`;
-    }],
-    [/^display transceiver interface (.+?) verbose$/i, (d, m) => {
-      const f = findIf(d, m[1].replace(/\s+/g, "")); if (!f) return "Error: Wrong parameter found at '^' position.";
-      const bad = f[3] < -9;
-      return `${f[0]} transceiver information:\n-------------------------------------------------------------\nCommon information:\n  Transceiver Type                      :10G_BASE_LR_SFP\n  Wavelength(nm)                        :1310\n  Transmission Distance(m)              :10000\nDiagnostic information:\n  Temperature(C)                        :39\n  Voltage(V)                            :3.30\n  TX Power(dBm)                         :-2.80\n  RX Power(dBm)                         :${f[3].toFixed(2)}\nAlarm information:\n  ${bad ? "RX power is low (warning)" : "None"}`;
-    }]
   ]
 };
 function findIf(d, name) { return d.ifs.find(f => f[0].toLowerCase() === String(name).toLowerCase()); }
-const VENDOR_ERR = { juniper: "                     ^\nunknown command.", cisco: "% Invalid input detected at '^' marker.", huawei: "Error: Unrecognized command found at '^' position." };
+const VENDOR_ERR = { juniper: "                     ^\nunknown command.", cisco: "% Invalid input detected at '^' marker." };
 const devNow = () => DEV[$("#devSel").value] || DEVICES[0];
 function runCmd(raw, dev) {
   const d = dev || devNow(), cmd = raw.trim().replace(/\s+/g, " ");
@@ -623,26 +587,23 @@ function runCmd(raw, dev) {
   return VENDOR_ERR[d.vendor];
 }
 function quickCmds() {
-  const d = devNow(), focus = termFocus && termFocus.dev === d.id ? d.ifs.find(f => f[1] === termFocus.server) : null;
-  const bad = focus || d.ifs.find(f => f[2] > 50 || f[3] < -9) || d.ifs[0], ok = d.ifs[0];
+  const d = devNow(), bad = d.ifs.find(f => f[2] > 50 || f[3] < -9) || d.ifs[0], ok = d.ifs[0];
   const list = {
     juniper: [`show interfaces diagnostics optics ${bad[0]}`, `show interfaces extensive ${bad[0]} | match CRC`, `show interfaces extensive | match "CRC|physical interface"`],
-    cisco: [`show interface ${bad[0]} | include CRC`, `show interface ${ok[0]} | include CRC`],
-    huawei: [`display transceiver interface ${bad[0].replace("XGigabitEthernet", "XGigabitEthernet ")} verbose`, `display interface ${bad[0].replace("XGigabitEthernet", "XGigabitEthernet ")} | include CRC`]
+    cisco: [`show interface ${bad[0]} | include CRC`, `show interface ${ok[0]} | include CRC`]
   }[d.vendor];
   $("#qcmd").innerHTML = [...new Set(list)].map(c => `<button data-c="${esc(c)}">${esc(c)}</button>`).join("");   // 포트가 하나뿐인 장비는 같은 명령이 두 번 나오지 않게
 }
-let termFocus = null;
 const termHist = []; let hp = 0;
 function termPrint(html) { const t = $("#termOut"); t.insertAdjacentHTML("beforeend", html); t.scrollTop = t.scrollHeight; }
 function termBanner() {
-  const d = devNow(), f = termFocus && termFocus.dev === d.id ? d.ifs.find(x => x[1] === termFocus.server) : null;
-  $("#termOut").innerHTML = `<span class="muted">가상 장비 ${d.id} (${d.vendor} · ${d.role}) 에 연결됨. 실제 장비가 아닙니다.</span>\n` + (f ? `<span class="muted">${esc(termFocus.server)} 가 연결된 포트: ${esc(f[0])}</span>\n` : "");
+  const d = devNow();
+  $("#termOut").innerHTML = `<span class="muted">가상 장비 ${d.id} (${d.vendor} · ${d.role}) 에 연결됨. 실제 장비가 아닙니다.</span>\n`;
   $("#termPrompt").textContent = d.prompt;
-  $("#termTarget").textContent = f ? `${termFocus.server} → ${d.id} · 포트 ${f[0]}` : "";
+  $("#termTarget").textContent = `${d.id} · ${d.rack}`;
   quickCmds();
 }
-const VENDORS = [["juniper", "Juniper · FS 계열"], ["cisco", "Cisco · FR 계열"], ["huawei", "Huawei · AS 계열"]];
+const VENDORS = [["juniper", "Juniper · FS 계열"], ["cisco", "Cisco · FR 계열"]];
 function fillVendors(keep) {   // 센터 선택에 맞는 장비 수를 보여 주고, 장비가 없는 제조사는 고를 수 없게 한다
   const cnt = v => DEVICES.filter(d => d.vendor === v).length;
   $("#vendorSel").innerHTML = VENDORS.map(([v, n]) => `<option value="${v}" ${cnt(v) ? "" : "disabled"}>${n} (${cnt(v)}대)</option>`).join("");
@@ -656,38 +617,37 @@ function fillDevices(vendor, keep) {   // 고른 제조사·센터의 장비만 
 }
 function selectDevice(devId) {
   const d = DEV[devId]; if (!d) return;
-  $("#vendorSel").value = d.vendor; fillDevices(d.vendor, devId); termFocus = null; termBanner();
+  $("#vendorSel").value = d.vendor; fillDevices(d.vendor, devId); termBanner();
 }
-// 서버 이름으로 연결: 그 서버가 꽂힌 랙 스위치를 고르고 포트 명령을 채워 둔다
-function termConnect(devId, server) {
+// 장비 이름으로 연결: 그 장비를 고르고 자주 쓰는 명령을 채워 둔다
+function termConnect(devId) {
   const d = DEV[devId]; if (!d) return;
-  $("#vendorSel").value = d.vendor; fillDevices(d.vendor, devId); termFocus = { dev: devId, server }; termBanner();
+  $("#vendorSel").value = d.vendor; fillDevices(d.vendor, devId); termBanner();
   const first = $("#qcmd button"); if (first) $("#termIn").value = first.dataset.c;
 }
 function renderDesign() {
   const name = Object.fromEntries(VENDORS);
   const dv = DEVICES, lk = TOPOLOGY.links;
-  $("#designSum").textContent = `장비 ${dv.length}대 (${VENDORS.map(([v, n]) => n.split(" ")[0] + " " + dv.filter(d => d.vendor === v).length).join(", ")}) · 연결 ${lk.length}건`;
-  $("#devTbl").innerHTML = `<tr><th>제조사</th><th>장비</th><th>역할</th><th>센터</th><th class="n">포트</th></tr>` +
-    VENDORS.map(([v]) => DEVICES.filter(d => d.vendor === v).map(d => `<tr class="click" data-dev="${d.id}"><td><span class="tag">${name[v]}</span></td><td>${d.id}</td><td>${esc(d.role)}</td><td>${esc(d.center)}</td><td class="n">${d.ifs.length}</td></tr>`).join("")).join("");
+  $("#designSum").textContent = `장비 ${dv.length}대 (${VENDORS.map(([v, n]) => n.split(" ")[0] + " " + dv.filter(d => d.vendor === v).length).join(", ")}) · 랙 ${DATA.racks.length}개 · 고객사 ${CUSTOMERS.length}곳 · 연결 ${lk.length}건`;
+  $("#devTbl").innerHTML = `<tr><th>제조사</th><th>장비</th><th>역할</th><th>센터</th><th>랙</th><th class="n">포트</th></tr>` +
+    VENDORS.map(([v]) => DEVICES.filter(d => d.vendor === v).map(d => `<tr class="click" data-dev="${d.id}"><td><span class="tag">${name[v]}</span></td><td>${d.id}</td><td>${esc(d.role)}</td><td>${esc(d.center)}</td><td>${d.rack}</td><td class="n">${d.ifs.length}</td></tr>`).join("")).join("");
+  $("#custTbl").innerHTML = `<tr><th>고객사</th><th>접속 장비</th><th>쓰는 회선</th></tr>` + CUSTOMERS.map(c => { const d = DEVICES.find(x => (x.customers || []).includes(c.key)); return `<tr class="click" data-dev="${d.id}"><td>${esc(c.name)}</td><td>${d.id}</td><td class="muted">${c.links.join(", ")}</td></tr>`; }).join("");
   $("#linkTbl").innerHTML = `<tr><th>연결</th><th>A 장비 · 포트</th><th>B 장비 · 포트</th><th>종류</th><th class="n">Gbps</th></tr>` +
     lk.map(l => `<tr class="click" data-dev="${l.a}"><td>${l.link}</td><td>${l.a} ${l.ap}</td><td>${esc(l.b)}${l.bp && l.bp !== "-" ? " " + l.bp : ""}</td><td>${esc(l.kind)}</td><td class="n">${l.gbps}</td></tr>`).join("");
 }
-function openServerTerminal(name) {
-  const rack = DATA.racks.find(r => r.servers.some(x => x.name === name)); if (!rack) return;
-  const tor = DEVICES.find(d => d.rack === rack.id); if (!tor) return;
-  const devId = tor.id;
-  const q = new URLSearchParams({ popup: "term", dev: devId, server: name });
-  const w = window.open(location.pathname + "?" + q.toString(), "term-" + name, "width=880,height=660");
+function openDeviceTerminal(devId) {   // 랙 안 장비를 누르면 그 장비의 터미널을 새 창으로 연다 (가상)
+  if (!DEV[devId]) return;
+  const q = new URLSearchParams({ popup: "term", dev: devId });
+  const w = window.open(location.pathname + "?" + q.toString(), "term-" + devId, "width=880,height=660");
   if (w) { try { w.focus(); } catch (e) { /* 무시 */ } return; }
-  termConnect(devId, name); showTab("term");   // 팝업이 막히면 같은 화면의 터미널 탭에서 연다
+  termConnect(devId); showTab("term");   // 팝업이 막히면 같은 화면의 터미널 탭에서 연다
   $("#termTarget").textContent += "  (팝업이 막혀서 이 화면에서 열었습니다)";
 }
 (function initTerm() {
   fillVendors("juniper");   // 가장 많이 쓰는 Juniper가 기본
-  $("#vendorSel").onchange = () => { termFocus = null; fillDevices($("#vendorSel").value); termBanner(); };
-  $("#devSel").onchange = () => { termFocus = null; termBanner(); };
-  ["devTbl", "linkTbl"].forEach(id => $("#" + id).addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { selectDevice(tr.dataset.dev); $("#termIn").focus(); window.scrollTo({ top: 0, behavior: "smooth" }); } }));
+  $("#vendorSel").onchange = () => { fillDevices($("#vendorSel").value); termBanner(); };
+  $("#devSel").onchange = termBanner;
+  ["devTbl", "custTbl", "linkTbl"].forEach(id => $("#" + id).addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { selectDevice(tr.dataset.dev); $("#termIn").focus(); window.scrollTo({ top: 0, behavior: "smooth" }); } }));
   renderDesign();
   $("#termClear").onclick = termBanner;
   $("#qcmd").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { $("#termIn").value = b.dataset.c; $("#termIn").focus(); } });
@@ -712,7 +672,7 @@ const visibleRacks = () => RACKS.filter(r => inView(r.id));   // 센터 선택�
 const sr = { end: idxOf(parseT("2026-10-22T21:00")) };
 const thNow = () => ({ warn: TEMP_WARN, hot: TEMP_HOT, crit: TEMP_CRIT });
 const tempCls = t => Lib.tempLevel(t, thNow());
-function srvState(rack, sv, i) { return Lib.serverLed(rack.temp[i], sv, msOf(i), thNow()); }
+function devState(rack, dv, i) { return Lib.deviceLed(rack.temp[i], dv, msOf(i), thNow()); }
 let ROOM_ALERTS = [];
 function computeRoomAlerts() { ROOM_ALERTS = Lib.detectRoom(RACKS, thNow()); }
 computeRoomAlerts();
@@ -722,16 +682,16 @@ function spark(arr, s, e) {
   return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}"><line x1="0" x2="${w}" y1="${Y(TEMP_HOT)}" y2="${Y(TEMP_HOT)}" stroke="#e5604d" stroke-dasharray="3 3" opacity=".7"/><line x1="0" x2="${w}" y1="${Y(TEMP_WARN)}" y2="${Y(TEMP_WARN)}" stroke="#d9b13b" stroke-dasharray="3 3" opacity=".6"/><path d="${d}" fill="none" stroke="#e5a93d" stroke-width="1.6"/></svg>`;
 }
 function ledHtml(st) {
-  return `<span class="led ${st.power ? "ok" : "off"}" title="전원"></span><span class="led ${st.status} ${st.status === "crit" ? "blink" : ""}" title="상태"></span><span class="led ${st.hdd}" title="디스크"></span>`;
+  return `<span class="led ${st.power ? "ok" : "off"}" title="전원"></span><span class="led ${st.status} ${st.status === "crit" ? "blink" : ""}" title="상태"></span><span class="led ${st.fan}" title="팬"></span>`;
 }
 function inspSummary(rack, i) {
-  const sts = rack.servers.map(sv => srvState(rack, sv, i)), n = k => sts.filter(x => x.status === k).length;
-  const off = sts.filter(x => !x.power).length, hdd = sts.filter(x => x.hdd === "warn").length;
+  const sts = rack.devices.map(dv => devState(rack, dv, i)), n = k => sts.filter(x => x.status === k).length;
+  const off = sts.filter(x => !x.power).length, fan = sts.filter(x => x.fan === "warn").length;
   const parts = [`입구 ${rack.temp[i].toFixed(1)}°C`];
   if (off) parts.push(`전원 꺼짐 ${off}대`);
   if (n("crit") - off > 0) parts.push(`상태 장애 ${n("crit") - off}대`);
   if (n("warn")) parts.push(`상태 주의 ${n("warn")}대`);
-  if (hdd) parts.push(`디스크 주의 ${hdd}대`);
+  if (fan) parts.push(`팬 주의 ${fan}대`);
   return parts.join(", ");
 }
 function renderServerRoom() {
@@ -739,11 +699,11 @@ function renderServerRoom() {
   const i = clamp(sr.end, 0, N - 1);
   $("#srTime").value = isoLocal(msOf(i));
   const vr = visibleRacks();
-  $("#roomSum").textContent = `${viewLabel()} 서버실 · 랙 ${vr.length}개 · 서버 ${vr.reduce((n, r) => n + r.servers.length, 0)}대 · 랙 스위치 ${DEVICES.filter(d => d.rack && inView(d.id)).length}대`;
+  $("#roomSum").textContent = `${viewLabel()} 서버실 · 랙 ${vr.length}개 · 네트워크 장비 ${vr.reduce((n, r) => n + r.devices.length, 0)}대 (랙 하나에 Cisco 1대 또는 Juniper 최대 2대)`;
   $("#racks").innerHTML = vr.map(r => {
     const t = r.temp[i];
     return `<div class="rack ${tempCls(t)}${HL.has(r.id) ? " hl" : ""}" data-rack="${r.id}"><div class="rhd"><b>${r.id}</b><span class="tmp ${tempCls(t)}">${t.toFixed(1)}°C</span></div>` +
-      r.servers.map(sv => `<div class="srv" data-server="${sv.name}" role="button" tabindex="0" title="누르면 이 서버가 연결된 스위치 터미널이 새 창으로 열립니다 (가상)">${ledHtml(srvState(r, sv, i))}<span class="sname">${sv.name}</span><span class="role">${sv.role}</span></div>`).join("") +
+      r.devices.map(dv => `<div class="rdev ${dv.vendor}" data-dev="${dv.id}" role="button" tabindex="0" title="누르면 이 장비의 터미널이 새 창으로 열립니다 (가상)">${ledHtml(devState(r, dv, i))}<span class="sname">${dv.id}</span><span class="role">${dv.vendor === "cisco" ? "Cisco · 랙 전용" : "Juniper"}</span></div>`).join("") +
       spark(r.temp, Math.max(0, i - (cfg.range * 12 - 1)), i) + `<div class="note" style="margin:2px 0 0">최근 ${cfg.range}시간 · 점선 ${TEMP_WARN}/${TEMP_HOT}°C</div></div>`;
   }).join("");
   const visAlerts = ROOM_ALERTS.map((a, k) => ({ a, k })).filter(x => inView(x.a.rack));
@@ -772,8 +732,8 @@ function renderInspections() {
   });
   $("#srAlerts").addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { sr.end = ROOM_ALERTS[+tr.dataset.k].peak; renderServerRoom(); } });
   $("#inRack").addEventListener("change", renderServerRoom);
-  $("#racks").addEventListener("click", ev => { const el = ev.target.closest(".srv"); if (el) openServerTerminal(el.dataset.server); });
-  $("#racks").addEventListener("keydown", ev => { if (ev.key === "Enter") { const el = ev.target.closest(".srv"); if (el) openServerTerminal(el.dataset.server); } });
+  $("#racks").addEventListener("click", ev => { const el = ev.target.closest(".rdev"); if (el) openDeviceTerminal(el.dataset.dev); });
+  $("#racks").addEventListener("keydown", ev => { if (ev.key === "Enter") { const el = ev.target.closest(".rdev"); if (el) openDeviceTerminal(el.dataset.dev); } });
   $("#srFrom").min = $("#srTo").min = MIN_DAY; $("#srFrom").max = $("#srTo").max = MAX_DAY;
   $("#srFrom").value = MIN_DAY; $("#srTo").value = MAX_DAY;
   $("#srTempCsv").onclick = () => {
@@ -783,9 +743,9 @@ function renderInspections() {
     downloadCsv(`rack_temps_${view.center}_${$("#srFrom").value}_${$("#srTo").value}.csv`, rows.join("\n"));
   };
   $("#srSheetCsv").onclick = () => {
-    const i = clamp(sr.end, 0, N - 1), rows = ["time,rack,server,role,inlet_c,power,status,disk"];
+    const i = clamp(sr.end, 0, N - 1), rows = ["time,rack,device,vendor,inlet_c,power,status,fan"];
     const lab = { ok: "정상", warn: "주의", crit: "장애", off: "꺼짐" };
-    visibleRacks().forEach(r => r.servers.forEach(sv => { const st = srvState(r, sv, i); rows.push(`${ymdhm(msOf(i))},${r.id},${sv.name},${sv.role},${r.temp[i]},${st.power ? "켜짐" : "꺼짐"},${lab[st.status]},${lab[st.hdd]}`); }));
+    visibleRacks().forEach(r => r.devices.forEach(dv => { const st = devState(r, dv, i); rows.push(`${ymdhm(msOf(i))},${r.id},${dv.id},${dv.vendor},${r.temp[i]},${st.power ? "켜짐" : "꺼짐"},${lab[st.status]},${lab[st.fan]}`); }));
     downloadCsv(`inspection_sheet_${view.center}_${fileStamp(msOf(i))}.csv`, rows.join("\n"));
   };
   $("#inAdd").onclick = () => {
@@ -834,7 +794,7 @@ function applyRoomCfg(save) {
 const syncHdr = () => document.documentElement.style.setProperty("--hdr", $("header.top").offsetHeight + "px");   // 안내 막대를 헤더 아래에 붙여 두려고
 function renderCenterBar() {
   const names = TOPOLOGY.centers, inRoom = $("#tab-room").classList.contains("on");
-  const stat = c => { const rs = RACKS.filter(r => c === "ALL" || codeOf(r.id) === c); return `랙 ${rs.length} · 서버 ${rs.reduce((n, r) => n + r.servers.length, 0)}`; };   // 서버실에서만 보여 준다
+  const stat = c => { const rs = RACKS.filter(r => c === "ALL" || codeOf(r.id) === c); return `랙 ${rs.length} · 장비 ${rs.reduce((n, r) => n + r.devices.length, 0)}`; };   // 서버실에서만 보여 준다
   $("#centerBar").innerHTML = `<span class="muted">센터</span>` + ["ALL", ...Object.keys(names)].map(c =>
     `<button class="cbtn${view.center === c ? " on" : ""}" data-center="${c}" title="${c === "ALL" ? "모든 센터" : names[c]}">${c === "ALL" ? "전체" : names[c]}${inRoom ? `<small>${stat(c)}</small>` : ""}</button>`).join("");
   syncHdr();
@@ -867,17 +827,16 @@ const runOn = (devId, cmd) => `${DEV[devId].prompt} ${cmd}\n${runCmd(cmd, DEV[de
 function buildScenarios() {
   const TD = Lib.TEMP_DEFAULTS;
   const OA = "IDC_B_FS1_UP1", OB = "IDC_B_FS1_UP2", IX = "IDC_B_FS2_IX1", INTL = "IDC_B_FS2_INTL1", EDGE = "IDC_B_FS2";   // 아래에서 새 이름으로 바뀐다
-  const torOf = rack => DEVICES.find(d => d.rack === rack);
 
   // 1) 평일 오후 7시: 평소 점검
   const calmFrom = "2026-10-22T18:30", c2 = "2026-10-22T18:45", c3 = "2026-10-22T19:00", c4 = "2026-10-22T19:30";
   const maxU = t => Math.max(...LINKS.map(l => l.out[isoIdx(t)] / l.cap)) * 100;
   const maxT = t => Math.max(...RACKS.map(r => r.temp[isoIdx(t)]));
-  const hdd = RACKS.flatMap(r => r.servers.filter(sv => sv.hddWarn).map(sv => sv.name));
+  const fans = RACKS.flatMap(r => r.devices.filter(dv => dv.fanWarn).map(dv => dv.id));
   const near = ALERTS.filter(a => Math.abs(a.s - isoIdx(c4)) <= 12).length + Lib.detectRoom(RACKS, TD).filter(a => Math.abs(a.s - isoIdx(c4)) <= 12).length;
   const calm = { name: "평일 오후 7시", tab: "monitor", win: 12, from: calmFrom, to: "2026-10-22T19:40", steps: [
     { at: calmFrom, kind: "확인", title: `그래프 8개 확인: 가장 높은 사용률 ${maxU(calmFrom).toFixed(0)}% (경고선 80% 아래)`, focus: LINKS.map(l => l.id) },
-    { at: c2, kind: "확인", title: `서버실 확인: 랙 입구 온도 최고 ${g1(maxT(c2))}°C (주의 기준 ${TD.warn}°C 아래), LED 정상${hdd.length ? `, 디스크 주의 ${hdd.join(", ")}(교체 대기)` : ""}` },
+    { at: c2, kind: "확인", title: `서버실 확인: 랙 입구 온도 최고 ${g1(maxT(c2))}°C (주의 기준 ${TD.warn}°C 아래), LED 정상${fans.length ? `, 팬 주의 ${fans.join(", ")}(교체 대기)` : ""}` },
     { at: c3, kind: "확인", title: `저녁 피크로 올라가는 중: ${OA} out ${g1(outAt(OA, calmFrom))}G → ${g1(outAt(OA, c3))}G, 평소 범위`, focus: [OA] },
     { at: c4, kind: "결과", title: `이상 없음: 이 시각 전후 새 경고 ${near}건. 점검 기록을 남기고 다음 점검으로`, focus: [] }
   ] };
@@ -912,23 +871,24 @@ function buildScenarios() {
     { at: kt(125), kind: "결과", title: `사후 정리: ${OA} 예상 ${A.exp.toFixed(0)}G, 실제 최대 ${A.act.toFixed(0)}G (${((A.act / A.exp - 1) * 100).toFixed(0)}%). 다음에는 배율을 ×${(1 + (A.act - A.base) / refPeak(A.l)).toFixed(1)}로`, focus: [] }
   ] };
 
-  // 4) 서버 온도 변화: A-03 냉각 이상
+  // 4) 서버실 온도 변화: IDC_B_R03 냉각 이상
   const COOL = "IDC_B_R03", R3 = RACKS.find(r => r.id === COOL), al = Lib.detectRoom(RACKS, TD).find(a => a.rack === COOL);
-  const fc = R3.temp.findIndex((t, i) => i >= al.s && t >= TD.crit), sv = R3.servers.find(x => x.downStart);
-  const dMs = parseT(sv.downStart), tAt = i => g1(R3.temp[i]), tor = torOf(COOL);
-  const temp = { name: "서버 온도 변화", tab: "room", center: "B", from: "2026-10-26T14:30", to: "2026-10-26T17:20", steps: [
+  const fc = R3.temp.findIndex((t, i) => i >= al.s && t >= TD.crit), dv = R3.devices.find(x => x.downStart);
+  const dMs = parseT(dv.downStart), tAt = i => g1(R3.temp[i]);
+  const lk = TOPOLOGY.links.find(l => l.b === dv.id && DEV[l.a]), peer = DEV[lk.a], pif = peer.ifs.find(x => x[0] === lk.ap);   // 꺼진 장비와 이어진 상대 쪽 포트
+  const temp = { name: "서버실 온도 변화", tab: "room", center: "B", from: "2026-10-26T14:30", to: "2026-10-26T17:20", steps: [
     { at: isoLocal(msOf(al.s)), kind: "감지", title: `${COOL} 입구 온도 ${TD.hot}°C 이상 (${tAt(al.s)}°C): 온도 경고 등록`, focus: [COOL] },
-    { at: isoLocal(msOf(fc)), kind: "감지", title: `${TD.crit}°C 이상 (${tAt(fc)}°C): 서버 LED 상태가 빨강 깜박임`, focus: [COOL] },
+    { at: isoLocal(msOf(fc)), kind: "감지", title: `${TD.crit}°C 이상 (${tAt(fc)}°C): 장비 LED 상태가 빨강 깜박임`, focus: [COOL] },
     { at: isoLocal(msOf(fc) + 15 * 60000), kind: "조치", title: "냉각기 점검 요청(티켓)과 육안점검 요청", focus: [COOL] },
-    { at: isoLocal(dMs), kind: "감지", title: `${sv.name} 과열로 꺼짐 (전원 LED 꺼짐)`, focus: [COOL] },
-    { at: isoLocal(dMs + 10 * 60000), kind: "조치", title: `터미널로 ${sv.name}이 연결된 스위치(${tor.id}) 포트 확인: 빛이 안 들어와서 서버가 꺼진 것으로 확인`, detail: runOn(tor.id, `show interfaces diagnostics optics xe-0/0/${sv.slot - 1}`), sum: `광 수신 ${DEV[tor.id].ifs.find(x => x[1] === sv.name)[3].toFixed(2)} dBm, 수신 낮음 알람 켜짐 → 빛이 안 들어옴`, detailLabel: "터미널 출력 보기", focus: [COOL] },
+    { at: isoLocal(dMs), kind: "감지", title: `${dv.id} 과열로 꺼짐 (전원 LED 꺼짐)`, focus: [COOL] },
+    { at: isoLocal(dMs + 10 * 60000), kind: "조치", title: `터미널로 ${dv.id}와 이어진 ${peer.id} 포트(${lk.ap}) 확인: 빛이 안 들어와서 ${dv.id}이 꺼진 것으로 확인`, detail: runOn(peer.id, `show interfaces diagnostics optics ${lk.ap}`), sum: `광 수신 ${pif[3].toFixed(2)} dBm, 수신 낮음 알람 켜짐 → 빛이 안 들어옴`, detailLabel: "터미널 출력 보기", focus: [COOL] },
     { at: isoLocal(msOf(al.e) + 5 * 60000), kind: "확인", title: `냉각 복구: ${TD.hot}°C 아래로 내려옴 (${tAt(al.e + 1)}°C)`, focus: [COOL] },
     { at: "2026-10-26T17:15", kind: "결과", title: `복구 완료 (${tAt(isoIdx("2026-10-26T17:15"))}°C). 육안점검 기록 남김: ${COOL} 이상 있음 → 정상 복귀`, focus: [COOL] }
   ] };
 
   return { calm, drop, surge, temp };
 }
-const SCN_LIST = [["calm", "평일 오후 7시", "저녁 피크 전 평소 점검 (이상 없음)"], ["drop", "트래픽 급감", "국내 연동(IX)이 갑자기 빠짐: 원인 확인과 조치"], ["surge", "트래픽 폭주", "월드컵 8강: 사전 연락·분산·모니터링"], ["temp", "서버 온도 변화", "분당 IDC_B_R03 냉각 이상: 육안점검·터미널 확인·복구"]];
+const SCN_LIST = [["calm", "평일 오후 7시", "저녁 피크 전 평소 점검 (이상 없음)"], ["drop", "트래픽 급감", "국내 연동(IX)이 갑자기 빠짐: 원인 확인과 조치"], ["surge", "트래픽 폭주", "월드컵 8강: 사전 연락·분산·모니터링"], ["temp", "서버실 온도 변화", "분당 IDC_B_R03 냉각 이상: 육안점검·터미널 확인·복구"]];
 let scn = null;
 function stopScn() { if (scn && scn.timer) clearInterval(scn.timer); scn = null; HL.clear(); }
 function scnSetView() {
@@ -997,8 +957,8 @@ $("#homeLink").addEventListener("click", e => {   // 제목을 누르면 관제(
 const qs = new URLSearchParams(location.search), h0 = location.hash.slice(1);
 if (qs.get("popup") === "term") {
   document.body.classList.add("popup");
-  showTab("term"); termConnect(qs.get("dev"), qs.get("server"));
-  document.title = `${qs.get("server")} 터미널 (가상)`;
+  showTab("term"); termConnect(qs.get("dev"));
+  document.title = `${qs.get("dev")} 터미널 (가상)`;
   $("#termIn").focus();
 } else {
   showTab(["monitor", "monthly", "event", "room", "visit", "term"].includes(h0) ? h0 : "monitor");

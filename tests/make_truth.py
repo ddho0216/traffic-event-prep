@@ -38,9 +38,9 @@ def build() -> dict:
         noise.append({"id": eid, "name": name, "start": fmt(kick), "end": fmt(end), "links": links})
 
     info = {
-        "server_down": {"server": f"{g.SERVER_DOWN[0]}_S{g.SERVER_DOWN[1]}", "start": fmt(g.SERVER_DOWN[2]), "end": fmt(g.SERVER_DOWN[3]),
-                        "why": "과열로 서버 한 대가 꺼짐 (LED로 확인)"},
-        "hdd_warn": {"server": f"{g.HDD_WARN[0]}_S{g.HDD_WARN[1]}", "why": "디스크 경고가 계속 켜져 있음 (교체 대기 가정)"},
+        "device_down": {"device": g.DEVICE_DOWN[0], "start": fmt(g.DEVICE_DOWN[1]), "end": fmt(g.DEVICE_DOWN[2]),
+                        "why": "과열로 장비 한 대가 꺼짐 (LED로 확인)"},
+        "fan_warn": {"device": g.FAN_WARN, "why": "팬 경고가 계속 켜져 있음 (교체 대기 가정)"},
     }
     return {
         "version": 1,
@@ -74,8 +74,8 @@ def markdown(t: dict) -> str:
     for n in t["expected_noise"]:
         L.append(f"| {n['id']} | {n['name']} | {n['start']} | {n['end']} | {', '.join(n['links'])} |")
     L += ["", "## 3. 알림은 아니지만 화면(LED)으로 보이는 것", "",
-          f"- 서버 꺼짐: {t['info']['server_down']['server']}, {t['info']['server_down']['start']} ~ {t['info']['server_down']['end']} ({t['info']['server_down']['why']})",
-          f"- 디스크 경고: {t['info']['hdd_warn']['server']} ({t['info']['hdd_warn']['why']})",
+          f"- 장비 꺼짐: {t['info']['device_down']['device']}, {t['info']['device_down']['start']} ~ {t['info']['device_down']['end']} ({t['info']['device_down']['why']})",
+          f"- 팬 경고: {t['info']['fan_warn']['device']} ({t['info']['fan_warn']['why']})",
           "", "## 4. 합격 기준", "",
           "- 1번 사건을 전부 잡는다 (놓침 0)",
           "- 1번과 2번이 아닌 \"확인 필요\" 알림이 없다 (오탐 0)",

@@ -86,9 +86,9 @@ tr.sel td{background:#1d2a36}
 .rhd{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
 .tmp{font-family:var(--mono);font-size:13px}
 .tmp.ok{color:var(--ok)}.tmp.warn{color:var(--warn)}.tmp.hot,.tmp.crit{color:var(--crit)}
-.srv{display:flex;align-items:center;gap:5px;background:var(--panel2);border:1px solid var(--line);border-radius:2px;padding:4px 6px;margin-bottom:4px;font-size:12px}
-.srv .sname{margin-left:4px;font-family:var(--mono);font-size:11.5px}
-.srv .role{margin-left:auto;color:var(--muted)}
+.rdev{display:flex;align-items:center;gap:5px;background:var(--panel2);border:1px solid var(--line);border-radius:2px;padding:4px 6px;margin-bottom:4px;font-size:12px}
+.rdev .sname{margin-left:4px;font-family:var(--mono);font-size:11.5px}
+.rdev .role{margin-left:auto;color:var(--muted)}
 .led{width:9px;height:9px;border-radius:50%;display:inline-block;background:#2b3640}
 .led.ok{background:var(--ok);box-shadow:0 0 5px #4ea36a88}
 .led.warn{background:var(--warn);box-shadow:0 0 5px #d9b13b88}
@@ -98,8 +98,9 @@ tr.sel td{background:#1d2a36}
 @keyframes blink{50%{opacity:.25}}
 @media(prefers-reduced-motion:reduce){.led.blink{animation:none}}
 
-.srv[data-server]{cursor:pointer}
-.srv[data-server]:hover,.srv[data-server]:focus-visible{border-color:var(--accent);outline:none}
+.rdev[data-dev]{cursor:pointer}
+.rdev.cisco{padding:14px 6px}
+.rdev[data-dev]:hover,.rdev[data-dev]:focus-visible{border-color:var(--accent);outline:none}
 .cfggrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
 .cfggrid input[type=number]{width:80px}
 header.top h1 a{color:inherit;text-decoration:none}

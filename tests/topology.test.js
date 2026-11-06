@@ -1,4 +1,4 @@
-// 설계도 일관성 시험: 장비·연결표가 서로 맞고 현장 설명(Juniper 주력, Cisco 4대, Huawei 소형 다수, 서초 중앙 백본)과 맞는지 확인한다.
+// 설계도 일관성 시험: 장비·연결표가 서로 맞고 현장 설명(Juniper 주력, Cisco 4대, 화웨이 없음, 서초 중앙 백본, 랙 규칙, 고객사 접속)과 맞는지 확인한다.
 // 실행: node --test "tests/*.test.js"
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -12,10 +12,10 @@ const dev = Object.fromEntries(T.devices.map(d => [d.id, d]));
 
 test('장비 이름이 겹치지 않는다', () => assert.equal(ids.size, T.devices.length));
 
-test('이름 규칙: IDC_<센터 코드 B/S/G/A>_<FS/FR/AS><번호>이고, 종류가 제조사와 맞다 (FS Juniper, FR Cisco, AS Huawei)', () => {
-  const kind = { juniper: 'FS', cisco: 'FR', huawei: 'AS' };
+test('이름 규칙: IDC_<센터 코드 B/S/G/A>_<FS/FR><번호>이고, 종류가 제조사와 맞다 (FS Juniper, FR Cisco)', () => {
+  const kind = { juniper: 'FS', cisco: 'FR' };
   for (const d of T.devices) {
-    const m = d.id.match(/^IDC_([BSGA])_(FS|FR|AS)(\d+)$/);
+    const m = d.id.match(/^IDC_([BSGA])_(FS|FR)(\d+)$/);
     assert.ok(m, `${d.id}: 이름 규칙에 안 맞음`);
     assert.equal(m[2], kind[d.vendor], `${d.id}: 종류와 제조사가 안 맞음`);
   }
@@ -42,15 +42,15 @@ test('장비 하나에서 같은 포트를 두 번 쓰지 않는다', () => {
   }
 });
 
-test('포트 이름이 제조사 형식과 맞다 (Juniper xe-, Cisco Te, Huawei XGigabitEthernet)', () => {
-  const re = { juniper: /^xe-\d+\/\d+\/\d+$/, cisco: /^Te\d+\/\d+\/\d+$/, huawei: /^XGigabitEthernet\d+\/\d+\/\d+$/ };
+test('포트 이름이 제조사 형식과 맞다 (Juniper xe-, Cisco Te)', () => {
+  const re = { juniper: /^xe-\d+\/\d+\/\d+$/, cisco: /^Te\d+\/\d+\/\d+$/ };
   for (const l of T.links) for (const [d, port] of [[l.a, l.ap], [l.b, l.bp]]) if (dev[d]) assert.match(port, re[dev[d].vendor], `${d} ${port}`);
 });
 
 test('연결 이름(회선)이 겹치지 않고, 규칙(IDC_센터_장비_용도)을 따른다', () => {
   const names = T.links.map(l => l.link);
   assert.equal(new Set(names).size, names.length);
-  for (const n of names) assert.match(n, /^IDC_[BSGA]_(FS|FR|AS)\d+_[A-Z]+\d*$/, n);
+  for (const n of names) assert.match(n, /^IDC_[BSGA]_(FS|FR)\d+_[A-Z]+\d*$/, n);
 });
 
 test('그래프의 회선 8개가 모두 연결표에 있다', () => {
@@ -62,15 +62,53 @@ test('연결표의 용량이 그래프 회선 용량과 같다', () => {
   for (const l of data.links) assert.equal(T.links.find(x => x.link === l.id).gbps, l.cap, l.id);
 });
 
-test('모든 랙에 랙 스위치가 하나씩 있다', () => {
-  for (const r of data.racks) assert.equal(T.devices.filter(d => d.rack === r.id).length, 1, `랙 ${r.id}`);
+test('모든 장비는 랙 하나에 들어 있고, 랙 이름의 센터 코드가 장비와 같다', () => {
+  const racks = new Set(data.racks.map(r => r.id));
+  for (const d of T.devices) {
+    assert.ok(racks.has(d.rack), `${d.id}: 랙 ${d.rack}이 서버실 데이터에 없음`);
+    assert.equal(d.rack.split('_')[1], d.id.split('_')[1], `${d.id}: 랙(${d.rack})과 센터 코드가 다름`);
+  }
 });
 
-test('현장 설명과 맞다: Juniper가 가장 많고, Cisco는 백본 4대, Huawei는 소형이 여러 대', () => {
-  assert.ok(count('juniper') >= count('huawei') && count('juniper') > count('cisco'), `J${count('juniper')} H${count('huawei')} C${count('cisco')}`);
+test('랙 규칙: Cisco는 랙 하나를 혼자 쓰고, Juniper는 랙당 최대 2대, 중앙 백본(대형)도 랙당 1대', () => {
+  const by = {}; T.devices.forEach(d => (by[d.rack] = by[d.rack] || []).push(d));
+  for (const [rack, list] of Object.entries(by)) {
+    assert.ok(list.length <= 2, `${rack}: 2대 초과`);
+    if (list.some(d => d.vendor === 'cisco' || d.tier === 'core')) assert.equal(list.length, 1, `${rack}: 대형 장비는 랙을 혼자 써야 함`);
+  }
+});
+
+test('설계도의 랙 배치 = 서버실 데이터의 랙 배치 (같은 장비, 같은 랙)', () => {
+  for (const r of data.racks) {
+    const fromTopo = T.devices.filter(d => d.rack === r.id).map(d => d.id).sort();
+    assert.deepEqual(r.devices.map(d => d.id).sort(), fromTopo, `랙 ${r.id}`);
+    for (const d of r.devices) assert.equal(d.vendor, dev[d.id].vendor, d.id);
+  }
+});
+
+test('현장 설명과 맞다: Juniper가 가장 많고, Cisco는 백본 4대, 화웨이는 없다', () => {
+  assert.ok(count('juniper') > count('cisco'), `J${count('juniper')} C${count('cisco')}`);
   assert.equal(count('cisco'), 4, 'Cisco는 4대');
-  assert.ok(count('huawei') >= 5, 'Huawei 소형 장비가 적음');
+  assert.equal(T.devices.filter(d => !['juniper', 'cisco'].includes(d.vendor)).length, 0, 'Juniper·Cisco 말고는 없어야 함');
   for (const d of T.devices.filter(x => x.vendor === 'cisco')) assert.match(d.role, /백본/, `${d.id}는 백본이어야 함`);
+});
+
+test('고객사: 13곳 모두 접속 장비가 하나씩 있고, 그 장비는 고객사 회선이 있는 센터에 있다', () => {
+  assert.equal(T.customers.length, 13);
+  const keys = new Set(T.customers.map(c => c.key)); assert.equal(keys.size, 13);
+  const linkIds = new Set(T.links.map(l => l.link));
+  for (const c of T.customers) {
+    assert.ok(c.links.length >= 1 && c.links.every(l => linkIds.has(l)), `${c.name}: 회선이 설계도에 없음`);
+    const hosts = T.devices.filter(d => (d.customers || []).includes(c.key));
+    assert.equal(hosts.length, 1, `${c.name}: 접속 장비가 정확히 하나여야 함`);
+    assert.equal(hosts[0].id.split('_')[1], c.links[0].split('_')[1], `${c.name}: 접속 장비의 센터와 첫 회선의 센터가 다름`);
+    assert.equal(hosts[0].vendor, 'juniper');
+  }
+  for (const d of T.devices) for (const k of d.customers || []) assert.ok(keys.has(k), `${d.id}: 없는 고객사 ${k}`);
+});
+
+test('고객 접속 장비는 장비마다 고객사 1~3곳을 받는다 (장비 하나에 너무 몰리지 않음)', () => {
+  for (const d of T.devices.filter(x => x.customers)) assert.ok(d.customers.length >= 1 && d.customers.length <= 3, d.id);
 });
 
 test('분당은 장비가 가장 많다', () => {
@@ -122,24 +160,12 @@ test('센터 이름 목록(centers)이 장비의 센터와 맞다', () => {
   assert.deepEqual(Object.values(T.centers).sort(), [...new Set(T.devices.map(d => d.center))].sort());
 });
 
-test('동기화: 센터마다 데이터의 랙 = 설계도의 랙 스위치가 맡은 랙 (이름·센터 일치)', () => {
-  for (const code of Object.keys(T.centers)) {
-    const racks = data.racks.filter(r => r.id.split('_')[1] === code).map(r => r.id).sort();
-    const tors = T.devices.filter(d => d.rack && d.id.split('_')[1] === code).map(d => d.rack).sort();
-    assert.deepEqual(tors, racks, `${code}: 서버실의 랙과 설계도의 랙 스위치가 다름`);
-  }
-  for (const d of T.devices.filter(x => x.rack)) assert.equal(d.rack.split('_')[1], d.id.split('_')[1], `${d.id}: 맡은 랙(${d.rack})과 센터 코드가 다름`);
-});
-
-test('동기화: 센터마다 랙이 있다 (분당 6, 서초 6, 구로 4, 안산 4)', () => {
+test('동기화: 센터마다 장비 수에 맞는 랙이 있다 (분당 6, 서초 4, 구로 2, 안산 2)', () => {
   const n = c => data.racks.filter(r => r.id.split('_')[1] === c).length;
-  assert.deepEqual([n('B'), n('S'), n('G'), n('A')], [6, 6, 4, 4]);
-});
-
-test('동기화: 서버 이름은 <랙 이름>_S<번호>이고 서버마다 랙 스위치 포트가 하나 필요하다 (랙 스위치는 서버 4대를 받는다)', () => {
-  for (const r of data.racks) {
-    assert.equal(r.servers.length, 4, r.id);
-    for (const sv of r.servers) assert.equal(sv.name, `${r.id}_S${sv.slot}`);
+  assert.deepEqual([n('B'), n('S'), n('G'), n('A')], [6, 4, 2, 2]);
+  for (const code of Object.keys(T.centers)) {
+    const used = new Set(T.devices.filter(d => d.id.split('_')[1] === code).map(d => d.rack));
+    assert.equal(used.size, n(code), `${code}: 빈 랙이 있거나 랙이 모자람`);
   }
 });
 
@@ -150,8 +176,8 @@ test('동기화: 그래프 회선의 센터 코드가 설계도 A장비의 센�
   }
 });
 
-test('동기화: 랙 스위치는 같은 센터의 백본에 올라간다', () => {
-  for (const d of T.devices.filter(x => x.rack)) {
+test('동기화: 고객 접속 장비는 같은 센터의 백본에 올라간다', () => {
+  for (const d of T.devices.filter(x => x.customers)) {
     const up = T.links.find(l => l.b === d.id && dev[l.a] && dev[l.a].center === d.center);
     assert.ok(up, `${d.id}: 같은 센터 백본으로 가는 업링크가 없음`);
   }

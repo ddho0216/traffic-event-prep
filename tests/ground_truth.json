@@ -129,15 +129,15 @@
   }
  ],
  "info": {
-  "server_down": {
-   "server": "IDC_B_R03_S2",
+  "device_down": {
+   "device": "IDC_B_FS6",
    "start": "2026-10-26 16:05",
    "end": "2026-10-26 16:25",
-   "why": "과열로 서버 한 대가 꺼짐 (LED로 확인)"
+   "why": "과열로 장비 한 대가 꺼짐 (LED로 확인)"
   },
-  "hdd_warn": {
-   "server": "IDC_B_R02_S3",
-   "why": "디스크 경고가 계속 켜져 있음 (교체 대기 가정)"
+  "fan_warn": {
+   "device": "IDC_B_FS4",
+   "why": "팬 경고가 계속 켜져 있음 (교체 대기 가정)"
   }
  },
  "decisions": [

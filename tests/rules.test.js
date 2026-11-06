@@ -82,26 +82,26 @@ test('랙 온도 단계 경계: 27 주의 / 30 경고 / 33 위험', () => {
   for (const [t, want] of table) assert.equal(Lib.tempLevel(t, {}), want, `${t}°C`);
 });
 
-test('서버 LED 상태: 30°C부터 주황, 33°C부터 빨강', () => {
-  const sv = { hddWarn: false };
+test('장비 LED 상태: 30°C부터 주황, 33°C부터 빨강', () => {
+  const dv = { fanWarn: false };
   for (const [t, want] of [[29.9, 'ok'], [30, 'warn'], [32.9, 'warn'], [33, 'crit']])
-    assert.equal(Lib.serverLed(t, sv, Lib.parseT('2026-10-22T12:00'), {}).status, want, `${t}°C`);
+    assert.equal(Lib.deviceLed(t, dv, Lib.parseT('2026-10-22T12:00'), {}).status, want, `${t}°C`);
 });
 
-test('서버 LED 디스크: 경고 서버는 항상 주황, 아니면 초록', () => {
+test('장비 LED 팬: 경고 장비는 항상 주황, 아니면 초록', () => {
   const ms = Lib.parseT('2026-10-22T12:00');
-  assert.equal(Lib.serverLed(22, { hddWarn: true }, ms, {}).hdd, 'warn');
-  assert.equal(Lib.serverLed(22, { hddWarn: false }, ms, {}).hdd, 'ok');
+  assert.equal(Lib.deviceLed(22, { fanWarn: true }, ms, {}).fan, 'warn');
+  assert.equal(Lib.deviceLed(22, { fanWarn: false }, ms, {}).fan, 'ok');
 });
 
-test('서버 꺼짐 경계: 시작 시각은 꺼짐, 끝 시각은 켜짐', () => {
-  const sv = { hddWarn: false, downStart: '2026-10-26T16:05', downEnd: '2026-10-26T16:25' };
-  const at = s => Lib.serverLed(22, sv, Lib.parseT(s), {});
+test('장비 꺼짐 경계: 시작 시각은 꺼짐, 끝 시각은 켜짐', () => {
+  const dv = { fanWarn: false, downStart: '2026-10-26T16:05', downEnd: '2026-10-26T16:25' };
+  const at = s => Lib.deviceLed(22, dv, Lib.parseT(s), {});
   assert.equal(at('2026-10-26T16:00').power, true);
   assert.equal(at('2026-10-26T16:05').power, false);
   assert.equal(at('2026-10-26T16:20').power, false);
   assert.equal(at('2026-10-26T16:25').power, true);
-  assert.deepEqual(at('2026-10-26T16:10'), { power: false, status: 'crit', hdd: 'off' });
+  assert.deepEqual(at('2026-10-26T16:10'), { power: false, status: 'crit', fan: 'off' });
 });
 
 test('랙 온도 경고 구간: 30.0 이상만 구간으로 잡는다', () => {
@@ -110,9 +110,9 @@ test('랙 온도 경고 구간: 30.0 이상만 구간으로 잡는다', () => {
   assert.deepEqual(r.map(a => [a.s, a.e, a.max]), [[1, 2, 30.1], [4, 4, 31]]);
 });
 
-// 아직 해결 못 한 불일치: 랙 이름 옆 색은 27°C부터 "주의"인데 서버 LED 상태는 30°C부터 주황이다.
-test('서버 LED 상태도 27°C부터 주의(주황)다 (랙 색 기준과 같다)', { todo: '2순위에서 기준 통일' }, () => {
+// 아직 해결 못 한 불일치: 랙 이름 옆 색은 27°C부터 "주의"인데 장비 LED 상태는 30°C부터 주황이다.
+test('장비 LED 상태도 27°C부터 주의(주황)다 (랙 색 기준과 같다)', { todo: '2순위에서 기준 통일' }, () => {
   const lvl = Lib.tempLevel(27.5, {});
   assert.equal(lvl, 'warn');
-  assert.equal(Lib.serverLed(27.5, { hddWarn: false }, Lib.parseT('2026-10-22T12:00'), {}).status, 'warn');
+  assert.equal(Lib.deviceLed(27.5, { fanWarn: false }, Lib.parseT('2026-10-22T12:00'), {}).status, 'warn');
 });

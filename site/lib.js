@@ -74,11 +74,11 @@
     const x = Object.assign({}, TEMP_DEFAULTS, th);
     return t >= x.crit ? "crit" : t >= x.hot ? "hot" : t >= x.warn ? "warn" : "ok";
   }
-  function serverLed(temp, sv, ms, th) {   // 서버 LED 3개: 전원(켜짐 여부), 상태(ok/warn/crit), 디스크(ok/warn/off)
+  function deviceLed(temp, dv, ms, th) {   // 장비 LED 3개: 전원(켜짐 여부), 상태(ok/warn/crit), 팬(ok/warn/off)
     const x = Object.assign({}, TEMP_DEFAULTS, th);
-    const down = !!sv.downStart && ms >= parseT(sv.downStart) && ms < parseT(sv.downEnd);
-    if (down) return { power: false, status: "crit", hdd: "off" };
-    return { power: true, status: temp >= x.crit ? "crit" : temp >= x.hot ? "warn" : "ok", hdd: sv.hddWarn ? "warn" : "ok" };
+    const down = !!dv.downStart && ms >= parseT(dv.downStart) && ms < parseT(dv.downEnd);
+    if (down) return { power: false, status: "crit", fan: "off" };
+    return { power: true, status: temp >= x.crit ? "crit" : temp >= x.hot ? "warn" : "ok", fan: dv.fanWarn ? "warn" : "ok" };
   }
   function detectRoom(racks, th) {   // 입구 온도가 경고(hot) 이상인 구간
     const x = Object.assign({}, TEMP_DEFAULTS, th), res = [];
@@ -89,5 +89,5 @@
     return res.sort((a, b) => a.s - b.s);
   }
 
-  return { PER_DAY, DEFAULTS, TEMP_DEFAULTS, parseT, runs, median, slotMedians, detectTraffic, tempLevel, serverLed, detectRoom };
+  return { PER_DAY, DEFAULTS, TEMP_DEFAULTS, parseT, runs, median, slotMedians, detectTraffic, tempLevel, deviceLed, detectRoom };
 });
