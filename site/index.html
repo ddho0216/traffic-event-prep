@@ -40,22 +40,29 @@
 </header>
 
 <main>
+<div class="scn" id="scnBar" hidden>
+  <div class="scn-top">
+    <b id="scnTitle"></b>
+    <span class="muted">가상 시각 <span id="scnTime" class="mono"></span></span>
+    <div class="scn-prog"><div id="scnProg"></div></div>
+    <button class="btn sm" id="scnPause">일시정지</button>
+    <button class="btn sm" id="scnSkip">끝까지</button>
+    <button class="btn sm" id="scnClose">닫고 현재로</button>
+  </div>
+  <ol class="scn-steps" id="scnSteps"></ol>
+</div>
 <!-- 1. 관제 -->
 <section class="tab on" id="tab-monitor">
   <div class="toolbar">
     <label>기준 시각 <input type="datetime-local" id="endTime"></label>
     <button class="btn" id="prev" title="한 창 뒤로">&lsaquo; 이전</button>
     <button class="btn" id="next" title="한 창 앞으로">다음 &rsaquo;</button>
+    <button class="btn" id="goNow" title="가상 현재 시각(10/22 21:00)으로 돌아가기">현재로</button>
     <label>고객사 <select id="cust"></select></label>
     <label>창 <select id="win"><option value="12">1시간</option><option value="36">3시간</option><option value="72">6시간</option><option value="288">24시간</option></select></label>
     <label>Y축 <select id="ymode"><option value="cap">회선 용량</option><option value="auto">자동 확대</option></select></label>
     <span class="sp"></span>
-    <span class="muted">빠른 이동</span>
-    <button class="btn" data-jump="2026-10-22T21:00">평소 저녁</button>
-    <button class="btn" data-jump="2026-10-29T03:20">새벽 급증</button>
-    <button class="btn" data-jump="2026-10-23T20:35">급감 (IX-1)</button>
-    <button class="btn" data-jump="2026-10-21T14:35">회선 다운 (B1)</button>
-    <select id="jumpEv"></select>
+    <span class="scn-wrap"><button class="btn" id="scnBtn" aria-expanded="false" title="몇 초 안에 상황과 조치가 흘러가는 안내 재생">시나리오</button><div class="menu" id="scnMenu" hidden></div></span>
     <button class="btn primary" id="csvAll">전체 CSV 내려받기</button>
   </div>
   <p class="note">파란 띠 = 경기 시간(킥오프~종료, 점선), 밝은 띠 = 하이드레이션 타임, 회색 띠 = 하프타임. 모든 일정·수치는 가상입니다.</p>

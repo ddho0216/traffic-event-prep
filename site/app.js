@@ -87,7 +87,9 @@ function showTab(name) {
 $("#tabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) showTab(b.dataset.tab); });
 
 /* ---------- 1. 관제 ---------- */
-const state = { end: idxOf(parseT("2026-10-22T21:00")), win: 12, ymode: "cap", cust: "all" };
+const NOW_IDX = idxOf(parseT("2026-10-22T21:00"));   // 가상 "현재" 시각: 평소 저녁
+const HL = new Set();   // 시나리오가 강조 표시하는 링크·랙
+const state = { end: NOW_IDX, win: 12, ymode: "cap", cust: "all" };
 const custOf = id => CUSTOMERS.filter(c => c.links.includes(id)).map(c => c.name);
 
 function niceMax(v) {
@@ -165,7 +167,7 @@ function renderPanel(l) {
   let wmax = 0; for (let i = s; i <= e; i++) wmax = Math.max(wmax, l.out[i]);
   let dropped = false; for (let i = s; i <= e; i++) if (DROP[l.id][i]) { dropped = true; break; }
   const util = l.out[e] / l.cap, wutil = wmax / l.cap, cls = wutil >= 0.8 || dropped ? "crit" : wutil >= 0.7 ? "warn" : "";
-  root.className = "panel " + cls;
+  root.className = "panel " + cls + (HL.has(l.id) ? " hl" : "");
   $(".chip", root).textContent = wutil >= 0.8 ? "경고" : dropped ? "급감" : wutil >= 0.7 ? "주의" : "정상";
   $(".now", root).innerHTML = `<span class="o">OUT ${l.out[e].toFixed(1)}G</span><span class="i">IN ${l.in[e].toFixed(1)}G</span><span class="muted">${(util * 100).toFixed(0)}% · 창 최대 out ${wmax.toFixed(1)}G</span>`;
 }
@@ -197,12 +199,7 @@ const fileStamp = ms => ymdhm(ms).replace(/[- :]/g, "").slice(0, 12);
   $("#cust").innerHTML = '<option value="all">전체</option>' + CUSTOMERS.map(c => `<option>${c.name}</option>`).join("") + '<option value="none">공용 (고객사 없음)</option>';
   $("#cust").onchange = e => { state.cust = e.target.value; renderAll(); };
   $("#ymode").onchange = e => { state.ymode = e.target.value; renderAll(); };
-  $("#jumpEv").innerHTML = '<option value="">월드컵 경기 보기…</option>' + DATA.events.map((ev, i) => `<option value="${i}">${esc(ev.name)} (${md(parseT(ev.start))})</option>`).join("");
-  $("#jumpEv").onchange = e => {
-    if (e.target.value === "") return;
-    const ev = DATA.events[+e.target.value]; state.win = 36; $("#win").value = "36"; state.end = idxOf(parseT(ev.start)) + 25; e.target.value = ""; renderAll();
-  };
-  $$("[data-jump]").forEach(b => b.onclick = () => { state.end = idxOf(parseT(b.dataset.jump)); renderAll(); });
+  $("#goNow").onclick = () => { stopScn(); goNow(); };
   $("#csvAll").onclick = () => { const [s, e] = viewRange(); downloadCsv(`traffic_all_${fileStamp(msOf(s))}_${fileStamp(msOf(e))}.csv`, csvOf(LINKS.filter(l => $("#p-" + l.id).style.display !== "none").map(l => l.id), s, e)); };
   $("#grid").addEventListener("click", ev => {
     const b = ev.target.closest(".csv"); if (!b) return;
@@ -588,8 +585,8 @@ const DEV_CMDS = {
 function findIf(d, name) { return d.ifs.find(f => f[0].toLowerCase() === String(name).toLowerCase()); }
 const VENDOR_ERR = { juniper: "                     ^\nunknown command.", cisco: "% Invalid input detected at '^' marker.", huawei: "Error: Unrecognized command found at '^' position." };
 const devNow = () => DEV[$("#devSel").value] || DEVICES[0];
-function runCmd(raw) {
-  const d = devNow(), cmd = raw.trim().replace(/\s+/g, " ");
+function runCmd(raw, dev) {
+  const d = dev || devNow(), cmd = raw.trim().replace(/\s+/g, " ");
   if (!cmd) return "";
   if (cmd === "?" || /^help$/i.test(cmd)) return "오른쪽의 '자주 쓰던 명령'을 참고하세요. 장비 종류에 맞는 명령만 동작합니다.";
   for (const [re, fn] of DEV_CMDS[d.vendor]) { const m = cmd.match(re); if (m) return fn(d, m); }
@@ -704,7 +701,7 @@ function renderServerRoom() {
   $("#srTime").value = isoLocal(msOf(i));
   $("#racks").innerHTML = RACKS.map(r => {
     const t = r.temp[i];
-    return `<div class="rack ${tempCls(t)}"><div class="rhd"><b>${r.id}</b><span class="tmp ${tempCls(t)}">${t.toFixed(1)}°C</span></div>` +
+    return `<div class="rack ${tempCls(t)}${HL.has(r.id) ? " hl" : ""}" data-rack="${r.id}"><div class="rhd"><b>${r.id}</b><span class="tmp ${tempCls(t)}">${t.toFixed(1)}°C</span></div>` +
       r.servers.map(sv => `<div class="srv" data-server="${sv.name}" role="button" tabindex="0" title="누르면 이 서버가 연결된 스위치 터미널이 새 창으로 열립니다 (가상)">${ledHtml(srvState(r, sv, i))}<span class="sname">${sv.name}</span><span class="role">${sv.role}</span></div>`).join("") +
       spark(r.temp, Math.max(0, i - (cfg.range * 12 - 1)), i) + `<div class="note" style="margin:2px 0 0">최근 ${cfg.range}시간 · 점선 ${TEMP_WARN}/${TEMP_HOT}°C</div></div>`;
   }).join("");
@@ -785,6 +782,147 @@ function applyRoomCfg(save) {
   }));
   $("#cfgReset").onclick = () => { Object.assign(cfg, ROOM_DEFAULT); $("#cfgMsg").textContent = ""; applyRoomCfg(true); if (playTimer) startPlay(); };
   applyRoomCfg(false);
+})();
+
+/* ---------- 시나리오: 몇 초 안에 상황이 흘러가고 조치까지 보여 주는 안내 재생 ---------- */
+// 현재(가상 10/22 21:00)로 돌아가기: 1시간 창, 전체 고객사, 서버실도 같은 시각
+function goNow() {
+  state.end = NOW_IDX; state.win = 12; state.ymode = "cap"; state.cust = "all";
+  $("#win").value = "12"; $("#ymode").value = "cap"; $("#cust").value = "all";
+  HL.clear(); sr.end = NOW_IDX; renderAll(); renderServerRoom();
+}
+const SCN_TICK = 180, SCN_HOLD = 8;   // 5분씩 0.18초, 단계가 나오면 약 1.4초 멈춤
+const KIND_CLS = { 감지: "crit", 확인: "", 조치: "warn", 결과: "ok" };
+const isoIdx = t => idxOf(parseT(t));
+const hhmm = i => hm(msOf(i));
+const g1 = v => v.toFixed(1);
+const outAt = (id, t) => LINK[id].out[isoIdx(t)], inAt = (id, t) => LINK[id].in[isoIdx(t)];
+const utilAt = (id, t) => outAt(id, t) / LINK[id].cap * 100;
+const prevDay = t => isoLocal(parseT(t) - 86400000);
+const runOn = (devId, cmd) => `${DEV[devId].prompt} ${cmd}\n${runCmd(cmd, DEV[devId])}`;
+
+// 숫자는 전부 데이터에서 읽어 문장을 만든다 (고정 문구 아님)
+function buildScenarios() {
+  const TD = Lib.TEMP_DEFAULTS;
+
+  // 1) 평일 오후 7시: 평소 점검
+  const calmFrom = "2026-10-22T18:30", c2 = "2026-10-22T18:45", c3 = "2026-10-22T19:00", c4 = "2026-10-22T19:30";
+  const maxU = t => Math.max(...LINKS.map(l => l.out[isoIdx(t)] / l.cap)) * 100;
+  const maxT = t => Math.max(...RACKS.map(r => r.temp[isoIdx(t)]));
+  const hdd = RACKS.flatMap(r => r.servers.filter(sv => sv.hddWarn).map(sv => sv.name));
+  const near = ALERTS.filter(a => Math.abs(a.s - isoIdx(c4)) <= 12).length + Lib.detectRoom(RACKS, TD).filter(a => Math.abs(a.s - isoIdx(c4)) <= 12).length;
+  const calm = { name: "평일 오후 7시", tab: "monitor", win: 12, from: calmFrom, to: "2026-10-22T19:40", steps: [
+    { at: calmFrom, kind: "확인", title: `그래프 8개 확인: 가장 높은 사용률 ${maxU(calmFrom).toFixed(0)}% (경고선 80% 아래)`, focus: LINKS.map(l => l.id) },
+    { at: c2, kind: "확인", title: `서버실 확인: 랙 입구 온도 최고 ${g1(maxT(c2))}°C (주의 기준 ${TD.warn}°C 아래), LED 정상${hdd.length ? `, 디스크 주의 ${hdd.join(", ")}(교체 대기)` : ""}` },
+    { at: c3, kind: "확인", title: `저녁 피크로 올라가는 중: OUR-A out ${g1(outAt("OUR-A", calmFrom))}G → ${g1(outAt("OUR-A", c3))}G, 평소 범위`, focus: ["OUR-A"] },
+    { at: c4, kind: "결과", title: `이상 없음: 이 시각 전후 새 경고 ${near}건. 점검 기록을 남기고 다음 점검으로`, focus: [] }
+  ] };
+
+  // 2) 트래픽 급감: IX-1
+  const dropA = ALERTS.find(a => a.link === "IX-1" && a.kind.includes("급감"));
+  const dt = m => isoLocal(msOf(dropA.s) + m * 60000);   // 급감이 시작된 시각 기준 분
+  const pct = (outAt("IX-1", dt(0)) / outAt("IX-1", prevDay(dt(0))) * 100).toFixed(0);
+  const ixCust = CUSTOMERS.find(c => c.links.includes("IX-1")).name;
+  const dropMail = `제목: [안내] 국내 연동(IX-1) 트래픽 감소 확인 중\n\n${ixCust} 담당자님, 안녕하세요.\n${hhmm(dropA.s)}부터 국내 연동(IX-1) 트래픽이 평소의 ${pct}% 수준으로 줄어든 것을 확인했습니다.\n현재 일부 트래픽은 해외 연동(INTL-1)으로 우회되어 서비스는 유지되고 있습니다.\n상대 사업자에 확인을 요청했고, 진행 상황은 다시 안내드리겠습니다. (가상 메일)`;
+  const drop = { name: "트래픽 급감", tab: "monitor", win: 12, from: dt(-20), to: dt(60), steps: [
+    { at: dt(0), kind: "감지", title: `IX-1 out이 전날 같은 시각 ${g1(outAt("IX-1", prevDay(dt(0))))}G에서 ${g1(outAt("IX-1", dt(0)))}G로 급감 (평소의 ${pct}%). 종 알림에 '확인 필요'로 등록`, focus: ["IX-1"] },
+    { at: dt(5), kind: "확인", title: `같은 시각 INTL-1 out ${g1(outAt("INTL-1", dt(-5)))}G → ${g1(outAt("INTL-1", dt(5)))}G로 증가: 빠진 트래픽 일부가 해외 회선으로 우회 중으로 보임`, focus: ["IX-1", "INTL-1"] },
+    { at: dt(10), kind: "조치", title: "BB-EDGE에서 IX-1 포트(xe-0/0/2) 광값 확인", detail: runOn("BB-EDGE", "show interfaces diagnostics optics xe-0/0/2") + "\n\n→ 광 수신값이 정상 범위. 우리 쪽 광 문제는 아님", sum: `광 수신 ${DEV["BB-EDGE"].ifs.find(x => x[0] === "xe-0/0/2")[3].toFixed(2)} dBm, 알람 없음 → 정상. 우리 쪽 광 문제는 아님`, detailLabel: "터미널 출력 보기", focus: ["IX-1"] },
+    { at: dt(15), kind: "조치", title: `상대 IX 사업자에 확인 요청, 영향 고객사(${ixCust})에 상황 안내`, detail: dropMail, detailLabel: "고객사 안내 메일 보기" },
+    { at: dt(50), kind: "결과", title: `IX-1 회복: out ${g1(outAt("IX-1", dt(50)))}G (전날 같은 시각 ${g1(outAt("IX-1", prevDay(dt(50))))}G). 급감 구간 ${hhmm(dropA.s)}~${hhmm(dropA.e)} (${(dropA.e - dropA.s + 1) * 5}분)`, focus: ["IX-1", "INTL-1"] },
+    { at: dt(55), kind: "결과", title: "복구 안내 메일 발송, 경고 이력에 기록하고 마무리", focus: ["IX-1"] }
+  ] };
+
+  // 3) 트래픽 폭주: 월드컵 8강
+  const ev = DATA.events.find(e => e.name.includes("8강")), cc = evCalc(ev);
+  const kt = m => isoLocal(parseT(ev.start) + m * 60000);   // 킥오프 기준 분
+  const A = cc.rows.find(r => r.l.id === "OUR-A"), mv = cc.moves.find(m => m.r.l.id === "OUR-A");
+  let pk = cc.s; for (let i = cc.s; i <= cc.e; i++) if (LINK["OUR-A"].out[i] > LINK["OUR-A"].out[pk]) pk = i;
+  const surge = { name: "트래픽 폭주", tab: "monitor", win: 36, from: kt(-30), to: kt(130), steps: [
+    { at: kt(-30), kind: "조치", title: `사전 연락(전날 발송)한 통보문대로 고객사에 '이쪽으로 보내겠습니다' 안내 완료 (${ev.name})`, detail: evNoticeText(ev, cc), detailLabel: "고객사 통보문 보기", focus: ev.links },
+    { at: kt(-15), kind: "조치", title: mv ? `분산 시작: OUR-A 예상 ${A.exp.toFixed(0)}G(${(A.util * 100).toFixed(0)}%) → 약 ${Math.max(1, Math.ceil(mv.need))}G를 ${mv.best ? mv.best.c.l.id : "여유 회선"}로 보냄` : "분산이 필요한 링크 없음, 모니터링만", focus: ["OUR-A", "OUR-B"] },
+    { at: kt(0), kind: "확인", title: `킥오프: OUR-A ${utilAt("OUR-A", kt(0)).toFixed(0)}%에서 올라가는 중`, focus: ev.links },
+    { at: kt(25), kind: "확인", title: `하이드레이션 타임: OUR-A ${g1(outAt("OUR-A", kt(20)))}G → ${g1(outAt("OUR-A", kt(25)))}G로 잠깐 감소. 급감이 아니라 경기 일정으로 설명되는 하락`, focus: ["OUR-A"] },
+    { at: isoLocal(msOf(pk)), kind: "감지", title: `OUR-A 최고 ${(LINK["OUR-A"].out[pk] / LINK["OUR-A"].cap * 100).toFixed(0)}% (${g1(LINK["OUR-A"].out[pk])}G): 경고선 80% 도달. 분산 상태와 고객사 영향을 집중 확인`, focus: ["OUR-A"] },
+    { at: kt(115), kind: "확인", title: `경기 종료: 트래픽이 급락하는 것은 정상 (${g1(outAt("OUR-A", kt(110)))}G → ${g1(outAt("OUR-A", kt(120)))}G)`, focus: ["OUR-A"] },
+    { at: kt(125), kind: "결과", title: `사후 정리: OUR-A 예상 ${A.exp.toFixed(0)}G, 실제 최대 ${A.act.toFixed(0)}G (${((A.act / A.exp - 1) * 100).toFixed(0)}%). 다음에는 배율을 ×${(1 + (A.act - A.base) / refPeak(A.l)).toFixed(1)}로`, focus: [] }
+  ] };
+
+  // 4) 서버 온도 변화: A-03 냉각 이상
+  const R3 = RACKS.find(r => r.id === "A-03"), al = Lib.detectRoom(RACKS, TD).find(a => a.rack === "A-03");
+  const fc = R3.temp.findIndex((t, i) => i >= al.s && t >= TD.crit), sv = R3.servers.find(x => x.downStart);
+  const dMs = parseT(sv.downStart), tAt = i => g1(R3.temp[i]);
+  const temp = { name: "서버 온도 변화", tab: "room", from: "2026-10-26T14:30", to: "2026-10-26T17:20", steps: [
+    { at: isoLocal(msOf(al.s)), kind: "감지", title: `A-03 입구 온도 ${TD.hot}°C 이상 (${tAt(al.s)}°C): 온도 경고 등록`, focus: ["A-03"] },
+    { at: isoLocal(msOf(fc)), kind: "감지", title: `${TD.crit}°C 이상 (${tAt(fc)}°C): 서버 LED 상태가 빨강 깜박임`, focus: ["A-03"] },
+    { at: isoLocal(msOf(fc) + 15 * 60000), kind: "조치", title: "냉각기 점검 요청(티켓)과 육안점검 요청", focus: ["A-03"] },
+    { at: isoLocal(dMs), kind: "감지", title: `${sv.name} 과열로 꺼짐 (전원 LED 꺼짐)`, focus: ["A-03"] },
+    { at: isoLocal(dMs + 10 * 60000), kind: "조치", title: `터미널로 ${sv.name}이 연결된 스위치 포트 확인: 빛이 안 들어와서 서버가 꺼진 것으로 확인`, detail: runOn("SW-A-03", `show interfaces diagnostics optics xe-0/0/${sv.slot - 1}`), sum: `광 수신 ${DEV["SW-A-03"].ifs.find(x => x[1] === sv.name)[3].toFixed(2)} dBm, 수신 낮음 알람 켜짐 → 빛이 안 들어옴`, detailLabel: "터미널 출력 보기", focus: ["A-03"] },
+    { at: isoLocal(msOf(al.e) + 5 * 60000), kind: "확인", title: `냉각 복구: ${TD.hot}°C 아래로 내려옴 (${tAt(al.e + 1)}°C)`, focus: ["A-03"] },
+    { at: "2026-10-26T17:15", kind: "결과", title: `복구 완료 (${tAt(isoIdx("2026-10-26T17:15"))}°C). 육안점검 기록 남김: A-03 이상 있음 → 정상 복귀`, focus: ["A-03"] }
+  ] };
+
+  return { calm, drop, surge, temp };
+}
+const SCN_LIST = [["calm", "평일 오후 7시", "저녁 피크 전 평소 점검 (이상 없음)"], ["drop", "트래픽 급감", "IX-1이 갑자기 빠짐: 원인 확인과 조치"], ["surge", "트래픽 폭주", "월드컵 8강: 사전 연락·분산·모니터링"], ["temp", "서버 온도 변화", "A-03 냉각 이상: 육안점검·터미널 확인·복구"]];
+let scn = null;
+function stopScn() { if (scn && scn.timer) clearInterval(scn.timer); scn = null; HL.clear(); }
+function scnSetView() {
+  if (scn.def.tab === "monitor") { state.end = scn.idx; renderAll(); } else { sr.end = scn.idx; renderServerRoom(); }
+  if (scn.reveal) {   // 강조된 그래프가 막대에 가리거나 화면 밖이면 보이는 곳으로 스크롤
+    scn.reveal = false;
+    const el = $(scn.def.tab === "monitor" ? ".panel.hl" : ".rack.hl");
+    if (el) { const r = el.getBoundingClientRect(), top = $("#scnBar").getBoundingClientRect().bottom; if (r.top < top || r.bottom > innerHeight) el.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+  }
+}
+function scnShowDue() {
+  const due = scn.steps.filter(st => !st.shown && st.i <= scn.idx);
+  due.forEach(st => { st.shown = true; scn.done.push(st); if (st.focus) { HL.clear(); st.focus.forEach(f => HL.add(f)); scn.reveal = true; } });
+  if (due.length) { scn.hold = SCN_HOLD; scnRenderSteps(); }
+}
+function scnProgress() {
+  $("#scnTime").textContent = ymdhm(msOf(scn.idx));
+  $("#scnProg").style.width = (scn.finished ? 100 : (scn.idx - scn.i0) / Math.max(1, scn.i1 - scn.i0) * 100) + "%";
+  $("#scnTitle").textContent = `시나리오 · ${scn.def.name}${scn.finished ? " (끝)" : ""}`;
+  $("#scnPause").textContent = scn.paused ? "계속" : "일시정지"; $("#scnPause").disabled = scn.finished;
+}
+function scnRenderSteps() {
+  const last = scn.done.length - 1;
+  $("#scnSteps").innerHTML = scn.done.map((st, k) => `<li class="${k === last && !scn.finished ? "cur" : ""}"><span class="tag ${KIND_CLS[st.kind]}">${st.kind}</span> <b class="mono">${hhmm(st.i)}</b> ${esc(st.title)}${st.sum ? `<span class="muted"> → ${esc(st.sum)}</span>` : ""}${st.detail ? `<details><summary>${esc(st.detailLabel || "자세히")}</summary><pre>${esc(st.detail)}</pre></details>` : ""}</li>`).join("");
+  const ul = $("#scnSteps"); ul.scrollTop = ul.scrollHeight;
+}
+function scnFinish() { scn.finished = true; clearInterval(scn.timer); scn.timer = null; scnProgress(); scnRenderSteps(); }
+function scnTick() {
+  if (!scn || scn.paused || scn.finished) return;
+  if (scn.hold > 0) { scn.hold--; return; }
+  if (scn.idx >= scn.i1) { scnFinish(); return; }
+  scn.idx++; scnShowDue(); scnSetView(); scnProgress();
+}
+function startScn(id) {
+  stopScn();
+  const def = buildScenarios()[id];
+  const steps = def.steps.map(st => Object.assign({ i: isoIdx(st.at), shown: false }, st)).sort((a, b) => a.i - b.i);
+  scn = { def, steps, i0: isoIdx(def.from), i1: isoIdx(def.to), idx: isoIdx(def.from), done: [], hold: 0, paused: false, finished: false, timer: null };
+  state.cust = "all"; $("#cust").value = "all"; state.ymode = "cap"; $("#ymode").value = "cap";
+  if (def.win) { state.win = def.win; $("#win").value = String(def.win); }
+  showTab(def.tab);
+  $("#scnBar").hidden = false; $("#scnSteps").innerHTML = "";
+  scnShowDue(); scnSetView(); scnProgress();
+  scn.timer = setInterval(scnTick, SCN_TICK);
+}
+(function initScn() {
+  const menu = $("#scnMenu"), btn = $("#scnBtn");
+  menu.innerHTML = SCN_LIST.map(([id, name, desc]) => `<button data-scn="${id}">${name}<small>${desc}</small></button>`).join("");
+  const closeMenu = () => { menu.hidden = true; btn.setAttribute("aria-expanded", "false"); };
+  btn.addEventListener("click", e => { e.stopPropagation(); if (menu.hidden) { menu.hidden = false; btn.setAttribute("aria-expanded", "true"); } else closeMenu(); });
+  menu.addEventListener("click", e => { const b = e.target.closest("[data-scn]"); if (b) { closeMenu(); startScn(b.dataset.scn); } });
+  document.addEventListener("click", e => { if (!menu.hidden && !menu.contains(e.target) && e.target !== btn) closeMenu(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeMenu(); });
+  $("#scnPause").onclick = () => { if (scn && !scn.finished) { scn.paused = !scn.paused; scnProgress(); } };
+  $("#scnSkip").onclick = () => { if (!scn || scn.finished) return; scn.idx = scn.i1; scn.hold = 0; scnShowDue(); scnSetView(); scnFinish(); };
+  $("#scnClose").onclick = () => { stopScn(); $("#scnBar").hidden = true; showTab("monitor"); goNow(); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const setHdr = () => document.documentElement.style.setProperty("--hdr", $("header.top").offsetHeight + "px");   // 안내 막대를 헤더 아래에 붙여 두려고
+  setHdr(); window.addEventListener("resize", setHdr);
 })();
 
 /* ---------- 시작 ---------- */

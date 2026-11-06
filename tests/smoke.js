@@ -16,6 +16,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   await page.goto(url, { waitUntil: 'load' });
+  const goTo = async (iso, win) => { if (win) await page.selectOption('#win', String(win)); await page.fill('#endTime', iso); await page.press('#endTime', 'Tab'); await page.waitForTimeout(150); };
   await page.waitForTimeout(400);
 
   check('그래프 패널 8개', (await page.locator('.panel').count()) === 8);
@@ -51,16 +52,52 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('#bell'); await page.click('[data-np=alerts]');
   await page.locator('#alertTbl tr.click').first().click();
   check('알림 행을 누르면 닫히고 관제의 그 시각으로 이동 (10/21)', !(await page.locator('#notif').isVisible()) && (await page.locator('#tab-monitor').isVisible()) && (await page.locator('#endTime').inputValue()).startsWith('2026-10-21'));
-  await page.click('[data-jump="2026-10-23T20:35"]');
+  await goTo('2026-10-23T20:35');
   check('급감 구간에서 IX-1 패널에 급감 표시', (await page.locator('#p-IX-1 .chip').innerText()) === '급감');
-  await page.click('[data-jump="2026-10-21T14:35"]');
+  await goTo('2026-10-21T14:35');
   check('회선 다운 구간에서 CTR-B1 패널에 급감 표시', (await page.locator('#p-CTR-B1 .chip').innerText()) === '급감');
 
-  await page.selectOption('#jumpEv', '4');
-  await page.waitForTimeout(200);
+  await goTo('2026-10-30T22:05', 36);
   const marks = await page.locator('#p-OUR-A svg text', { hasText: '하프타임' }).count()
     + await page.locator('#p-OUR-A svg text', { hasText: '하이드레이션' }).count();
-  check('경기 보기에서 하이드레이션·하프타임 표시', marks >= 2, String(marks));
+  check('경기 시간대에서 하이드레이션·하프타임 표시', marks >= 2, String(marks));
+
+  // 빠른 이동 버튼은 없고, "현재로" 버튼 하나로 돌아온다
+  check('빠른 이동 버튼과 경기 보기 선택이 없다', (await page.locator('[data-jump]').count()) === 0 && (await page.locator('#jumpEv').count()) === 0 && !(await page.locator('#tab-monitor .toolbar').innerText()).includes('빠른 이동'));
+  await page.click('#goNow');
+  check('현재로 버튼: 가상 현재(10/22 21:00), 1시간 창으로 돌아옴', (await page.locator('#endTime').inputValue()) === '2026-10-22T21:00' && (await page.locator('#win').inputValue()) === '12');
+  for (const w of [1366, 1280]) {   // 폭이 좁아져도 위쪽 도구줄이 한 줄을 유지하는가
+    await page.setViewportSize({ width: w, height: 900 }); await page.waitForTimeout(150);
+    const spread = await page.evaluate(() => { const ys = [...document.querySelectorAll('#tab-monitor .toolbar > *')].filter(e => e.offsetParent).map(e => { const r = e.getBoundingClientRect(); return r.top + r.height / 2; }); return Math.max(...ys) - Math.min(...ys); });
+    check(`폭 ${w}px에서 위쪽 도구줄이 한 줄`, spread < 14, `높이 차 ${spread.toFixed(0)}px`);
+  }
+  await page.setViewportSize({ width: 1600, height: 900 });
+
+  // 시나리오 4가지: 시간이 흘러가고, 단계(감지·확인·조치·결과)가 나오고, 닫으면 현재로 돌아온다
+  const scenarios = [['calm', '평일 오후 7시', 4, ['그래프 8개 확인', '서버실 확인', '이상 없음']], ['drop', '트래픽 급감', 6, ['급감', 'INTL-1', '광값', '예시미디어', '회복']],
+    ['surge', '트래픽 폭주', 7, ['사전 연락', '분산', '하이드레이션', '경고선 80%', '사후 정리', '[사전 안내]']], ['temp', '서버 온도 변화', 7, ['온도 경고', '빨강 깜박임', '터미널', '냉각 복구', '-40.00 dBm']]];
+  for (const [id, name, n, words] of scenarios) {
+    await page.click('[data-tab=monitor]');
+    await page.click('#scnBtn'); await page.click(`#scnMenu [data-scn=${id}]`);
+    const t0 = await page.locator('#scnTime').innerText();
+    await page.waitForTimeout(2800);   // 첫 단계가 나오면 약 1.4초 멈추므로 그보다 길게 기다린다
+    const t1 = await page.locator('#scnTime').innerText();
+    check(`시나리오 "${name}": 시간이 자동으로 흘러감`, (await page.locator('#scnBar').isVisible()) && t0 !== t1, `${t0} -> ${t1}`);
+    await page.click('#scnSkip');
+    const txt = await page.locator('#scnSteps').textContent();
+    const cnt = await page.locator('#scnSteps li').count();
+    check(`시나리오 "${name}": 단계 ${n}개와 핵심 내용이 나옴`, cnt === n && words.every(w => txt.includes(w)), `단계 ${cnt}/${n}, 빠진 말: ${words.filter(w => !txt.includes(w)).join(',') || '없음'}`);
+    if (id === 'drop') {
+      check('급감 시나리오: IX-1 패널이 강조 표시됨', (await page.locator('#p-IX-1.hl').count()) === 1);
+      await page.waitForTimeout(1200);   // 자동 스크롤이 끝나길 기다림
+      const vis = await page.evaluate(() => { const r = document.querySelector('#p-IX-1').getBoundingClientRect(), bar = document.querySelector('#scnBar').getBoundingClientRect(); return { top: r.top, bottom: r.bottom, barBottom: bar.bottom, h: innerHeight }; });
+      check('급감 시나리오: 강조된 IX-1 패널이 안내 막대에 가리지 않고 화면 안에 보임', vis.top >= vis.barBottom - 2 && vis.bottom <= vis.h + 2, JSON.stringify(vis));
+      check('안내 막대 높이가 화면의 30% 이하 (그래프를 가리지 않음)', vis.barBottom <= vis.h * 0.30, `막대 아래 ${vis.barBottom.toFixed(0)}px / 화면 ${vis.h}px`);
+    }
+    if (id === 'temp') check('온도 시나리오: 서버실 탭으로 이동하고 A-03 랙이 강조 표시됨', (await page.locator('#tab-room').isVisible()) && (await page.locator('.rack.hl[data-rack="A-03"]').count()) === 1);
+    await page.click('#scnClose');
+    check(`시나리오 "${name}": 닫으면 관제 현재(10/22 21:00)로 돌아옴`, !(await page.locator('#scnBar').isVisible()) && (await page.locator('#tab-monitor').isVisible()) && (await page.locator('#endTime').inputValue()) === '2026-10-22T21:00');
+  }
 
   for (const t of ['monthly', 'event', 'room', 'visit', 'term']) {
     await page.click(`[data-tab=${t}]`);
