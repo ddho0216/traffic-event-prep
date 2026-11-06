@@ -19,7 +19,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const goTo = async (iso, win) => { if (win) await page.selectOption('#win', String(win)); await page.fill('#endTime', iso); await page.press('#endTime', 'Tab'); await page.waitForTimeout(150); };
   await page.waitForTimeout(400);
 
-  check('그래프 패널 9개', (await page.locator('.panel').count()) === 9);
+  check('그래프 패널 15개', (await page.locator('.panel').count()) === 15);
   check('가상 데이터 표시가 맨 위에 있음', (await page.locator('.badge').innerText()).includes('가상 데이터'));
 
   const box = await page.locator('#p-IDC_B_FS1_UP1 svg').boundingBox();
@@ -31,7 +31,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const [csv] = await Promise.all([page.waitForEvent('download'), page.click('#csvAll')]);
   const csvPath = await csv.path();
   const text = require('fs').readFileSync(csvPath, 'utf8').replace(/^﻿/, '');
-  check('전체 CSV 헤더와 108행(9회선 x 12점)', text.startsWith('time,link,in_gbps,out_gbps,out_util_pct') && text.trim().split('\n').length === 109);
+  check('전체 CSV 헤더와 180행(15회선 x 12점)', text.startsWith('time,link,in_gbps,out_gbps,out_util_pct') && text.trim().split('\n').length === 181);
 
   await page.selectOption('#cust', '샘플게임즈');
   check('고객사 선택 시 해당 그래프만 보임', (await page.locator('.panel:visible').count()) === 2);
@@ -175,9 +175,9 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('[data-tab=term]');
   const devCount = await page.locator('#devTbl tr.click').count();
   check('터미널·설계도는 센터 선택과 상관없이 전체 장비를 보여 줌 (서초를 골라도 120대)', devCount === (await page.evaluate(() => TOPOLOGY.devices.length)) && devCount === 120, String(devCount));
-  // 고객사 13곳, 모든 회선에 고객사가 있고, 제목은 길면 줄여서 보인다
+  // 고객사 19곳, 모든 회선에 고객사가 있고, 제목은 길면 줄여서 보인다
   const cust = await page.evaluate(() => ({ n: CUSTOMERS.length, keys: new Set(CUSTOMERS.map(c => c.key)).size, bad: CUSTOMERS.flatMap(c => c.links).filter(id => !LINK[id]), none: LINKS.filter(l => custOf(l.id).length === 0).map(l => l.id) }));
-  check('고객사 13곳(가상), 이름·키 중복 없음, 존재하지 않는 회선 없음, 고객사가 없는 회선 없음', cust.n === 13 && cust.keys === 13 && cust.bad.length === 0 && cust.none.length === 0, JSON.stringify(cust));
+  check('고객사 19곳(가상), 이름·키 중복 없음, 존재하지 않는 회선 없음, 고객사가 없는 회선 없음', cust.n === 19 && cust.keys === 19 && cust.bad.length === 0 && cust.none.length === 0, JSON.stringify(cust));
   await page.click('[data-tab=monitor]'); await page.click('#centerBar [data-center=ALL]');
   const titles = await page.locator('.panel .hd b').allInnerTexts();
   check('그래프 제목에 "공용"이 없고, 고객사가 3곳 이상이면 "외 N곳"으로 줄여 보임', titles.every(t => !t.includes('공용')) && titles.some(t => /외 \d+곳/.test(t)) && titles.every(t => t.split(' · ').length <= 2 || /외 \d+곳/.test(t)), titles.join(' | '));
@@ -200,12 +200,12 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.reload({ waitUntil: 'load' });
   await page.waitForTimeout(300);
   await page.click('[data-tab=monitor]');   // 새로고침한 주소에 #room이 남아 있을 수 있어 관제 화면으로 간다
-  check('센터 선택(구로)이 새로고침 후에도 유지됨', (await page.locator('#centerBar .cbtn.on').getAttribute('data-center')) === 'G' && (await page.locator('.panel:visible').count()) === 1);
+  check('센터 선택(구로)이 새로고침 후에도 유지됨', (await page.locator('#centerBar .cbtn.on').getAttribute('data-center')) === 'G' && (await page.locator('.panel:visible').count()) === 2);
   await page.click('#centerBar [data-center=ALL]');
-  check('전체를 고르면 그래프 9개가 모두 보임', (await page.locator('.panel:visible').count()) === 9);
+  check('전체를 고르면 그래프 15개가 모두 보임', (await page.locator('.panel:visible').count()) === 15);
 
   // 시나리오 4가지: 시간이 흘러가고, 단계(감지·확인·조치·결과)가 나오고, 닫으면 현재로 돌아온다
-  const scenarios = [['calm', '평일 오후 7시', 4, ['그래프 9개 확인', '서버실 확인', '이상 없음']], ['drop', '트래픽 급감', 6, ['급감', 'IDC_B_FS2_INTL1', '광값', '예시미디어', '회복']],
+  const scenarios = [['calm', '평일 오후 7시', 4, ['그래프 15개 확인', '서버실 확인', '이상 없음']], ['drop', '트래픽 급감', 6, ['급감', 'IDC_B_FS2_INTL1', '광값', '예시미디어', '회복']],
     ['linkDown', '업링크 회선 다운', 8, ['Admin', '트래픽(전/후)', '광값', 'ping', '연동망', '회복']], ['surge', '트래픽 폭주', 7, ['사전 연락', '분산', '하이드레이션', '경고선 80%', '사후 정리', '[사전 안내]']], ['temp', '서버실 온도 변화', 7, ['온도 경고', '빨강 깜박임', '터미널', '냉각 복구', '-40.00 dBm']]];
   for (const [id, name, n, words] of scenarios) {
     await page.click('[data-tab=monitor]');

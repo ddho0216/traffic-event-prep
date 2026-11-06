@@ -33,7 +33,14 @@
     { name: "시험물류", key: "test-logistics", links: ["IDC_A_FR1_UP1"] },
     { name: "데모헬스", key: "demo-health", links: ["IDC_S_FR1_UP1", "IDC_G_FS1_UP1"] },
     { name: "가상모빌리티", key: "gasang-mobility", links: ["IDC_A_FS1_UP1", "IDC_A_FR1_UP1"] },
-    { name: "예시금융", key: "yesi-finance", links: ["IDC_B_FS2_INTL1"] }
+    { name: "예시금융", key: "yesi-finance", links: ["IDC_B_FS2_INTL1"] },
+    // 큰 고객사 6곳 (서초 2, 분당 2, 구로 1, 안산 1): 전용 접속 장비와 전용 회선. 이름과 크기는 제가 만든 가정
+    { name: "가상스트림", key: "gasang-stream", big: true, links: ["IDC_S_FR1_BIG1"] },
+    { name: "시험데이터", key: "sieom-data", big: true, links: ["IDC_S_FR1_BIG2"] },
+    { name: "샘플비디오", key: "sample-video", big: true, links: ["IDC_B_FS1_BIG1"] },
+    { name: "데모포털", key: "demo-portal", big: true, links: ["IDC_B_FS1_BIG2"] },
+    { name: "예제게임월드", key: "yeje-gameworld", big: true, links: ["IDC_G_FS1_BIG1"] },
+    { name: "모의OTT", key: "mock-ott", big: true, links: ["IDC_A_FS1_BIG1"] }
   ];
   // 센터별 장비 수 (사용자가 정한 값): FR = Cisco, FS = Juniper, AS = Huawei
   const COUNTS = { B: { FR: 4, FS: 8, AS: 10 }, S: { FR: 6, FS: 12, AS: 30 }, G: { FR: 2, FS: 4, AS: 20 }, A: { FR: 4, FS: 10, AS: 10 } };
@@ -49,6 +56,9 @@
     IDC_S_FS1: "서초 중앙 백본 1 (대형)", IDC_S_FS2: "서초 중앙 백본 2 (대형)", IDC_S_FR1: "서초 센터 백본 (Cisco)",
     IDC_S_FS3: "서초 고객 접속 1 (테스트클라우드)", IDC_S_FS4: "서초 고객 접속 2 (데모헬스)",
     IDC_G_FS1: "구로 센터 백본", IDC_G_FS2: "구로 고객 접속 1 (샘플게임즈)", IDC_G_FS3: "구로 고객 접속 2 (예제교육)",
+    IDC_B_FS8: "분당 큰 고객 전용 1 (샘플비디오)", IDC_B_FR4: "분당 큰 고객 전용 2 (데모포털, Cisco)",
+    IDC_S_FS5: "서초 큰 고객 전용 1 (가상스트림)", IDC_S_FS6: "서초 큰 고객 전용 2 (시험데이터)",
+    IDC_G_FS4: "구로 큰 고객 전용 (예제게임월드)", IDC_A_FS3: "안산 큰 고객 전용 (모의OTT)",
     IDC_A_FS1: "안산 센터 백본", IDC_A_FS2: "안산 고객 접속 (시험물류·가상모빌리티)", IDC_A_FR1: "안산 센터 백본 (Cisco)"
   };
   const EXTRA = {
@@ -57,7 +67,10 @@
     IDC_S_FS1: { tier: "core" }, IDC_S_FS2: { tier: "core" },
     IDC_S_FS3: { customers: ["test-cloud"] }, IDC_S_FS4: { customers: ["demo-health"] },
     IDC_G_FS2: { customers: ["sample-games"] }, IDC_G_FS3: { customers: ["yeje-edu"] },
-    IDC_A_FS2: { customers: ["test-logistics", "gasang-mobility"] }
+    IDC_A_FS2: { customers: ["test-logistics", "gasang-mobility"] },
+    IDC_B_FS8: { customers: ["sample-video"] }, IDC_B_FR4: { customers: ["demo-portal"] },
+    IDC_S_FS5: { customers: ["gasang-stream"] }, IDC_S_FS6: { customers: ["sieom-data"] },
+    IDC_G_FS4: { customers: ["yeje-gameworld"] }, IDC_A_FS3: { customers: ["mock-ott"] }
   };
   const DEFAULT_ROLE = { FR: "센터 장비 (Cisco)", FS: "집선 장비 (Juniper)", AS: "랙 접속 스위치 (Huawei)" };
   const devices = [];
@@ -104,7 +117,14 @@
     L("IDC_S_FR1_DN2", "IDC_S_FR1", "Te1/0/11", "IDC_S_FS4", "xe-0/0/10", "고객 접속 업링크 (Cisco-Juniper)", 10),
     L("IDC_G_FS1_DN1", "IDC_G_FS1", "xe-0/0/10", "IDC_G_FS2", "xe-0/0/10", "고객 접속 업링크", 10),
     L("IDC_G_FS1_DN2", "IDC_G_FS1", "xe-0/0/11", "IDC_G_FS3", "xe-0/0/10", "고객 접속 업링크", 10),
-    L("IDC_A_FS1_DN1", "IDC_A_FS1", "xe-0/0/10", "IDC_A_FS2", "xe-0/0/10", "고객 접속 업링크", 10)
+    L("IDC_A_FS1_DN1", "IDC_A_FS1", "xe-0/0/10", "IDC_A_FS2", "xe-0/0/10", "고객 접속 업링크", 10),
+    // 큰 고객사 전용 회선 (용량은 제가 정한 가정)
+    L("IDC_S_FR1_BIG1", "IDC_S_FR1", "Te1/0/2", "IDC_S_FS5", "xe-0/0/10", "큰 고객사 전용 (Cisco-Juniper)", 200),
+    L("IDC_S_FR1_BIG2", "IDC_S_FR1", "Te1/0/3", "IDC_S_FS6", "xe-0/0/10", "큰 고객사 전용 (Cisco-Juniper)", 100),
+    L("IDC_B_FS1_BIG1", "IDC_B_FS1", "xe-0/0/3", "IDC_B_FS8", "xe-0/0/10", "큰 고객사 전용", 200),
+    L("IDC_B_FS1_BIG2", "IDC_B_FS1", "xe-0/0/4", "IDC_B_FR4", "Te1/0/1", "큰 고객사 전용 (Juniper-Cisco)", 100),
+    L("IDC_G_FS1_BIG1", "IDC_G_FS1", "xe-0/0/5", "IDC_G_FS4", "xe-0/0/10", "큰 고객사 전용", 100),
+    L("IDC_A_FS1_BIG1", "IDC_A_FS1", "xe-0/0/5", "IDC_A_FS3", "xe-0/0/10", "큰 고객사 전용", 100)
   ];
   // 나머지 장비는 모두 같은 센터의 백본(허브)에 업링크 한 줄로 붙는다. 허브 포트는 시작 번호부터 차례로 쓴다.
   (function addUplinks() {
