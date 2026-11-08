@@ -81,18 +81,20 @@ VENDOR = {"FR": "cisco", "FS": "juniper", "AS": "huawei"}
 
 
 def build_rack_devices() -> dict:
-    """랙마다 들어 있는 장비. 랙 번호는 Cisco 랙, Juniper 랙, Huawei 랙 순서. site/topology.js와 같은 규칙 (tests가 같은지 확인한다)."""
+    """랙마다 들어 있는 장비. 이중화 짝(FS1-FS2 ...)은 서로 다른 랙에 둔다 (한쪽 전기가 나가도 반대쪽이 살려 주도록).
+    A측 랙에는 짝의 홀수 번호 장비, B측 랙에는 짝수 번호 장비. 랙 번호는 Cisco 랙, Juniper 랙, Huawei 랙 순서.
+    site/topology.js와 같은 규칙 (tests가 같은지 확인한다)."""
     racks: dict = {}
     for c, n in COUNTS.items():
-        n_fs_racks = -(-n["FS"] // PER_RACK["FS"])
+        n_fs_racks = 2 * -(-(-(-n["FS"] // 2)) // PER_RACK["FS"])
         for k in ("FR", "FS", "AS"):
             for i in range(1, n[k] + 1):
                 if k == "FR":
                     r = i
-                elif k == "FS":
-                    r = n["FR"] + -(-i // PER_RACK["FS"])
                 else:
-                    r = n["FR"] + n_fs_racks + -(-i // PER_RACK["AS"])
+                    grp = -(-(-(-i // 2)) // PER_RACK[k])
+                    side = 1 if i % 2 else 2
+                    r = (n["FR"] if k == "FS" else n["FR"] + n_fs_racks) + 2 * (grp - 1) + side
                 racks.setdefault(f"IDC_{c}_R{r:02d}", []).append(f"IDC_{c}_{k}{i}")
     return racks
 
@@ -100,10 +102,10 @@ def build_rack_devices() -> dict:
 RACK_DEVICES = build_rack_devices()
 RACKS = list(RACK_DEVICES)
 CENTER_TEMP_OFFSET = {"B": 0.0, "S": 0.4, "G": -0.2, "A": 0.1}   # 센터마다 평소 온도가 조금씩 다르다
-# 냉각 이상: 분당 IDC_B_R07 랙(IDC_B_FS5·FS6), 14:30에 오르기 시작 -> 15:30 최고 -> 16:30까지 유지 -> 17:15에 복구
-COOLING = ("IDC_B_R07", "2026-10-26 14:30", "2026-10-26 15:30", "2026-10-26 16:30", "2026-10-26 17:15", 11.5)
+# 냉각 이상: 분당 IDC_B_R08 랙(IDC_B_FS6·FS8이 든 B측 랙. 짝 장비 FS5는 다른 랙 R07이라 영향 없음), 14:30에 오르기 시작 -> 15:30 최고 -> 16:30까지 유지 -> 17:15에 복구
+COOLING = ("IDC_B_R08", "2026-10-26 14:30", "2026-10-26 15:30", "2026-10-26 16:30", "2026-10-26 17:15", 11.5)
 # 장비가 꺼진 사건 (장비, 시작, 끝, 원인). 전부 가상.
-#  1) IDC_B_FS6: 냉각 이상으로 과열 보호 종료, 16:05~16:25 (같은 랙의 짝 장비 IDC_B_FS5는 살아 있음)
+#  1) IDC_B_FS6: 냉각 이상으로 과열 보호 종료, 16:05~16:25 (짝 장비 IDC_B_FS5는 다른 랙(R07)에 있어 살아 있음)
 #  2) IDC_B_FS7: 전원 모듈 고장(가정)으로 꺼짐, 새벽 03:10~03:50. 짝 장비 IDC_B_FS8이 같은 고객 회선을 받아서 큰 장애 없이 넘어간다 (이중화 시나리오)
 DEVICE_DOWNS = [
     ("IDC_B_FS6", "2026-10-26 16:05", "2026-10-26 16:25", "과열 보호 종료"),

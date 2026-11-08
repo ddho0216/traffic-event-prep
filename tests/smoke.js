@@ -82,7 +82,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('[data-tab=room3d]');
   await page.click('#centerBar [data-center=ALL]');
   await page.waitForFunction(() => window.THREE && document.querySelectorAll('#glList .gli').length > 0, null, { timeout: 15000 });
-  check('서버실-3D: 전체 보기 왼쪽 목록에 랙 44개', (await page.locator('#glList .gli').count()) === 44, await page.locator('#glList .gli').count());
+  check('서버실-3D: 전체 보기 왼쪽 목록에 랙 46개', (await page.locator('#glList .gli').count()) === 46, await page.locator('#glList .gli').count());
   check('서버실-3D: 3D 화면(canvas)이 그려지고 비어 있지 않음', await page.evaluate(() => { const c = document.getElementById('glCanvas'); if (!c || c.width < 100) return false; const t = document.createElement('canvas'); t.width = 64; t.height = 64; const g = t.getContext('2d'); g.drawImage(c, 0, 0, 64, 64); const d = g.getImageData(0, 0, 64, 64).data; let n = 0; for (let k = 0; k < d.length; k += 4) if (d[k] + d[k + 1] + d[k + 2] > 90) n++; return n > 100; }));
   await page.click('#centerBar [data-center=S]');
   const rowsS = await page.locator('#r3RowSel option').count();
@@ -132,8 +132,8 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('#glHome'); await flyDone(); check('서버실-3D: 초기 시점 버튼', Math.abs(await page.evaluate(() => G.cs.az)) < 0.01);
   // 사건: 냉각 이상 -> 분당 R07 선택, 위험 표시, 장비 상세에서 포트·광케이블
   await page.click('[data-r3="2026-10-26T16:15"]');
-  check('서버실-3D: 장비 꺼짐 버튼은 분당으로 맞추고 IDC_B_R07을 선택', (await page.locator('#centerBar .cbtn.on').getAttribute('data-center')) === 'B' && (await page.locator('#glDetail h3').innerText()).includes('IDC_B_R07'));
-  check('서버실-3D: 목록의 R07이 경고·위험 상태이고 필터에 잡힘', (await page.locator('#glList .gli[data-rack="IDC_B_R07"] .dot.crit').count()) === 1);
+  check('서버실-3D: 장비 꺼짐 버튼은 분당으로 맞추고 IDC_B_R08을 선택', (await page.locator('#centerBar .cbtn.on').getAttribute('data-center')) === 'B' && (await page.locator('#glDetail h3').innerText()).includes('IDC_B_R08'));
+  check('서버실-3D: 목록의 R07이 경고·위험 상태이고 필터에 잡힘', (await page.locator('#glList .gli[data-rack="IDC_B_R08"] .dot.crit').count()) === 1);
   await page.click('#glDevs tr[data-id="IDC_B_FS6"]');
   const t6 = await page.locator('#glDetail').innerText();
   check('서버실-3D: 아래 장비 목록에서 IDC_B_FS6을 누르면 꺼짐 상태·알림이 보임', t6.includes('IDC_B_FS6') && t6.includes('꺼짐') && t6.includes('과열 보호 종료') && t6.includes('터미널은 응답 없음'), t6.slice(0, 80));
@@ -191,7 +191,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('#centerBar [data-center=ALL]');
   await page.click('[data-tab=room]');
   const barRoom = await page.locator('#centerBar').innerText();
-  check('센터 버튼 옆의 숫자: 관제에는 없고 서버실에서만 "랙 · 장비" 수가 보임', !/\d/.test(barMon) && /랙 10 · 장비 22/.test(barRoom) && /랙 44 · 장비 120/.test(barRoom), barRoom.replace(/\n/g, ' '));
+  check('센터 버튼 옆의 숫자: 관제에는 없고 서버실에서만 "랙 · 장비" 수가 보임', !/\d/.test(barMon) && /랙 10 · 장비 22/.test(barRoom) && /랙 46 · 장비 120/.test(barRoom), barRoom.replace(/\n/g, ' '));
   const expectBy = await page.evaluate(() => Object.fromEntries(Object.keys(TOPOLOGY.centers).map(c => [c, {
     panels: DATA.links.filter(l => l.id.split('_')[1] === c || TOPOLOGY.links.some(t => t.link === l.id && t.feeds === c)).map(l => l.id).sort(),
     racks: DATA.racks.filter(r => r.id.split('_')[1] === c).map(r => r.id).sort(),
@@ -227,7 +227,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('#centerBar [data-center=S]');
   await page.click('[data-tab=room]');
   await page.click('[data-sr="2026-10-26T15:55"]');
-  check('냉각 이상 버튼: 서초를 보고 있어도 사건이 있는 분당으로 맞춰지고 IDC_B_R07가 보임', (await page.locator('#centerBar .cbtn.on').getAttribute('data-center')) === 'B' && (await page.locator('.rack[data-rack="IDC_B_R07"]').count()) === 1);
+  check('냉각 이상 버튼: 서초를 보고 있어도 사건이 있는 분당으로 맞춰지고 IDC_B_R08가 보임', (await page.locator('#centerBar .cbtn.on').getAttribute('data-center')) === 'B' && (await page.locator('.rack[data-rack="IDC_B_R08"]').count()) === 1);
   check('서버실 화면에 옛 랙 이름(A-03)이 없음', !(await page.locator('#tab-room').innerText()).includes('A-03'));
   // 서버실에서 장비를 누르면 그 장비의 터미널이 열린다 (서초)
   await page.click('#centerBar [data-center=S]');
@@ -279,7 +279,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
       check('급감 시나리오: 강조된 IDC_B_FS2_IX1 패널이 안내 막대에 가리지 않고 화면 안에 보임', vis.top >= vis.barBottom - 2 && vis.bottom <= vis.h + 2, JSON.stringify(vis));
       check('안내 막대 높이가 화면의 30% 이하 (그래프를 가리지 않음)', vis.barBottom <= vis.h * 0.30, `막대 아래 ${vis.barBottom.toFixed(0)}px / 화면 ${vis.h}px`);
     }
-    if (id === 'temp') check('온도 시나리오: 서버실 탭으로 이동하고 IDC_B_R07 랙이 강조 표시됨', (await page.locator('#tab-room').isVisible()) && (await page.locator('.rack.hl[data-rack="IDC_B_R07"]').count()) === 1);
+    if (id === 'temp') check('온도 시나리오: 서버실 탭으로 이동하고 IDC_B_R08 랙이 강조 표시됨', (await page.locator('#tab-room').isVisible()) && (await page.locator('.rack.hl[data-rack="IDC_B_R08"]').count()) === 1);
     await page.click('#scnClose');
     check(`시나리오 "${name}": 닫으면 관제 현재(10/22 21:00)로 돌아옴`, !(await page.locator('#scnBar').isVisible()) && (await page.locator('#tab-monitor').isVisible()) && (await page.locator('#endTime').inputValue()) === '2026-10-22T21:00');
   }
@@ -348,7 +348,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
 
   const [pop] = await Promise.all([ctx.waitForEvent('page'), page.click('.rdev[data-dev="IDC_B_FS6"]')]);
   await pop.waitForLoadState('load');
-  check('꺼진 장비(IDC_B_FS6)를 누르면 새 창에 그 장비 터미널이 열림', pop.url().includes('popup=term') && (await pop.locator('#termTarget').innerText()).includes('IDC_B_FS6 · IDC_B_R07'), await pop.locator('#termTarget').innerText());
+  check('꺼진 장비(IDC_B_FS6)를 누르면 새 창에 그 장비 터미널이 열림', pop.url().includes('popup=term') && (await pop.locator('#termTarget').innerText()).includes('IDC_B_FS6 · IDC_B_R08'), await pop.locator('#termTarget').innerText());
   check('새 창에는 터미널만 보임', (await pop.locator('#tab-term').isVisible()) && !(await pop.locator('#tab-monitor').isVisible()));
   await pop.press('#termIn', 'Enter');
   check('채워 둔 첫 명령(회선 설명)이 실행됨', (await pop.locator('#termOut').innerText()).includes('Admin Link Description'));

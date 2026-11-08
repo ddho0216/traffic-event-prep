@@ -1045,8 +1045,8 @@ function buildScenarios() {
     "사후 정리입니다. 예상과 실제 최대치를 비교해서 다음 경기의 배율을 보정합니다."
   ], null, "경기·행사 때의 급증과 급감은 '이벤트 일정과 겹치는지'부터 확인하면 대부분 설명됩니다. 겹치지 않는 급증은 DDoS 가능성을 봅니다.");
 
-  // 4) 서버실 온도 변화: IDC_B_R07 냉각 이상
-  const COOL = "IDC_B_R07", R3 = RACKS.find(r => r.id === COOL), al = Lib.detectRoom(RACKS, TD).find(a => a.rack === COOL);
+  // 4) 서버실 온도 변화: IDC_B_R08 냉각 이상
+  const COOL = "IDC_B_R08", R3 = RACKS.find(r => r.id === COOL), al = Lib.detectRoom(RACKS, TD).find(a => a.rack === COOL);
   const fc = R3.temp.findIndex((t, i) => i >= al.s && t >= TD.crit), dv = R3.devices.find(x => x.downStart);
   const dMs = parseT(dv.downStart), tAt = i => g1(R3.temp[i]);
   const lk = TOPOLOGY.links.find(l => l.b === dv.id && DEV[l.a]), peer = DEV[lk.a], pif = peer.ifs.find(x => x[0] === lk.ap);   // 꺼진 장비와 이어진 상대 쪽 포트
@@ -1061,14 +1061,14 @@ function buildScenarios() {
   ] };
 
   addExplain(temp, [
-    `랙 ${COOL}의 입구 온도가 경고 기준 이상으로 올랐습니다. 이 랙에는 이중화 짝 장비 ${R3.devices.map(x => x.id).join("·")}가 함께 들어 있습니다. 온도 경고가 등록되고 육안점검 대상이 됩니다.`,
+    `랙 ${COOL}의 입구 온도가 경고 기준 이상으로 올랐습니다. 이 랙에는 ${R3.devices.map(x => x.id).join("·")}가 들어 있습니다. 이 장비들의 이중화 짝(${R3.devices.map(x => DEV[x.id].partner).join("·")})은 전기가 다른 쪽 랙(${[...new Set(R3.devices.map(x => DEV[DEV[x.id].partner].rack))].join("·")})에 있어서 이 온도 문제의 영향을 받지 않습니다. 온도 경고가 등록되고 육안점검 대상이 됩니다.`,
     "온도가 위험 기준(33°C)을 넘으면 장비 LED의 상태 불빛이 빨간색으로 깜박입니다. 이제 장비가 스스로 꺼질 수 있는 단계입니다.",
     "냉각기 점검을 요청(티켓)하고 현장 육안점검을 요청합니다. 온도가 더 오르기 전에 먼저 알리는 것이 중요합니다.",
-    `과열을 견디지 못한 ${dv.id}이 보호 종료로 꺼졌습니다. 전원 LED가 꺼진 상태입니다. 같은 랙의 짝 장비는 아직 켜져 있어서 고객 회선은 짝 장비로 이어집니다.`,
+    `과열을 견디지 못한 ${dv.id}이 보호 종료로 꺼졌습니다. 전원 LED가 꺼진 상태입니다. 짝 장비 ${DEV[dv.id].partner}는 다른 랙(${DEV[DEV[dv.id].partner].rack})에 있어서 켜져 있고, 고객 회선은 그쪽으로 이어집니다.`,
     `꺼진 장비는 터미널로 들어가도 응답이 없습니다. 대신 옆 장비(허브)에서 이 장비와 이어진 포트를 보면 Down이고 광 수신이 -40dBm입니다. 이것으로 '장비가 꺼졌다'를 확인합니다. 아래 출력의 두 번째 부분이 ${dv.id}에 직접 들어가 본 결과입니다.`,
     "냉각이 복구되어 온도가 경고 기준 아래로 내려왔습니다.",
     "복구가 끝났습니다. 육안점검 기록을 남기고, 꺼졌던 장비가 정상으로 돌아왔는지 확인합니다."
-  ], [null, null, null, [dv.id, DEV[dv.id].partner], [dv.id, peer.id], null, [dv.id]], "온도가 오르면 장비가 스스로 꺼질 수 있습니다. 꺼진 장비는 터미널로 확인할 수 없으니 옆 장비의 포트 상태로 확인하고, 짝 장비가 살아 있는지 같이 봅니다.");
+  ], [null, null, null, [dv.id, DEV[dv.id].partner], [dv.id, peer.id], null, [dv.id]], "온도가 오르면 장비가 스스로 꺼질 수 있습니다. 꺼진 장비는 터미널로 확인할 수 없으니 옆 장비의 포트 상태로 확인하고, 다른 랙에 있는 짝 장비가 살아 있는지 같이 봅니다.");
 
   // 5) 이중화로 무사히 넘기기: 장비 한 대가 꺼져도 짝 장비가 같은 고객 회선을 받아서 큰 장애 없이 넘어간다
   const o2 = OUTAGES.find(o => o.dev !== dv.id), D1 = o2.dev, D2 = DEV[D1].partner, rt = m => isoLocal(o2.s + m * 60000), downMin = Math.round((o2.e - o2.s) / 60000);
@@ -1088,7 +1088,7 @@ function buildScenarios() {
     { at: rt(downMin + 5), kind: "결과", title: `고객 영향 없음. 이중화가 없었다면 고객사 ${custOn.length}곳의 회선 ${lu.length}개(합계 ${sumG}G)가 ${downMin}분 끊겼을 것 (가정)`, focus: rFocus }
   ] };
   addExplain(redundancy, [
-    `새벽 시간입니다. 이중화는 같은 고객 회선을 서로 다른 장비 두 대(${D1}, ${D2})에 똑같이 꽂아 두는 것입니다. 두 장비의 회선 목록이 같은 포트로 보입니다. 평소에는 두 장비가 함께 트래픽을 나눠 받는다고 가정합니다.`,
+    `새벽 시간입니다. 이중화는 같은 고객 회선을 서로 다른 장비 두 대(${D1}, ${D2})에 똑같이 꽂아 두는 것입니다. 두 장비는 서로 다른 랙(${DEV[D1].rack}, ${DEV[D2].rack})에 있어서, 한쪽 전기가 나가도 반대쪽이 살려 줍니다. 두 장비의 회선 목록이 같은 포트로 보입니다. 평소에는 두 장비가 함께 트래픽을 나눠 받는다고 가정합니다.`,
     `${D1}이 꺼졌습니다(${o2.why}). 서버실 경고가 뜨고, 이 장비에 터미널로 접속하려고 하면 응답이 없습니다. 꺼진 장비는 직접 확인할 수 없습니다.`,
     `꺼지지 않은 짝 장비 ${D2}로 가서 같은 명령을 칩니다. 고객 회선은 전부 그대로 Up이고, ${D1}과 직접 이어진 짝 연결 포트만 Down입니다. 이 결과가 '회선은 짝 장비로 계속 이어진다'는 증거입니다.`,
     "그래프를 확인합니다. 장비가 꺼지기 직전과 5분 뒤의 값이 거의 같습니다. 고객의 트래픽이 끊기지 않고 짝 장비로 이어졌다는 뜻입니다.",
@@ -1100,7 +1100,7 @@ function buildScenarios() {
 
   return { calm, drop, linkDown, surge, temp, redundancy };
 }
-const SCN_LIST = [["calm", "평일 오후 7시", "저녁 피크 전 평소 점검 (이상 없음)"], ["drop", "트래픽 급감", "국내 연동(IX)이 갑자기 빠짐: 원인 확인과 조치"], ["linkDown", "업링크 회선 다운", "안산 업링크 Down: 회선·트래픽·광값·ping·연동망 문의 순서"], ["surge", "트래픽 폭주", "월드컵 8강: 사전 연락·분산·모니터링"], ["redundancy", "이중화로 무사히 넘기기", "장비 한 대가 꺼져도 짝 장비가 고객 회선을 받아 큰 장애 없이 넘김"], ["temp", "서버실 온도 변화", "분당 IDC_B_R07 냉각 이상: 육안점검·터미널 확인·복구"]];
+const SCN_LIST = [["calm", "평일 오후 7시", "저녁 피크 전 평소 점검 (이상 없음)"], ["drop", "트래픽 급감", "국내 연동(IX)이 갑자기 빠짐: 원인 확인과 조치"], ["linkDown", "업링크 회선 다운", "안산 업링크 Down: 회선·트래픽·광값·ping·연동망 문의 순서"], ["surge", "트래픽 폭주", "월드컵 8강: 사전 연락·분산·모니터링"], ["redundancy", "이중화로 무사히 넘기기", "장비 한 대가 꺼져도 짝 장비가 고객 회선을 받아 큰 장애 없이 넘김"], ["temp", "서버실 온도 변화", "분당 IDC_B_R08 냉각 이상: 육안점검·터미널 확인·복구"]];
 let scn = null;
 function stopScn() { if (scn && scn.timer) clearInterval(scn.timer); scn = null; HL.clear(); const p = $("#scnPop"); if (p) p.hidden = true; }
 function scnSetView() {

@@ -107,14 +107,14 @@ class ServerRoomData(unittest.TestCase):
         cls.devs = pd.read_csv(DATA / "rack_devices.csv")
 
     def test_counts(self):
-        self.assertEqual(self.temps.rack.nunique(), 44)
+        self.assertEqual(self.temps.rack.nunique(), 46)
         self.assertEqual(len(self.devs), 120)
         for v, n in {"cisco": 16, "juniper": 34, "huawei": 70}.items():
             self.assertEqual(self.devs.vendor.eq(v).sum(), n, v)
 
     def test_racks_per_center_and_naming(self):
         racks = sorted(self.temps.rack.unique())
-        for code, n in {"B": 10, "S": 16, "G": 7, "A": 11}.items():
+        for code, n in {"B": 10, "S": 16, "G": 8, "A": 12}.items():
             mine = [r for r in racks if r.startswith(f"IDC_{code}_R")]
             self.assertEqual(len(mine), n, code)
         self.assertTrue(all(__import__("re").fullmatch(r"IDC_[BSGA]_R\d\d", r) for r in racks))
@@ -130,12 +130,22 @@ class ServerRoomData(unittest.TestCase):
             self.assertLessEqual(len(g), cap[g.vendor.iloc[0]], f"{rack}: 용량 초과")
         self.assertEqual(self.devs.device.nunique(), len(self.devs), "한 장비는 랙 하나에만")
 
+    def test_partners_are_in_different_racks(self):
+        """이중화 짝(FS1-FS2 ...)은 서로 다른 랙에 있다: 한쪽 전기가 나가도 반대쪽이 살려 주도록."""
+        rack = dict(zip(self.devs.device, self.devs.rack))
+        for dev, r in rack.items():
+            head, num = dev.rsplit("_", 1)[0], int(dev.rsplit("_", 1)[1][2:])
+            kind = dev.rsplit("_", 1)[1][:2]
+            partner = f"{head}_{kind}{num + 1 if num % 2 else num - 1}"
+            self.assertIn(partner, rack, dev)
+            self.assertNotEqual(rack[partner], r, f"{dev}와 짝 {partner}가 같은 랙 {r}")
+
     def test_normal_racks_stay_below_27(self):
-        normal = self.temps[self.temps.rack != "IDC_B_R07"]
+        normal = self.temps[self.temps.rack != "IDC_B_R08"]
         self.assertLess(normal.inlet_c.max(), 27)
 
     def test_cooling_incident_only_in_b03(self):
-        b03 = self.temps[self.temps.rack == "IDC_B_R07"].set_index("time").inlet_c
+        b03 = self.temps[self.temps.rack == "IDC_B_R08"].set_index("time").inlet_c
         self.assertGreaterEqual(b03["2026-10-26 15:55"], 33)
         self.assertLess(b03["2026-10-27 12:00"], 27)
 
@@ -143,7 +153,7 @@ class ServerRoomData(unittest.TestCase):
         self.assertEqual(self.devs.fan_warn.sum(), 1)
         down = self.devs[self.devs.down_start.notna()].set_index("device")
         self.assertEqual(sorted(down.index), ["IDC_B_FS6", "IDC_B_FS7"])
-        self.assertEqual(down.loc["IDC_B_FS6", "rack"], "IDC_B_R07")   # 냉각 이상이 난 랙 안의 장비
+        self.assertEqual(down.loc["IDC_B_FS6", "rack"], "IDC_B_R08")   # 냉각 이상이 난 랙 안의 장비
         self.assertTrue(down.down_why.notna().all())
 
     def test_downed_device_has_alive_partner(self):

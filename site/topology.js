@@ -5,6 +5,7 @@
      종류: FS = Juniper 계열, FR = Cisco 계열, AS = Huawei 계열 (FS·FR·AS가 무슨 약자인지는 모름)
    랙 이름: IDC_<센터 코드>_R<번호>. 랙에는 네트워크 장비만 들어간다 (서버는 다루지 않음).
    랙 규칙: Cisco 대형 장비는 랙 하나를 혼자 쓴다 (랙당 1대). Juniper는 랙당 최대 2대. Huawei는 소형이라 랙당 최대 8대(제가 정한 가정).
+   이중화 짝(FS1-FS2 ...)은 서로 다른 랙에 둔다 (한쪽 전기가 나가도 반대쪽이 살려 주도록): A측 랙에 홀수, B측 랙에 짝수 번호.
    센터별 장비 수(사용자가 정한 값): 분당 FR4·FS8·AS10, 서초 FR6·FS12·AS30, 구로 FR2·FS4·AS20, 안산 FR4·FS10·AS10.
    구조: 서초에 대형 중앙 백본 2대(IDC_S_FS1, IDC_S_FS2)가 있고, 센터 4곳이 거기에 이중화로 붙는다.
    서초가 장비가 가장 많다. 고객사 13곳은 센터마다 '고객 접속 장비'(Juniper)에 나뉘어 붙는다.
@@ -77,8 +78,14 @@
   const DEFAULT_ROLE = { FR: "센터 장비 (Cisco)", FS: "집선 장비 (Juniper)", AS: "랙 접속 스위치 (Huawei)" };
   const devices = [];
   Object.keys(centers).forEach(c => {
-    const n = COUNTS[c], nFR = n.FR, nFS = Math.ceil(n.FS / PER_RACK.FS);
-    const rackNo = (k, i) => k === "FR" ? i : k === "FS" ? nFR + Math.ceil(i / PER_RACK.FS) : nFR + nFS + Math.ceil(i / PER_RACK.AS);
+    // 랙 배치: 이중화 짝(FS1-FS2 ...)은 서로 다른 랙에 둔다. 한쪽 전기(A측)가 나가도 반대쪽(B측)이 살려 주기 위해서다.
+    // A측 랙에는 짝의 홀수 번호 장비, B측 랙에는 짝의 짝수 번호 장비를 담는다. 랙 하나에 담는 대수는 Juniper 2대, Huawei 8대, Cisco 1대.
+    const n = COUNTS[c], nFR = n.FR, nFS = 2 * Math.ceil(Math.ceil(n.FS / 2) / PER_RACK.FS);
+    const rackNo = (k, i) => {
+      if (k === "FR") return i;
+      const grp = Math.ceil(Math.ceil(i / 2) / PER_RACK[k]), side = i % 2 ? 1 : 2;   // 랙 묶음 번호, A측(1)·B측(2)
+      return (k === "FS" ? nFR : nFR + nFS) + 2 * (grp - 1) + side;
+    };
     ["FR", "FS", "AS"].forEach(k => { for (let i = 1; i <= n[k]; i++) {
       const id = `IDC_${c}_${k}${i}`, rack = `IDC_${c}_R${String(rackNo(k, i)).padStart(2, "0")}`;
       devices.push(Object.assign({ id, vendor: VENDOR[k], role: ROLE[id] || `${centers[c]} ${DEFAULT_ROLE[k]} ${i}`, center: centers[c], rack }, EXTRA[id] || {}));

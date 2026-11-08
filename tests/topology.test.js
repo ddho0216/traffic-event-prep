@@ -162,9 +162,9 @@ test('센터 이름 목록(centers)이 장비의 센터와 맞다', () => {
   assert.deepEqual(Object.values(T.centers).sort(), [...new Set(T.devices.map(d => d.center))].sort());
 });
 
-test('동기화: 센터마다 장비 수에 맞는 랙이 있다 (분당 10, 서초 16, 구로 7, 안산 11)', () => {
+test('동기화: 센터마다 장비 수에 맞는 랙이 있다 (분당 10, 서초 16, 구로 8, 안산 12)', () => {
   const n = c => data.racks.filter(r => r.id.split('_')[1] === c).length;
-  assert.deepEqual([n('B'), n('S'), n('G'), n('A')], [10, 16, 7, 11]);
+  assert.deepEqual([n('B'), n('S'), n('G'), n('A')], [10, 16, 8, 12]);
   for (const code of Object.keys(T.centers)) {
     const used = new Set(T.devices.filter(d => d.id.split('_')[1] === code).map(d => d.rack));
     assert.equal(used.size, n(code), `${code}: 빈 랙이 있거나 랙이 모자람`);
@@ -268,4 +268,13 @@ test('아직 쓰지 않는 고객 회선: 약 20~45%가 Down이고, Link down(un
   assert.ok(all.some(l => l.state === 'unused') && all.some(l => l.state === 'off'));
   for (const l of all) assert.ok(['up', 'unused', 'off'].includes(l.state));
   for (const d of T.devices) assert.ok(d.lines.some(l => l.state === 'up'), `${d.id}: 사용 중인 회선이 하나도 없음`);
+});
+
+test('이중화: 짝 장비는 서로 다른 랙에 있다 (A측 랙에 홀수, B측 랙에 짝수 번호)', () => {
+  for (const d of T.devices) {
+    const p = dev[d.partner];
+    assert.notEqual(p.rack, d.rack, `${d.id}와 짝 ${p.id}가 같은 랙 ${d.rack}`);
+    const n = +d.id.match(/(\d+)$/)[1], mates = T.devices.filter(x => x.rack === d.rack);
+    assert.ok(mates.every(x => (+x.id.match(/(\d+)$/)[1] % 2) === (n % 2)), `${d.rack}: 한 랙에는 한쪽(홀수/짝수)만 있어야 함`);
+  }
 });
