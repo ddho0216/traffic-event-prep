@@ -102,8 +102,14 @@ RACKS = list(RACK_DEVICES)
 CENTER_TEMP_OFFSET = {"B": 0.0, "S": 0.4, "G": -0.2, "A": 0.1}   # 센터마다 평소 온도가 조금씩 다르다
 # 냉각 이상: 분당 IDC_B_R07 랙(IDC_B_FS5·FS6), 14:30에 오르기 시작 -> 15:30 최고 -> 16:30까지 유지 -> 17:15에 복구
 COOLING = ("IDC_B_R07", "2026-10-26 14:30", "2026-10-26 15:30", "2026-10-26 16:30", "2026-10-26 17:15", 11.5)
-# 과열로 장비 한 대가 꺼짐(보호 종료): IDC_B_FS6, 16:05~16:25
-DEVICE_DOWN = ("IDC_B_FS6", "2026-10-26 16:05", "2026-10-26 16:25")
+# 장비가 꺼진 사건 (장비, 시작, 끝, 원인). 전부 가상.
+#  1) IDC_B_FS6: 냉각 이상으로 과열 보호 종료, 16:05~16:25 (같은 랙의 짝 장비 IDC_B_FS5는 살아 있음)
+#  2) IDC_B_FS7: 전원 모듈 고장(가정)으로 꺼짐, 새벽 03:10~03:50. 짝 장비 IDC_B_FS8이 같은 고객 회선을 받아서 큰 장애 없이 넘어간다 (이중화 시나리오)
+DEVICE_DOWNS = [
+    ("IDC_B_FS6", "2026-10-26 16:05", "2026-10-26 16:25", "과열 보호 종료"),
+    ("IDC_B_FS7", "2026-10-27 03:10", "2026-10-27 03:50", "전원 모듈 고장(가정)"),
+]
+DEVICE_DOWN = DEVICE_DOWNS[0][:3]   # 이전 이름 호환
 # 팬 경고가 계속 켜져 있는 장비(교체 대기): IDC_B_FS4
 FAN_WARN = "IDC_B_FS4"
 
@@ -173,10 +179,10 @@ def write_server_room(times: pd.DatetimeIndex, hours: np.ndarray) -> None:
     for rack, devs in RACK_DEVICES.items():
         for slot, name in enumerate(devs, 1):
             vendor = VENDOR[name.split("_")[2][:2]]
-            down = DEVICE_DOWN if name == DEVICE_DOWN[0] else None
+            down = next((x for x in DEVICE_DOWNS if x[0] == name), None)
             dev.append((rack, slot, name, vendor, int(name == FAN_WARN),
-                        down[1] if down else "", down[2] if down else ""))
-    pd.DataFrame(dev, columns=["rack", "slot", "device", "vendor", "fan_warn", "down_start", "down_end"]
+                        down[1] if down else "", down[2] if down else "", down[3] if down else ""))
+    pd.DataFrame(dev, columns=["rack", "slot", "device", "vendor", "fan_warn", "down_start", "down_end", "down_why"]
                  ).to_csv(OUT / "rack_devices.csv", index=False)
 
 

@@ -35,7 +35,7 @@ for rack, g in devs.groupby("rack", sort=False):
     out["racks"].append({
         "id": rack,
         "devices": [{"slot": int(r.slot), "id": r.device, "vendor": r.vendor, "fanWarn": bool(r.fan_warn),
-                     "downStart": str(r.down_start).replace(" ", "T"), "downEnd": str(r.down_end).replace(" ", "T")}
+                     "downStart": str(r.down_start).replace(" ", "T"), "downEnd": str(r.down_end).replace(" ", "T"), "downWhy": str(r.down_why)}
                     for r in g.itertuples()],
         "temp": temps[temps.rack == rack].sort_values("time").inlet_c.tolist(),
     })

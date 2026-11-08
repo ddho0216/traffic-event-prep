@@ -84,6 +84,7 @@ function showTab(name) {
   if (name !== "room" && typeof stopPlay === "function") stopPlay();
   if (name === "room") renderServerRoom();
   if (name === "room3d" && typeof render3d === "function") render3d();
+  if (name === "term" && typeof termSync === "function") termSync();
   try { history.replaceState(null, "", "#" + name); } catch (e) { /* 무시 */ }
 }
 $("#tabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) showTab(b.dataset.tab); });
@@ -570,7 +571,8 @@ TOPOLOGY.links.forEach(l => { addPort(l.a, l.ap, l.b, l, "a"); if (DEV[l.b]) add
 // 고객 회선(1G·10G): 장비마다 한 줄씩. [.., 속도(G), {홈 장비, 고객사}] 가 뒤에 붙는다. 짝 장비도 같은 목록을 가진다.
 DEVICES.forEach(d => (d.lines || []).forEach((ln, k) => {
   const f = TOPOLOGY.faults[`${d.id}|${ln.port}`] || {}, name = CUSTOMERS.find(c => c.key === ln.customer).name;
-  d.ifs.push([ln.port, name, f.crc || 0, f.rx != null ? f.rx : (ln.speed === 10 ? -2.6 : -4.1) - (k % 5) * 0.12, null, "up", "up", "", "", ln.speed, { home: ln.home, customer: name }]);
+  const idle = ln.state !== "up";   // 아직 쓰지 않는 회선: Link down(unused) 또는 Admin down(off), 빛이 안 들어옴
+  d.ifs.push([ln.port, name, f.crc || 0, f.rx != null ? f.rx : idle ? -40 : (ln.speed === 10 ? -2.6 : -4.1) - (k % 5) * 0.12, null, idle ? "down" : "up", ln.state === "off" ? "down" : "up", "", "", ln.speed, { home: ln.home, customer: name }, idle ? ln.state : ""]);
 }));
 
 /* 업무 메모에서 일반화한 명령들: 회선 설명(Up/Down·Admin/Link·고객사), ARP·ping, 로그, BGP, 설정. 출력은 전부 가상입니다. */
@@ -608,7 +610,7 @@ function iosPing(d, ip, n) {
 }
 function logLines(d, style) {   // 이상이 있는 포트의 로그만 만든다 (가상)
   const out = []; let k = 0;
-  d.ifs.forEach(f => {
+  d.ifs.filter(f => !f[11]).forEach(f => {
     if (f[6] === "down") out.push({ j: `${logTime(k)} ${d.id} mib2d[1234]: SNMP_TRAP_LINK_DOWN: ifIndex ${500 + k}, ifAdminStatus down(2), ifOperStatus down(2), ifName ${f[0]}`, c: `${logTime(k)}: %LINK-5-CHANGED: Interface ${f[0]}, changed state to administratively down`, h: `Oct 22 2026 ${logTime(k).slice(7)} ${d.id} %%01IFNET/4/LINK_STATE(l)[${k}]:The interface ${f[0]} was shut down by the administrator.` }), k++;
     else if (f[5] === "down") out.push({ j: `${logTime(k)} ${d.id} mib2d[1234]: SNMP_TRAP_LINK_DOWN: ifIndex ${500 + k}, ifAdminStatus up(1), ifOperStatus down(2), ifName ${f[0]}`, c: `${logTime(k)}: %LINK-3-UPDOWN: Interface ${f[0]}, changed state to down`, h: `Oct 22 2026 ${logTime(k).slice(7)} ${d.id} %%01IFNET/4/LINK_STATE(l)[${k}]:The line protocol on the interface ${f[0]} has entered the DOWN state.` }), k++;
     else if (f[3] < -9) out.push({ j: `${logTime(k)} ${d.id} fpc0: ${f[0]}: Optical receive power low alarm`, c: `${logTime(k)}: %OPTICS-4-RX_LOW: ${f[0]} receive power low warning (${f[3].toFixed(1)} dBm)`, h: `Oct 22 2026 ${logTime(k).slice(7)} ${d.id} %%01OPTMOD/4/RX_POWER_LOW(l)[${k}]:${f[0]} RX power is too low.` }), k++;
@@ -666,15 +668,35 @@ const DEV_CMDS = {
 function findIf(d, name) { return d.ifs.find(f => f[0].toLowerCase() === String(name).toLowerCase()); }
 const VENDOR_ERR = { juniper: "                     ^\nunknown command.", cisco: "% Invalid input detected at '^' marker.", huawei: "Error: Unrecognized command found at '^' position." };
 const devNow = () => DEV[$("#devSel").value] || DEVICES[0];
-function runCmd(raw, dev) {
+/* 장비가 꺼진 시간대(데이터의 downStart~downEnd). 그 시각의 터미널·3D 상세는 꺼진 상태를 반영한다:
+   꺼진 장비는 접속이 안 되고(전 포트 Down), 그 장비와 이어진 옆 장비의 포트는 Down·빛 없음으로 보인다. */
+const OUTAGES = DATA.racks.flatMap(r => r.devices.filter(x => x.downStart).map(x => ({ dev: x.id, s: parseT(x.downStart), e: parseT(x.downEnd), why: x.downWhy || "" })));
+const outageAt = (id, ms) => OUTAGES.find(o => o.dev === id && ms >= o.s && ms < o.e);
+const TERM = { at: null, shown: null };   // at: 팝업이 열릴 때 받은 가상 시각. 없으면 서버실 기준 시각
+const termMs = () => { if (TERM.at != null) return TERM.at; try { return msOf(clamp(sr.end, 0, N - 1)); } catch (e) { return msOf(NOW_IDX); } };
+function withTime(ms, fn) {   // 그 시각의 꺼짐 상태를 잠깐 덧씌워 fn을 실행하고 원래대로 되돌린다
+  const act = OUTAGES.filter(o => ms >= o.s && ms < o.e).map(o => o.dev), saved = [], off = [];
+  if (act.length) DEVICES.forEach(d => {
+    if (act.includes(d.id)) { d.offline = true; off.push(d); }
+    d.ifs.forEach(f => { if (act.includes(d.id) || act.includes(f[1])) { saved.push([f, f[5], f[3]]); f[5] = "down"; f[3] = -40; } });
+  });
+  try { return fn(); } finally { saved.forEach(([f, s, r]) => { f[5] = s; f[3] = r; }); off.forEach(d => { d.offline = false; }); }
+}
+const offlineMsg = (d, ms) => { const o = outageAt(d.id, ms); return `ssh: connect to host ${d.id} port 22: Connection timed out\n→ ${d.id}은(는) ${hm(ms)} 현재 전원이 꺼져 응답이 없습니다${o && o.why ? ` (${o.why})` : ""}.\n   이 장비의 터미널은 쓸 수 없습니다. 옆 장비(허브·짝 장비)에서 이 장비와 이어진 포트가 Down인지 확인하세요.`; };
+function runCmd(raw, dev, ms) {
+  const t = ms != null ? ms : termMs();
+  return withTime(t, () => runCmdNow(raw, dev, t));
+}
+function runCmdNow(raw, dev, t) {
   const d = dev || devNow(), cmd = raw.trim().replace(/\s+/g, " ");
   if (!cmd) return "";
+  if (d.offline) return offlineMsg(d, t);
   if (cmd === "?" || /^help$/i.test(cmd)) return "오른쪽의 '자주 쓰던 명령'을 참고하세요. 장비 종류에 맞는 명령만 동작합니다.";
   for (const [re, fn] of DEV_CMDS[d.vendor]) { const m = cmd.match(re); if (m) return fn(d, m); }
   return VENDOR_ERR[d.vendor];
 }
 function quickCmds() {
-  const d = devNow(), bad = d.ifs.find(f => f[2] > 50 || f[3] < -9) || d.ifs[0], ok = d.ifs[0];
+  const d = devNow(), bad = d.ifs.find(f => !f[11] && (f[2] > 50 || f[3] < -9)) || d.ifs.find(f => !f[11]) || d.ifs[0], ok = d.ifs[0];
   const pp = d.ifs.find(f => f[8] && f[5] === "up"), ip = pp ? pp[8] : "";
   const list = {
     juniper: [`show interfaces descriptions`, `show interfaces diagnostics optics ${bad[0]}`, `show interfaces extensive ${bad[0]} | match CRC`, `show interfaces extensive | match "CRC|physical interface"`, `show log messages | last 20`, ...(ip ? [`show arp | match ${pp[0]}`, `ping ${ip} rapid count 100`] : []), `show bgp summary`],
@@ -686,12 +708,14 @@ function quickCmds() {
 const termHist = []; let hp = 0;
 function termPrint(html) { const t = $("#termOut"); t.insertAdjacentHTML("beforeend", html); t.scrollTop = t.scrollHeight; }
 function termBanner() {
-  const d = devNow();
-  $("#termOut").innerHTML = `<span class="muted">가상 장비 ${d.id} (${d.vendor} · ${d.role}) 에 연결됨. 실제 장비가 아닙니다.</span>\n`;
-  $("#termPrompt").textContent = d.prompt;
-  $("#termTarget").textContent = `${d.id} · ${d.rack}`;
+  const d = devNow(), ms = termMs(), off = withTime(ms, () => d.offline);
+  TERM.shown = ms;
+  $("#termOut").innerHTML = off ? `<span class="e">${esc(offlineMsg(d, ms))}</span>\n` : `<span class="muted">가상 장비 ${d.id} (${d.vendor} · ${d.role}) 에 연결됨. 실제 장비가 아닙니다.</span>\n`;
+  $("#termPrompt").textContent = off ? `${d.id} (응답 없음)>` : d.prompt;
+  $("#termTarget").textContent = `${d.id} · ${d.rack} · 가상 시각 ${ymdhm(ms)}${off ? " · 전원 꺼짐" : ""}`;
   quickCmds();
 }
+function termSync() { if (TERM.shown !== termMs()) termBanner(); }   // 서버실에서 시각을 바꾸고 터미널로 오면 장비 상태를 다시 반영
 const VENDORS = [["juniper", "Juniper · FS 계열"], ["cisco", "Cisco · FR 계열"], ["huawei", "Huawei · AS 계열"]];
 function fillVendors(keep) {   // 센터 선택에 맞는 장비 수를 보여 주고, 장비가 없는 제조사는 고를 수 없게 한다
   const cnt = v => DEVICES.filter(d => d.vendor === v).length;
@@ -726,7 +750,7 @@ function renderDesign() {
 }
 function openDeviceTerminal(devId) {   // 랙 안 장비를 누르면 그 장비의 터미널을 새 창으로 연다 (가상)
   if (!DEV[devId]) return;
-  const q = new URLSearchParams({ popup: "term", dev: devId });
+  const q = new URLSearchParams({ popup: "term", dev: devId, t: isoLocal(termMs()) });   // 지금 보고 있는 가상 시각도 같이 넘긴다 (꺼진 장비 반영)
   const w = window.open(location.pathname + "?" + q.toString(), "term-" + devId, "width=880,height=660");
   if (w) { try { w.focus(); } catch (e) { /* 무시 */ } return; }
   termConnect(devId); showTab("term");   // 팝업이 막히면 같은 화면의 터미널 탭에서 연다
@@ -744,7 +768,7 @@ function openDeviceTerminal(devId) {   // 랙 안 장비를 누르면 그 장비
     if (e.key === "Enter") {
       const v = e.target.value; termHist.push(v); hp = termHist.length;
       const out = runCmd(v);
-      termPrint(`<span class="p">${esc(devNow().prompt)}</span> <span class="c">${esc(v)}</span>\n${/^(error|%|Error|\s+\^)/.test(out) ? `<span class="e">${esc(out)}</span>` : esc(out)}\n`);
+      termPrint(`<span class="p">${esc(devNow().prompt)}</span> <span class="c">${esc(v)}</span>\n${/^(error|%|Error|ssh:|\s+\^)/.test(out) ? `<span class="e">${esc(out)}</span>` : esc(out)}\n`);
       e.target.value = "";
     } else if (e.key === "ArrowUp" && termHist.length) { hp = Math.max(0, hp - 1); e.target.value = termHist[hp]; e.preventDefault(); }
     else if (e.key === "ArrowDown" && termHist.length) { hp = Math.min(termHist.length, hp + 1); e.target.value = termHist[hp] || ""; e.preventDefault(); }
@@ -903,7 +927,7 @@ function goNow() {
   $("#win").value = "12"; $("#ymode").value = "cap"; $("#cust").value = "all";
   HL.clear(); sr.end = NOW_IDX; setCenter("ALL");
 }
-const SCN_TICK = 180, SCN_HOLD = 8;   // 5분씩 0.18초, 단계가 나오면 약 1.4초 멈춤
+const SCN_TICK = 450;   // 가상 5분이 0.45초. 단계가 나오면 팝업이 뜨고, '다음 단계'를 누를 때까지 멈춘다
 const KIND_CLS = { 감지: "crit", 확인: "", 조치: "warn", 결과: "ok" };
 const isoIdx = t => idxOf(parseT(t));
 const hhmm = i => hm(msOf(i));
@@ -911,13 +935,14 @@ const g1 = v => v.toFixed(1);
 const outAt = (id, t) => LINK[id].out[isoIdx(t)], inAt = (id, t) => LINK[id].in[isoIdx(t)];
 const utilAt = (id, t) => outAt(id, t) / LINK[id].cap * 100;
 const prevDay = t => isoLocal(parseT(t) - 86400000);
-const runOn = (devId, cmd, down) => {   // down: 이 시나리오에서 Down이라고 가정할 포트 이름들 (실행 뒤 원래대로 되돌린다)
+const runOn = (devId, cmd, down, atIso) => {   // down: 이 시나리오에서 Down이라고 가정할 포트 이름들 (실행 뒤 원래대로 되돌린다)
   const d = DEV[devId], saved = [];
   (down || []).forEach(p => { const f = findIf(d, p); if (f) { saved.push([f, f.slice()]); f[5] = "down"; f[3] = -40; f[2] = 0; } });
-  try { return `${d.prompt} ${cmd}\n${runCmd(cmd, d)}`; } finally { saved.forEach(([f, o]) => o.forEach((v, k) => { f[k] = v; })); }
+  try { return `${d.prompt} ${cmd}\n${runCmd(cmd, d, atIso ? parseT(atIso) : undefined)}`; } finally { saved.forEach(([f, o]) => o.forEach((v, k) => { f[k] = v; })); }
 };
 
 // 숫자는 전부 데이터에서 읽어 문장을 만든다 (고정 문구 아님)
+const addExplain = (def, texts, devs, lesson) => { def.steps.forEach((st, k) => { if (texts[k]) st.explain = texts[k]; if (devs && devs[k]) st.devs = devs[k]; }); if (lesson) def.lesson = lesson; };
 function buildScenarios() {
   const TD = Lib.TEMP_DEFAULTS;
   const OA = "IDC_B_FS1_UP1", OB = "IDC_B_FS1_UP2", IX = "IDC_B_FS2_IX1", INTL = "IDC_B_FS2_INTL1", EDGE = "IDC_B_FS2";   // 아래에서 새 이름으로 바뀐다
@@ -936,6 +961,13 @@ function buildScenarios() {
   ] };
 
   const INQUIRY = "\n\n[연동망에 문의할 때 확인할 3가지]\n가. NOC 작업 유/무\n나. 연동 구간(타 부서·타 ISP) 작업 및 이슈 유/무\n다. 보안 관련 이슈 유/무\n* 전화로 내용을 전달받을 때는 통화한 분의 성함을 꼭 확인해서 기록한다.";
+  addExplain(calm, [
+    "평일 저녁 피크 직전의 평소 점검입니다. 관제 화면의 그래프를 훑어보면서 사용률이 경고선(80%)에 가까운 회선이 없는지 봅니다. 이 시각에는 어느 회선도 경고선 근처가 아닙니다.",
+    "서버실 점검입니다. 랙 입구 온도와 장비 LED를 봅니다. 모든 랙이 주의 기준 아래이고 LED도 정상입니다. 팬 경고가 계속 켜져 있는 장비는 교체 대기 중이라 '알려진 상태'로 기록해 둡니다.",
+    "저녁 피크로 올라가는 중입니다. 지금 값을 같은 시각의 평소 곡선과 비교하고, 평소 범위 안에서 오르고 있으므로 이상으로 보지 않습니다.",
+    "점검을 마칩니다. 이 시각 전후에 새 경고가 없었으므로 '이상 없음' 점검 기록을 남기고 다음 점검 시각으로 넘어갑니다."
+  ], [null, fans.slice(0, 2), null, null], "평소 점검은 '경고선 근처인 회선이 있나, 온도·LED가 평소와 같은가'를 같은 순서로 보는 일입니다. 평소 값을 알고 있어야 이상이 눈에 띕니다.");
+
   // 2) 트래픽 급감: 국내 연동(IX)
   const dropA = ALERTS.find(a => a.link === IX && a.kind.includes("급감"));
   const dt = m => isoLocal(msOf(dropA.s) + m * 60000);   // 급감이 시작된 시각 기준 분
@@ -950,6 +982,15 @@ function buildScenarios() {
     { at: dt(50), kind: "결과", title: `${IX} 회복: out ${g1(outAt(IX, dt(50)))}G (전날 같은 시각 ${g1(outAt(IX, prevDay(dt(50))))}G). 급감 구간 ${hhmm(dropA.s)}~${hhmm(dropA.e)} (${(dropA.e - dropA.s + 1) * 5}분)`, focus: [IX, INTL] },
     { at: dt(55), kind: "결과", title: "복구 안내 메일 발송, 경고 이력에 기록하고 마무리", focus: [IX] }
   ] };
+
+  addExplain(drop, [
+    `국내 연동(IX) 회선 ${IX}의 out 트래픽이 전날 같은 시각의 약 ${pct}% 수준으로 갑자기 떨어졌습니다. 같은 시각의 다른 회선은 그대로라서, 센터 전체가 아니라 이 연동 회선 쪽 문제로 좁혀집니다. 종 알림에는 '확인 필요'로 등록됩니다.`,
+    `IX에서 빠진 트래픽이 해외 연동(${INTL})으로 돌아서 들어오고 있습니다. 한쪽이 빠지면 다른 쪽이 오르는 모양이라 서비스는 끊기지 않았지만, 해외 회선의 사용률이 평소보다 높아졌는지 같이 봐야 합니다.`,
+    "우리 쪽 문제인지 확인하는 단계입니다. 광 수신값이 정상 범위이고 CRC 오류도 없으니 우리 쪽 케이블·SFP 문제는 아닙니다. 그래서 상대 구간(연동 상대)을 의심합니다.",
+    "원인이 우리 쪽이 아니므로 상대 IX 사업자에 확인을 요청하고, 영향이 있는 고객사에는 상황을 알립니다. 연동망에 문의할 때는 NOC 작업, 연동 구간 이슈, 보안 이슈 세 가지를 꼭 묻고 통화한 분의 성함을 기록합니다.",
+    "트래픽이 돌아왔습니다. 회복 시각을 기록하고, 다운 구간의 길이와 전날 값과의 차이를 확인합니다.",
+    "복구 안내 메일을 보내고 경고 이력에 기록해 마무리합니다."
+  ], [null, null, [EDGE], null, null, null], "트래픽이 갑자기 빠지면 '우리 쪽(광값·CRC)인가, 상대 쪽인가'를 먼저 가르고, 상대 쪽이면 연동망에 3가지(NOC 작업·연동 구간 이슈·보안 이슈)를 묻습니다.");
 
   // 2-2) 업링크 회선 다운: 안산 -> 중앙 백본 (업무 메모의 장애 대응 순서를 일반화한 것)
   const DN = "IDC_A_FS1_UP1", dnA = ALERTS.find(a => a.link === DN && a.kind.includes("급감")), dn = m => isoLocal(msOf(dnA.s) + m * 60000);
@@ -968,6 +1009,17 @@ function buildScenarios() {
     { at: dn(dnWin), kind: "결과", title: `${DN} 회복: out ${g1(outAt(DN, dn(dnWin)))}G (다운 구간 ${hhmm(dnA.s)}~${hhmm(dnA.e)}, ${dnWin}분). 경과 문자 발송, 조장에게 결과 전달`, focus: [DN] }
   ] };
 
+  addExplain(linkDown, [
+    `안산 센터에서 중앙 백본으로 가는 업링크(${DN})의 in·out이 거의 0으로 떨어졌습니다. 속도가 줄어든 게 아니라 0에 가까우므로, 회선이 끊긴 것으로 의심합니다.`,
+    `정확한 장비·회선명을 확인합니다. ${dDev}의 ${dPort} 포트가 이 회선입니다. descriptions 출력에서 Admin은 관리자가 켜 둔 상태, Link는 실제 연결 상태입니다. Admin up인데 Link down이므로 누가 일부러 내린 게 아니라 연결이 끊긴 것입니다.`,
+    "트래픽 전/후를 확인해서 경과 문자에 넣을 값을 정합니다. Down이면 5분 전 값만 보고 이후는 0으로 적습니다(OUT 기준). 경과 문자가 나가기 전에 트래픽을 먼저 전달해야 합니다.",
+    "영향을 받는 고객사에 발생 문자를 보냅니다. 이 회선을 쓰는 고객사는 관련 회선 표의 고객사 열에서 확인합니다.",
+    "광값과 CRC를 봅니다. 수신 광값이 -40dBm이면 빛이 전혀 들어오지 않는 것입니다. 광 케이블 접촉 불량이나 SFP 불량이 흔한 원인이라 이 둘을 먼저 의심합니다.",
+    "상대 장비까지 닿는지 ping으로 봅니다. 링크가 Down이면 ARP도 비어 있고 ping도 100% 실패합니다. 우리 장비까지는 정상이고 선 건너편이 안 보이는 것으로 정리합니다.",
+    "연동망(상대 센터)에 문의합니다. NOC 작업 유/무, 연동 구간 작업·이슈 유/무, 보안 이슈 유/무 세 가지를 묻고, 통화한 분의 성함을 기록합니다. 확인한 내용은 조장에게 전달합니다.",
+    "회선이 복구되었습니다. 복구 시각과 트래픽 회복 값을 확인하고 경과 문자를 보냅니다."
+  ], [null, [dDev], null, null, [dDev], [dDev], null, null], "끊긴 회선은 descriptions의 Admin/Link로 먼저 찾고, 광값·CRC → ping → 상대 구간 문의 순서로 좁혀 갑니다. 확인한 값은 문자와 보고에 그대로 씁니다.");
+
   // 3) 트래픽 폭주: 월드컵 8강
   const ev = DATA.events.find(e => e.name.includes("8강")), cc = evCalc(ev);
   const kt = m => isoLocal(parseT(ev.start) + m * 60000);   // 킥오프 기준 분
@@ -983,6 +1035,16 @@ function buildScenarios() {
     { at: kt(125), kind: "결과", title: `사후 정리: ${OA} 예상 ${A.exp.toFixed(0)}G, 실제 최대 ${A.act.toFixed(0)}G (${((A.act / A.exp - 1) * 100).toFixed(0)}%). 다음에는 배율을 ×${(1 + (A.act - A.base) / refPeak(A.l)).toFixed(1)}로`, focus: [] }
   ] };
 
+  addExplain(surge, [
+    "월드컵 8강 경기 30분 전입니다. 경기 전날 고객사에 '이 회선으로 보내 달라'고 미리 안내해 두었고, 오늘은 그 안내대로 트래픽이 들어오는지 지켜봅니다.",
+    "예상 트래픽이 회선 용량을 넘을 것 같아서 일부를 여유 있는 다른 회선으로 돌립니다(분산). 다른 센터 회선으로 돌릴 때는 먼저 협의합니다.",
+    "킥오프입니다. 트래픽이 평소 곡선이 아니라 경기 곡선을 따라 오르기 시작합니다.",
+    "하프타임 하이드레이션 타임에 트래픽이 잠깐 줄었다가 다시 오릅니다. 급감 경고가 아니라 경기 일정으로 설명되는 하락입니다.",
+    "최고점에서 경고선 80%에 닿았습니다. 분산 상태와 영향을 받는 고객사를 집중해서 확인합니다.",
+    "경기 종료 직후 트래픽이 급락하는 것은 정상입니다. 이것도 경기 일정으로 설명됩니다.",
+    "사후 정리입니다. 예상과 실제 최대치를 비교해서 다음 경기의 배율을 보정합니다."
+  ], null, "경기·행사 때의 급증과 급감은 '이벤트 일정과 겹치는지'부터 확인하면 대부분 설명됩니다. 겹치지 않는 급증은 DDoS 가능성을 봅니다.");
+
   // 4) 서버실 온도 변화: IDC_B_R07 냉각 이상
   const COOL = "IDC_B_R07", R3 = RACKS.find(r => r.id === COOL), al = Lib.detectRoom(RACKS, TD).find(a => a.rack === COOL);
   const fc = R3.temp.findIndex((t, i) => i >= al.s && t >= TD.crit), dv = R3.devices.find(x => x.downStart);
@@ -993,16 +1055,54 @@ function buildScenarios() {
     { at: isoLocal(msOf(fc)), kind: "감지", title: `${TD.crit}°C 이상 (${tAt(fc)}°C): 장비 LED 상태가 빨강 깜박임`, focus: [COOL] },
     { at: isoLocal(msOf(fc) + 15 * 60000), kind: "조치", title: "냉각기 점검 요청(티켓)과 육안점검 요청", focus: [COOL] },
     { at: isoLocal(dMs), kind: "감지", title: `${dv.id} 과열로 꺼짐 (전원 LED 꺼짐)`, focus: [COOL] },
-    { at: isoLocal(dMs + 10 * 60000), kind: "조치", title: `터미널로 ${dv.id}와 이어진 ${peer.id} 포트(${lk.ap}) 확인: 빛이 안 들어와서 ${dv.id}이 꺼진 것으로 확인`, detail: runOn(peer.id, `show interfaces diagnostics optics ${lk.ap}`), sum: `광 수신 ${pif[3].toFixed(2)} dBm, 수신 낮음 알람 켜짐 → 빛이 안 들어옴`, detailLabel: "터미널 출력 보기", focus: [COOL] },
+    { at: isoLocal(dMs + 10 * 60000), kind: "조치", title: `터미널로 ${dv.id}와 이어진 ${peer.id} 포트(${lk.ap}) 확인: 빛이 안 들어와서 ${dv.id}이 꺼진 것으로 확인`, detail: runOn(peer.id, `show interfaces diagnostics optics ${lk.ap}`, null, isoLocal(dMs + 10 * 60000)) + `\n\n터미널로 ${dv.id}에 직접 들어가 보면:\n` + runOn(dv.id, "show interfaces descriptions", null, isoLocal(dMs + 10 * 60000)), sum: `광 수신 ${withTime(dMs + 10 * 60000, () => pif[3]).toFixed(2)} dBm, 수신 낮음 알람 켜짐 → 빛이 안 들어옴. ${dv.id} 터미널은 응답 없음`, detailLabel: "터미널 출력 보기", focus: [COOL] },
     { at: isoLocal(msOf(al.e) + 5 * 60000), kind: "확인", title: `냉각 복구: ${TD.hot}°C 아래로 내려옴 (${tAt(al.e + 1)}°C)`, focus: [COOL] },
     { at: "2026-10-26T17:15", kind: "결과", title: `복구 완료 (${tAt(isoIdx("2026-10-26T17:15"))}°C). 육안점검 기록 남김: ${COOL} 이상 있음 → 정상 복귀`, focus: [COOL] }
   ] };
 
-  return { calm, drop, linkDown, surge, temp };
+  addExplain(temp, [
+    `랙 ${COOL}의 입구 온도가 경고 기준 이상으로 올랐습니다. 이 랙에는 이중화 짝 장비 ${R3.devices.map(x => x.id).join("·")}가 함께 들어 있습니다. 온도 경고가 등록되고 육안점검 대상이 됩니다.`,
+    "온도가 위험 기준(33°C)을 넘으면 장비 LED의 상태 불빛이 빨간색으로 깜박입니다. 이제 장비가 스스로 꺼질 수 있는 단계입니다.",
+    "냉각기 점검을 요청(티켓)하고 현장 육안점검을 요청합니다. 온도가 더 오르기 전에 먼저 알리는 것이 중요합니다.",
+    `과열을 견디지 못한 ${dv.id}이 보호 종료로 꺼졌습니다. 전원 LED가 꺼진 상태입니다. 같은 랙의 짝 장비는 아직 켜져 있어서 고객 회선은 짝 장비로 이어집니다.`,
+    `꺼진 장비는 터미널로 들어가도 응답이 없습니다. 대신 옆 장비(허브)에서 이 장비와 이어진 포트를 보면 Down이고 광 수신이 -40dBm입니다. 이것으로 '장비가 꺼졌다'를 확인합니다. 아래 출력의 두 번째 부분이 ${dv.id}에 직접 들어가 본 결과입니다.`,
+    "냉각이 복구되어 온도가 경고 기준 아래로 내려왔습니다.",
+    "복구가 끝났습니다. 육안점검 기록을 남기고, 꺼졌던 장비가 정상으로 돌아왔는지 확인합니다."
+  ], [null, null, null, [dv.id, DEV[dv.id].partner], [dv.id, peer.id], null, [dv.id]], "온도가 오르면 장비가 스스로 꺼질 수 있습니다. 꺼진 장비는 터미널로 확인할 수 없으니 옆 장비의 포트 상태로 확인하고, 짝 장비가 살아 있는지 같이 봅니다.");
+
+  // 5) 이중화로 무사히 넘기기: 장비 한 대가 꺼져도 짝 장비가 같은 고객 회선을 받아서 큰 장애 없이 넘어간다
+  const o2 = OUTAGES.find(o => o.dev !== dv.id), D1 = o2.dev, D2 = DEV[D1].partner, rt = m => isoLocal(o2.s + m * 60000), downMin = Math.round((o2.e - o2.s) / 60000);
+  const lu = DEV[D1].ifs.filter(f => f[10] && !f[11]), sumG = lu.reduce((q, f) => q + f[9], 0), g10 = lu.filter(f => f[9] === 10).length;
+  const custOn = [...new Set(lu.map(f => f[10].customer))], rLinks = CUSTOMERS.filter(c => custOn.includes(c.name)).flatMap(c => c.links).filter(id => LINK[id] && codeOf(id) === codeOf(D1));
+  const rFocus = [...new Set(rLinks)].slice(0, 3);
+  const trafficTxt = (m0, m1) => rFocus.map(id => `${id}: ${g1(outAt(id, rt(m0)))}G → ${g1(outAt(id, rt(m1)))}G (${((outAt(id, rt(m1)) / outAt(id, rt(m0)) - 1) * 100).toFixed(1)}%)`).join("\n");
+  const hubIp = withTime(o2.s + 20 * 60000, () => (DEV[D2].ifs.find(f => f[8] && f[5] === "up") || [])[8]);
+  const redundancy = { name: "이중화로 무사히 넘기기", tab: "monitor", center: codeOf(D1), win: 12, from: rt(-30), to: rt(downMin + 20), steps: [
+    { at: rt(-10), kind: "확인", title: `평소: 짝 장비 ${D1}·${D2} 모두 정상, 같은 고객 회선이 두 장비에 똑같이 꽂혀 있음`, detail: runOn(D1, "show interfaces descriptions", null, rt(-10)), detailLabel: `${D1} 회선 목록 보기`, sum: `고객 회선 ${lu.length}개 사용 중 (10G ${g10}개, 1G ${lu.length - g10}개)`, focus: rFocus },
+    { at: rt(0), kind: "감지", title: `${D1} 전원 꺼짐 (${o2.why}). 서버실 경고가 뜨고 터미널로 접속이 안 됨`, detail: runOn(D1, "show interfaces descriptions", null, rt(1)), detailLabel: `${D1} 터미널 시도 결과 보기`, focus: rFocus },
+    { at: rt(3), kind: "확인", title: `짝 장비 ${D2}에서 보면 고객 회선은 그대로 Up, ${D1}과 이어진 짝 연결(PAIR1)만 Down`, detail: runOn(D2, "show interfaces descriptions", null, rt(3)), detailLabel: `${D2} 회선 목록 보기`, sum: "고객 회선은 짝 장비로 계속 이어짐", focus: rFocus },
+    { at: rt(5), kind: "확인", title: "트래픽은 거의 그대로: 고객 회선이 짝 장비로 이어져 그래프 변화가 거의 없음", detail: `■ 트래픽 (장비 다운 직전 → 5분 뒤, OUT)\n${trafficTxt(-5, 5)}\n\n* 그래프가 거의 변하지 않았으므로 고객 장애는 없는 것으로 판단한다.`, detailLabel: "트래픽 비교 보기", focus: rFocus },
+    { at: rt(8), kind: "조치", title: `고객 영향이 없어 고객 안내는 하지 않고, 조장에게 보고하고 ${D1} 전원 모듈 교체를 요청`, detail: `[내부 보고 (가상)]\n${hm(o2.s)}에 ${D1}(${DEV[D1].rack})이 꺼졌습니다. 원인은 ${o2.why}으로 보입니다.\n짝 장비 ${D2}가 같은 고객 회선을 받고 있어 고객 영향은 없습니다. 그래프 변화도 거의 없습니다.\n${D1} 전원 모듈 교체를 요청했습니다(티켓). ${D2}가 한 대로 운영 중이므로 교체 전까지 ${D2}를 주의해서 보겠습니다.`, detailLabel: "보고 내용 보기", focus: rFocus },
+    { at: rt(20), kind: "확인", title: `지금은 ${D2} 한 대로 버티는 중: 이 장비를 더 주의해서 확인 (ping 정상)`, detail: runOn(D2, `ping ${hubIp} rapid count 100`, null, rt(20)) + "\n\n* 한 대가 더 죽으면 진짜 장애가 된다. 교체가 끝날 때까지 이 장비의 로그·CRC·온도를 계속 확인한다.", detailLabel: "터미널 출력 보기", focus: rFocus },
+    { at: isoLocal(o2.e), kind: "확인", title: `${D1} 전원 복구: 이중화 복귀 확인 (회선 목록이 다시 Up)`, detail: runOn(D1, "show interfaces descriptions", null, isoLocal(o2.e + 60000)), detailLabel: `${D1} 회선 목록 보기`, focus: rFocus },
+    { at: rt(downMin + 5), kind: "결과", title: `고객 영향 없음. 이중화가 없었다면 고객사 ${custOn.length}곳의 회선 ${lu.length}개(합계 ${sumG}G)가 ${downMin}분 끊겼을 것 (가정)`, focus: rFocus }
+  ] };
+  addExplain(redundancy, [
+    `새벽 시간입니다. 이중화는 같은 고객 회선을 서로 다른 장비 두 대(${D1}, ${D2})에 똑같이 꽂아 두는 것입니다. 두 장비의 회선 목록이 같은 포트로 보입니다. 평소에는 두 장비가 함께 트래픽을 나눠 받는다고 가정합니다.`,
+    `${D1}이 꺼졌습니다(${o2.why}). 서버실 경고가 뜨고, 이 장비에 터미널로 접속하려고 하면 응답이 없습니다. 꺼진 장비는 직접 확인할 수 없습니다.`,
+    `꺼지지 않은 짝 장비 ${D2}로 가서 같은 명령을 칩니다. 고객 회선은 전부 그대로 Up이고, ${D1}과 직접 이어진 짝 연결 포트만 Down입니다. 이 결과가 '회선은 짝 장비로 계속 이어진다'는 증거입니다.`,
+    "그래프를 확인합니다. 장비가 꺼지기 직전과 5분 뒤의 값이 거의 같습니다. 고객의 트래픽이 끊기지 않고 짝 장비로 이어졌다는 뜻입니다.",
+    "고객에게 영향이 없으므로 고객 안내 문자는 보내지 않습니다. 대신 조장에게 보고하고, 꺼진 장비의 전원 모듈 교체를 요청합니다. 영향이 없어도 장비 한 대가 죽은 것은 반드시 보고해야 합니다.",
+    `지금은 이중화가 한 쪽만 남은 위험한 시간입니다. ${D2}에 문제가 생기면 진짜 장애가 되므로 이 장비를 더 자주 확인합니다.`,
+    `${D1}의 전원이 복구되어 회선 목록이 다시 전부 Up입니다. 이중화가 원래 상태로 돌아왔습니다. 복구 후에도 짝 연결과 고객 회선이 정상인지 확인합니다.`,
+    `정리합니다. 이번 장애로 고객 영향은 없었습니다. 만약 이 회선들이 한 장비에만 꽂혀 있었다면 고객사 ${custOn.length}곳의 회선 ${lu.length}개, 합계 ${sumG}G가 ${downMin}분 동안 끊겼을 것입니다(가정).`
+  ], [[D1, D2], [D1], [D2], null, [D1, D2], [D2], [D1], [D1, D2]], "중요한 회선은 서로 다른 장비 두 대에 나눠 꽂아 둡니다(이중화). 한 대가 꺼져도 고객 회선은 짝 장비로 이어져서, 장애가 아니라 '조치가 필요한 알림'으로 끝납니다. 다만 한 대로 버티는 동안은 위험한 시간이므로 빨리 복구해야 합니다.");
+
+  return { calm, drop, linkDown, surge, temp, redundancy };
 }
-const SCN_LIST = [["calm", "평일 오후 7시", "저녁 피크 전 평소 점검 (이상 없음)"], ["drop", "트래픽 급감", "국내 연동(IX)이 갑자기 빠짐: 원인 확인과 조치"], ["linkDown", "업링크 회선 다운", "안산 업링크 Down: 회선·트래픽·광값·ping·연동망 문의 순서"], ["surge", "트래픽 폭주", "월드컵 8강: 사전 연락·분산·모니터링"], ["temp", "서버실 온도 변화", "분당 IDC_B_R07 냉각 이상: 육안점검·터미널 확인·복구"]];
+const SCN_LIST = [["calm", "평일 오후 7시", "저녁 피크 전 평소 점검 (이상 없음)"], ["drop", "트래픽 급감", "국내 연동(IX)이 갑자기 빠짐: 원인 확인과 조치"], ["linkDown", "업링크 회선 다운", "안산 업링크 Down: 회선·트래픽·광값·ping·연동망 문의 순서"], ["surge", "트래픽 폭주", "월드컵 8강: 사전 연락·분산·모니터링"], ["redundancy", "이중화로 무사히 넘기기", "장비 한 대가 꺼져도 짝 장비가 고객 회선을 받아 큰 장애 없이 넘김"], ["temp", "서버실 온도 변화", "분당 IDC_B_R07 냉각 이상: 육안점검·터미널 확인·복구"]];
 let scn = null;
-function stopScn() { if (scn && scn.timer) clearInterval(scn.timer); scn = null; HL.clear(); }
+function stopScn() { if (scn && scn.timer) clearInterval(scn.timer); scn = null; HL.clear(); const p = $("#scnPop"); if (p) p.hidden = true; }
 function scnSetView() {
   if (scn.def.tab === "monitor") { state.end = scn.idx; renderAll(); } else { sr.end = scn.idx; renderServerRoom(); }
   if (scn.reveal) {   // 강조된 그래프가 막대에 가리거나 화면 밖이면 보이는 곳으로 스크롤
@@ -1014,8 +1114,48 @@ function scnSetView() {
 function scnShowDue() {
   const due = scn.steps.filter(st => !st.shown && st.i <= scn.idx);
   due.forEach(st => { st.shown = true; scn.done.push(st); if (st.focus) { HL.clear(); st.focus.forEach(f => HL.add(f)); scn.reveal = true; } });
-  if (due.length) { scn.hold = SCN_HOLD; scnRenderSteps(); }
+  if (due.length) { scnRenderSteps(); if (!scn.skip) { scn.queue.push(...due); if (!scn.modal) scnPopNext(); } }
 }
+/* ---------- 단계 팝업: 어떤 장비·회선이 어떻게 되고 있는지 자세히 ---------- */
+function scnDevText(id, i) {   // 그 시각의 장비 상태 한 줄
+  const rack = RACKS.find(r => r.devices.some(x => x.id === id)), dv = rack.devices.find(x => x.id === id), st = devState(rack, dv, i);
+  return !st.power ? '<span class="crit-t">전원 꺼짐</span>' : st.status === "crit" ? '<span class="crit-t">장애(온도)</span>' : st.status === "warn" ? '<span class="warn-t">주의(온도)</span>' : st.fan === "warn" ? '<span class="warn-t">팬 주의</span>' : "정상";
+}
+function scnRelatedHtml(st) {
+  const i = clamp(st.i, 0, N - 1), foc = st.focus || [], links = foc.filter(id => LINK[id]), racks = foc.filter(id => RACKS.some(r => r.id === id));
+  let h = "";
+  if (links.length) {
+    const sorted = [...links].sort((x, y) => LINK[y].out[i] / LINK[y].cap - LINK[x].out[i] / LINK[x].cap), show = sorted.slice(0, 6);
+    h += `<h4>관련 회선 (이 시각 ${hm(msOf(i))})</h4><table class="kv2"><tr><th>회선</th><th>연결 (장비 포트)</th><th class="n">용량</th><th class="n">out / in</th><th>고객사</th></tr>` + show.map(id => {
+      const l = TOPOLOGY.links.find(x => x.link === id), L = LINK[id], cu = custOf(id), u = L.out[i] / L.cap * 100;
+      return `<tr><td class="mono">${id}</td><td>${l ? `${l.a} ${l.ap} ↔ ${esc(l.b)}${l.bp && l.bp !== "-" ? " " + l.bp : ""}` : ""}</td><td class="n">${L.cap}G</td><td class="n ${u >= 80 ? "crit-t" : ""}">${g1(L.out[i])}G / ${g1(L.in[i])}G (${u.toFixed(0)}%)</td><td>${esc(cu.slice(0, 3).join(" · "))}${cu.length > 3 ? ` 외 ${cu.length - 3}곳` : ""}</td></tr>`;
+    }).join("") + `</table>${sorted.length > 6 ? `<p class="note">외 ${sorted.length - 6}개 회선은 관제 화면에서 확인합니다.</p>` : ""}`;
+  }
+  const devs = st.devs || [];
+  if (racks.length) h += `<h4>관련 랙</h4><table class="kv2"><tr><th>랙</th><th class="n">입구 온도</th><th>장비 상태</th></tr>` + racks.map(id => { const r = RACKS.find(x => x.id === id); return `<tr><td class="mono">${id}</td><td class="n ${tempCls(r.temp[i])}">${r.temp[i].toFixed(1)}°C</td><td>${r.devices.map(x => `${x.id} ${scnDevText(x.id, i)}`).join(" · ")}</td></tr>`; }).join("") + "</table>";
+  if (devs.length) h += `<h4>관련 장비</h4><table class="kv2"><tr><th>장비</th><th>종류·역할</th><th>랙</th><th>이중화 짝</th><th>이 시각 상태</th></tr>` + devs.map(id => { const d = DEV[id]; return `<tr><td class="mono">${id}</td><td>${{ juniper: "Juniper", cisco: "Cisco Nexus 7710(추정)", huawei: "Huawei" }[d.vendor]} · ${esc(d.role)}</td><td>${d.rack}</td><td class="mono">${d.partner}</td><td>${scnDevText(id, i)}</td></tr>`; }).join("") + "</table>";
+  return h;
+}
+function scnPopupShow(st) {
+  const k = scn.steps.indexOf(st), lesson = !!st.lesson;
+  $("#scnPopKind").className = "tag " + (KIND_CLS[st.kind] || ""); $("#scnPopKind").textContent = st.kind;
+  $("#scnPopTime").textContent = lesson ? "" : ymdhm(msOf(st.i));
+  $("#scnPopNo").textContent = lesson ? "정리" : `단계 ${k + 1} / ${scn.steps.length}`;
+  $("#scnPopTitle").textContent = st.title;
+  const ex = st.explain ? `<div class="explain">${String(st.explain).split("\n").map(x => `<p>${esc(x)}</p>`).join("")}</div>` : "";
+  $("#scnPopBody").innerHTML = ex + (lesson ? "" : scnRelatedHtml(st)) + (st.sum ? `<p class="sumline">정리: ${esc(st.sum)}</p>` : "") + (st.detail ? `<h4>${esc(st.detailLabel || "자세한 내용")}</h4><pre>${esc(st.detail)}</pre>` : "");
+  $("#scnPopBody").scrollTop = 0;
+  $("#scnPopNext").textContent = scn.queue.length ? "다음 ▶" : (scn.finished || scn.idx >= scn.i1 || lesson) ? "닫기" : "계속 진행 ▶";
+  $("#scnPop").hidden = false; scn.modal = true;
+}
+function scnPopNext() {
+  if (!scn) return;
+  const st = scn.queue.shift();
+  if (st) { scnPopupShow(st); return; }
+  $("#scnPop").hidden = true; scn.modal = false;
+  if (!scn.finished && scn.idx >= scn.i1) scnFinish();
+}
+function scnLessonPop() { if (scn && scn.def.lesson) { scn.queue.unshift({ kind: "결과", title: "이 시나리오에서 배울 점", explain: scn.def.lesson, i: scn.i1, lesson: true }); scnPopNext(); } }
 function scnProgress() {
   $("#scnTime").textContent = ymdhm(msOf(scn.idx));
   $("#scnProg").style.width = (scn.finished ? 100 : (scn.idx - scn.i0) / Math.max(1, scn.i1 - scn.i0) * 100) + "%";
@@ -1024,13 +1164,14 @@ function scnProgress() {
 }
 function scnRenderSteps() {
   const last = scn.done.length - 1;
-  $("#scnSteps").innerHTML = scn.done.map((st, k) => `<li class="${k === last && !scn.finished ? "cur" : ""}"><span class="tag ${KIND_CLS[st.kind]}">${st.kind}</span> <b class="mono">${hhmm(st.i)}</b> ${esc(st.title)}${st.sum ? `<span class="muted"> → ${esc(st.sum)}</span>` : ""}${st.detail ? `<details><summary>${esc(st.detailLabel || "자세히")}</summary><pre>${esc(st.detail)}</pre></details>` : ""}</li>`).join("");
+  $("#scnSteps").innerHTML = scn.done.map((st, k) => `<li class="${k === last && !scn.finished ? "cur" : ""}"><span class="tag ${KIND_CLS[st.kind]}">${st.kind}</span> <b class="mono">${hhmm(st.i)}</b> ${esc(st.title)}${st.sum ? `<span class="muted"> → ${esc(st.sum)}</span>` : ""}${st.detail ? `<details><summary>${esc(st.detailLabel || "자세히")}</summary><pre>${esc(st.detail)}</pre></details>` : ""} <button class="btn sm" data-scnpop="${k}">자세히 팝업</button></li>`).join("");
   const ul = $("#scnSteps"); ul.scrollTop = ul.scrollHeight;
+  $("#scnLesson").hidden = !(scn.finished && scn.def.lesson);
 }
-function scnFinish() { scn.finished = true; clearInterval(scn.timer); scn.timer = null; scnProgress(); scnRenderSteps(); }
+function scnFinish() { scn.finished = true; clearInterval(scn.timer); scn.timer = null; scnProgress(); scnRenderSteps(); if (!scn.skip && scn.def.lesson && !scn.lessonShown) { scn.lessonShown = true; scnLessonPop(); } }
 function scnTick() {
   if (!scn || scn.paused || scn.finished) return;
-  if (scn.hold > 0) { scn.hold--; return; }
+  if (scn.modal) return;   // 팝업이 열려 있는 동안은 시간이 흐르지 않는다
   if (scn.idx >= scn.i1) { scnFinish(); return; }
   scn.idx++; scnShowDue(); scnSetView(); scnProgress();
 }
@@ -1038,7 +1179,7 @@ function startScn(id) {
   stopScn();
   const def = buildScenarios()[id];
   const steps = def.steps.map(st => Object.assign({ i: isoIdx(st.at), shown: false }, st)).sort((a, b) => a.i - b.i);
-  scn = { def, steps, i0: isoIdx(def.from), i1: isoIdx(def.to), idx: isoIdx(def.from), done: [], hold: 0, paused: false, finished: false, timer: null };
+  scn = { def, steps, i0: isoIdx(def.from), i1: isoIdx(def.to), idx: isoIdx(def.from), done: [], queue: [], modal: false, skip: false, lessonShown: false, paused: false, finished: false, timer: null };
   state.cust = "all"; $("#cust").value = "all"; state.ymode = "cap"; $("#ymode").value = "cap";
   setCenter(def.center || "ALL", false);   // 시나리오가 보여 줄 센터 (선택값은 저장하지 않음)
   if (def.win) { state.win = def.win; $("#win").value = String(def.win); }
@@ -1056,36 +1197,42 @@ function startScn(id) {
   document.addEventListener("click", e => { if (!menu.hidden && !menu.contains(e.target) && e.target !== btn) closeMenu(); });
   document.addEventListener("keydown", e => { if (e.key === "Escape") closeMenu(); });
   $("#scnPause").onclick = () => { if (scn && !scn.finished) { scn.paused = !scn.paused; scnProgress(); } };
-  $("#scnSkip").onclick = () => { if (!scn || scn.finished) return; scn.idx = scn.i1; scn.hold = 0; scnShowDue(); scnSetView(); scnFinish(); };
+  const skipAll = () => { if (!scn || scn.finished) return; scn.skip = true; scn.queue = []; scn.modal = false; $("#scnPop").hidden = true; scn.idx = scn.i1; scnShowDue(); scnSetView(); scnFinish(); };
+  $("#scnSkip").onclick = skipAll; $("#scnPopSkip").onclick = skipAll;
+  $("#scnPopNext").onclick = scnPopNext; $("#scnPopX").onclick = scnPopNext;
+  $("#scnLesson").onclick = scnLessonPop;
+  $("#scnSteps").addEventListener("click", e => { const b = e.target.closest("[data-scnpop]"); if (b && scn) { scn.queue.unshift(scn.done[+b.dataset.scnpop]); scnPopNext(); } });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && scn && scn.modal) scnPopNext(); });
   $("#scnClose").onclick = () => { stopScn(); $("#scnBar").hidden = true; showTab("monitor"); goNow(); window.scrollTo({ top: 0, behavior: "smooth" }); };
   syncHdr(); window.addEventListener("resize", syncHdr);
 })();
 
 /* ---------- 서버실-3D 공용: 포트 배치, 장비 상세(포트·광케이블). 3D 화면 자체는 room3d.js ---------- */
-// 랙·장비의 크기(Cisco 21U, Juniper 6U, Huawei 2U)와 포트 배치는 제가 만든 가상 그림입니다.
+// 장비 크기: Cisco는 Nexus 7710(14U, 사진·메모로 추정), Juniper 6U·Huawei 2U와 포트 배치는 제가 만든 가상 그림입니다.
 const R3 = { dev: null, port: null };   // 장비 상세(포트·광케이블) 창의 상태
-const RACK_U = 42, DEV_U = { cisco: 21, juniper: 6, huawei: 2 }, ROW_N = 8;   // 장비 높이는 제가 만든 가정
-const portBad = f => f[2] > 50 || f[3] < -9;
+const RACK_U = 42, DEV_U = { cisco: 14, juniper: 6, huawei: 2 }, ROW_N = 8;   // 장비 높이는 제가 만든 가정
+const portBad = f => !f[11] && (f[2] > 50 || f[3] < -9);   // 아직 안 쓰는 회선(f[11])은 이상이 아니다
 function portPlan(d) {   // 포트를 슬롯·번호 순서대로 위치(0부터)에 놓는다. 위아래 2줄, 왼쪽부터
   const sorted = sortedIfs(d), n = sorted.length;
   const total = d.vendor === "cisco" ? Math.max(48, Math.ceil(n / 12) * 12) : Math.max(24, Math.ceil(n / 24) * 24);
   return { total, cols: total / 2, map: new Map(sorted.map((f, q) => [q, f])) };
 }
 /* 장비 상세: 포트 배치와 꽂혀 있는 광케이블 (위줄 포트의 케이블은 위로, 아래줄은 아래로) */
-function r3Detail() {
+function r3Detail() { return withTime(msOf(clamp(sr.end, 0, N - 1)), r3DetailNow); }   // 그 시각의 꺼짐 상태를 반영해서 그린다
+function r3DetailNow() {
   const d = DEV[R3.dev], rack = RACKS.find(r => r.id === d.rack), i = clamp(sr.end, 0, N - 1), dv = rack.devices.find(x => x.id === d.id), st = devState(rack, dv, i);
   const pl = portPlan(d), PX = 26, PAD = 20, CARD = d.vendor === "cisco" ? 6 : 0, GAPW = 16, ZONE = 150, HEAD = 26;
   const colX = c => PAD + c * PX + (CARD ? Math.floor(c / CARD) * GAPW : 0);
   const W = colX(pl.cols - 1) + PX + PAD, plateH = HEAD + 2 * 30 + PAD, H = ZONE * 2 + plateH;
   const pos = k => ({ x: colX(Math.floor(k / 2)) + 10, row: k % 2, y: ZONE + HEAD + (k % 2) * 30 });
-  const used = [...pl.map.keys()].sort((a, b) => a - b);
+  const used = [...pl.map.keys()].sort((a, b) => a - b), cabled = used.filter(k => !pl.map.get(k)[11]), outNow = outageAt(d.id, msOf(clamp(sr.end, 0, N - 1)));   // 아직 안 쓰는 회선에는 케이블을 그리지 않는다
   const sel = R3.port != null && pl.map.has(R3.port) ? R3.port : null;
   const peerOf = f => { if (f[10]) return { dev: f[1], port: "", kind: `고객 회선 (홈 ${f[10].home})`, gbps: f[9] }; const lk = f[4]; return { dev: f[1], port: lk ? (lk.a === d.id ? lk.bp : lk.ap) : "", kind: lk ? lk.kind : "", gbps: lk ? lk.gbps : "" }; };
   let svg = "", tags = "", plate = "";
   for (let k = 0; k < pl.total; k++) { const p = pos(k), f = pl.map.get(k);
-    plate += `<button class="pt${f ? (portBad(f) ? " x" : " u") : ""}${k === sel ? " sel" : ""}" data-i="${k}" style="left:${p.x - 10}px;top:${p.y}px" title="포트 ${k}${f ? " → " + f[1] : " (비어 있음)"}">${k}</button>`; }
+    plate += `<button class="pt${f ? (portBad(f) ? " x" : f[5] === "down" ? " d" : " u") : ""}${k === sel ? " sel" : ""}" data-i="${k}" style="left:${p.x - 10}px;top:${p.y}px" title="포트 ${k}${f ? " → " + f[1] : " (비어 있음)"}">${k}</button>`; }
   [0, 1].forEach(rw => {   // rw 0 = 위줄(케이블 위로), 1 = 아래줄(케이블 아래로)
-    const mine = used.filter(k => k % 2 === rw);
+    const mine = cabled.filter(k => k % 2 === rw);
     const want = mine.filter(k => k === sel || portBad(pl.map.get(k)));
     (mine.length <= 6 ? mine : want).forEach(k => { if (!want.includes(k)) want.push(k); });
     const tagged = [...new Set(want)].slice(0, 7).sort((a, b) => a - b);
@@ -1099,14 +1246,14 @@ function r3Detail() {
     });
   });
   const rows = used.map(k => { const f = pl.map.get(k), pe = peerOf(f);
-    return `<tr class="click${k === sel ? " on" : ""}" data-i="${k}"><td>${f[0]}</td><td>${esc(pe.dev)}${pe.port && pe.port !== "-" ? " " + esc(pe.port) : ""}</td><td>${esc(pe.kind || "외부 연결")}</td><td class="n">${pe.gbps}</td><td class="n ${f[3] < -9 ? "crit-t" : ""}">${f[3].toFixed(2)}</td><td class="n ${f[2] > 50 ? "crit-t" : ""}">${f[2]}</td></tr>`; }).join("");
+    return `<tr class="click${k === sel ? " on" : ""}" data-i="${k}"><td>${f[0]}</td><td>${esc(pe.dev)}${pe.port && pe.port !== "-" ? " " + esc(pe.port) : ""}</td><td>${esc(pe.kind || "외부 연결")}</td><td class="n">${pe.gbps}</td><td class="n ${f[3] < -9 ? "crit-t" : ""}">${f[3].toFixed(2)}</td><td class="n ${f[2] > 50 ? "crit-t" : ""}">${f[2]}</td><td class="${f[5] === "down" && !f[11] ? "crit-t" : "muted"}">${f[11] === "unused" ? "미사용 (Link down)" : f[11] === "off" ? "미사용 (Admin down)" : f[6] === "down" ? "Admin down" : f[5] === "down" ? "Link down" : "Up"}</td></tr>`; }).join("");
   const label = { ok: "정상", warn: "주의", crit: "장애", off: "꺼짐" };
   $("#r3Detail").hidden = false;
-  $("#r3DBody").innerHTML = `<div class="dhd"><b>${d.id}</b><span class="tag">${{ juniper: "Juniper", cisco: "Cisco", huawei: "Huawei" }[d.vendor]}</span><span class="muted">${esc(d.role)} · ${d.rack} · 입구 ${rack.temp[i].toFixed(1)}°C</span>${ledHtml(st)}<span class="muted">전원 ${st.power ? "켜짐" : "꺼짐"} · 상태 ${label[st.status]} · 팬 ${label[st.fan]}</span><span class="sp"></span><button class="btn" id="r3DTerm">이 장비 터미널 열기</button><button class="btn" id="r3DClose">닫기</button></div>` +
-    `<p class="note">노란 선이 꽂혀 있는 광케이블(가상, 단일모드로 가정)이고 빨간 선은 광 수신이 약하거나 CRC 오류가 많은 포트입니다. 위줄 포트의 케이블은 위로, 아래줄은 아래로 나갑니다. 포트를 누르면 표시됩니다.</p>` +
+  $("#r3DBody").innerHTML = `<div class="dhd"><b>${d.id}</b><span class="tag">${{ juniper: "Juniper", cisco: "Cisco", huawei: "Huawei" }[d.vendor]}</span><span class="muted">${esc(d.role)} · ${d.rack} · 입구 ${rack.temp[i].toFixed(1)}°C</span>${ledHtml(st)}<span class="muted">전원 ${st.power ? "켜짐" : "꺼짐"} · 상태 ${label[st.status]} · 팬 ${label[st.fan]}</span>${outNow ? `<span class="tag crit">전원 꺼짐${outNow.why ? ": " + esc(outNow.why) : ""}</span>` : ""}<span class="sp"></span><button class="btn" id="r3DTerm">이 장비 터미널 열기</button><button class="btn" id="r3DClose">닫기</button></div>` +
+    `<p class="note">노란 선이 꽂혀 있는 광케이블(가상, 단일모드로 가정)이고 빨간 선은 광 수신이 약하거나 CRC 오류가 많은 포트입니다. 회색 포트는 아직 쓰지 않는 회선(Down)이라 케이블을 그리지 않았습니다. 위줄 포트의 케이블은 위로, 아래줄은 아래로 나갑니다. 포트를 누르면 표시됩니다.</p>` +
     `<div class="dscroll"><div class="dwrap" style="width:${W}px;height:${H}px"><svg width="${W}" height="${H}">${svg}</svg>` +
-    `<div class="plate ${d.vendor}" style="left:0;top:${ZONE}px;width:${W}px;height:${plateH}px"><span class="pl">${d.id} · ${d.vendor === "cisco" ? "Cisco 대형 섀시" : d.vendor === "juniper" ? "Juniper" : "Huawei"}</span></div>${plate}${tags}</div></div>` +
-    `<div class="card" style="padding:0;margin-top:10px;max-height:240px;overflow:auto"><table><tr><th>포트</th><th>연결 상대</th><th>종류</th><th class="n">Gbps</th><th class="n">수신 dBm</th><th class="n">CRC</th></tr>${rows || `<tr><td colspan="6" class="muted">연결된 포트가 없습니다.</td></tr>`}</table></div>`;
+    `<div class="plate ${d.vendor}" style="left:0;top:${ZONE}px;width:${W}px;height:${plateH}px"><span class="pl">${d.id} · ${d.vendor === "cisco" ? "Cisco Nexus 7710 (추정)" : d.vendor === "juniper" ? "Juniper" : "Huawei"}</span></div>${plate}${tags}</div></div>` +
+    `<div class="card" style="padding:0;margin-top:10px;max-height:240px;overflow:auto"><table><tr><th>포트</th><th>연결 상대</th><th>종류</th><th class="n">Gbps</th><th class="n">수신 dBm</th><th class="n">CRC</th><th>상태</th></tr>${rows || `<tr><td colspan="6" class="muted">연결된 포트가 없습니다.</td></tr>`}</table></div>`;
 }
 function r3Open(id) { R3.dev = id; R3.port = null; r3Detail(); }
 function r3Close() { R3.dev = null; $("#r3Detail").hidden = true; }
@@ -1127,6 +1274,7 @@ $("#homeLink").addEventListener("click", e => {   // 제목을 누르면 관제(
 const qs = new URLSearchParams(location.search), h0 = location.hash.slice(1);
 if (qs.get("popup") === "term") {
   document.body.classList.add("popup");
+  if (qs.get("t")) TERM.at = parseT(qs.get("t"));
   showTab("term"); termConnect(qs.get("dev"));
   document.title = `${qs.get("dev")} 터미널 (가상)`;
   $("#termIn").focus();

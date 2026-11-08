@@ -222,3 +222,32 @@ body.popup #centerBar{display:none}
 
 .runbook{margin:6px 0 0;padding-left:20px;font-size:13px;line-height:1.6}.runbook li{margin:4px 0}.runbook code{font-family:var(--mono);font-size:12px;background:var(--panel2);padding:1px 4px;border-radius:2px}
 #runbook{margin-top:12px}
+.pt.d{background:#2d343b;color:#7f8c97;border-color:#1a2026}
+
+/* 3D 화면 조작 버튼 (아이패드 같은 터치 기기용, 마우스로도 쓸 수 있다) */
+.glpad{position:absolute;right:10px;bottom:10px;display:flex;flex-direction:column;gap:6px;align-items:flex-end;z-index:4;user-select:none;-webkit-user-select:none}
+.glpad button{min-width:44px;min-height:44px;background:#0d141bdd;border:1px solid #3a4856;color:#e6edf3;border-radius:6px;font-size:16px;padding:0 10px;touch-action:none}
+.glpad button:active{background:#1b2f46}
+.glpad .glmode{display:flex}.glpad .glmode .btn{min-height:36px;font-size:13px;border-radius:0}.glpad .glmode .btn:first-child{border-radius:6px 0 0 6px}.glpad .glmode .btn:last-child{border-radius:0 6px 6px 0;margin-left:-1px}
+.glpad .glmode .btn.on{background:#1b2f46;border-color:var(--accent)}
+.gldpad{display:grid;grid-template-columns:repeat(3,44px);gap:4px}
+.glrz{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}.glrz button{font-size:13px}
+@media(max-width:900px){.glwrap{height:min(520px,70vh)}}
+
+/* 시나리오 단계 팝업 */
+.scnpop{position:fixed;inset:0;background:#000a;z-index:60;display:flex;align-items:center;justify-content:center;padding:14px}
+.scnpop[hidden]{display:none}
+.scnpop-box{background:var(--panel);border:1px solid var(--accent);border-radius:6px;width:min(860px,100%);max-height:calc(100vh - 28px);display:flex;flex-direction:column;padding:14px 16px}
+.scnpop-head{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.scnpop-box h3{margin:8px 0 6px;font-size:17px;line-height:1.45}
+.scnpop-body{overflow:auto;flex:1;min-height:80px}
+.scnpop-body .explain p{margin:6px 0;line-height:1.7;font-size:14px}
+.scnpop-body h4{margin:12px 0 4px;font-size:12.5px;color:var(--muted);font-weight:600}
+.scnpop-body pre{background:#05080b;border:1px solid var(--line);padding:8px 10px;font:12px/1.5 var(--mono);white-space:pre-wrap;margin:4px 0 0;max-height:260px;overflow:auto}
+.scnpop-body .sumline{margin:10px 0 0;padding:6px 10px;background:#13202c;border-left:3px solid var(--accent);font-size:13px}
+.kv2{width:100%;border-collapse:collapse;font-size:12.5px}.kv2 th{color:var(--muted);text-align:left;font-weight:600;padding:3px 6px;border-bottom:1px solid var(--line)}.kv2 td{padding:4px 6px;border-bottom:1px solid var(--line);vertical-align:top}.kv2 .n{text-align:right}
+.scnpop-foot{display:flex;gap:8px;margin-top:12px}
+.btn.pri{background:#1b2f46;border-color:var(--accent);color:#fff;min-width:120px}
+.scn-steps .btn.sm{margin-left:6px;padding:1px 8px;font-size:11px}
+.glpad.min>:not(#glPadTog){display:none}
+.glpad #glPadTog{min-height:36px;font-size:13px}

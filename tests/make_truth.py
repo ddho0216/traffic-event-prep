@@ -40,6 +40,8 @@ def build() -> dict:
     info = {
         "device_down": {"device": g.DEVICE_DOWN[0], "start": fmt(g.DEVICE_DOWN[1]), "end": fmt(g.DEVICE_DOWN[2]),
                         "why": "과열로 장비 한 대가 꺼짐 (LED로 확인)"},
+        "device_down2": {"device": g.DEVICE_DOWNS[1][0], "start": fmt(g.DEVICE_DOWNS[1][1]), "end": fmt(g.DEVICE_DOWNS[1][2]),
+                         "why": "전원 모듈 고장(가정)으로 장비 한 대가 꺼짐. 짝 장비가 받아서 큰 장애 없음"},
         "fan_warn": {"device": g.FAN_WARN, "why": "팬 경고가 계속 켜져 있음 (교체 대기 가정)"},
     }
     return {
@@ -75,6 +77,7 @@ def markdown(t: dict) -> str:
         L.append(f"| {n['id']} | {n['name']} | {n['start']} | {n['end']} | {', '.join(n['links'])} |")
     L += ["", "## 3. 알림은 아니지만 화면(LED)으로 보이는 것", "",
           f"- 장비 꺼짐: {t['info']['device_down']['device']}, {t['info']['device_down']['start']} ~ {t['info']['device_down']['end']} ({t['info']['device_down']['why']})",
+          f"- 장비 꺼짐(이중화로 무사히 넘김): {t['info']['device_down2']['device']}, {t['info']['device_down2']['start']} ~ {t['info']['device_down2']['end']} ({t['info']['device_down2']['why']})",
           f"- 팬 경고: {t['info']['fan_warn']['device']} ({t['info']['fan_warn']['why']})",
           "", "## 4. 합격 기준", "",
           "- 1번 사건을 전부 잡는다 (놓침 0)",

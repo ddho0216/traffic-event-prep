@@ -139,11 +139,21 @@ class ServerRoomData(unittest.TestCase):
         self.assertGreaterEqual(b03["2026-10-26 15:55"], 33)
         self.assertLess(b03["2026-10-27 12:00"], 27)
 
-    def test_one_device_down_and_one_fan_warning(self):
+    def test_two_device_downs_and_one_fan_warning(self):
         self.assertEqual(self.devs.fan_warn.sum(), 1)
+        down = self.devs[self.devs.down_start.notna()].set_index("device")
+        self.assertEqual(sorted(down.index), ["IDC_B_FS6", "IDC_B_FS7"])
+        self.assertEqual(down.loc["IDC_B_FS6", "rack"], "IDC_B_R07")   # 냉각 이상이 난 랙 안의 장비
+        self.assertTrue(down.down_why.notna().all())
+
+    def test_downed_device_has_alive_partner(self):
+        """이중화: 꺼진 장비의 짝(홀수-짝수) 장비는 같은 시간에 꺼져 있지 않다."""
         down = self.devs[self.devs.down_start.notna()]
-        self.assertEqual(list(down.device), ["IDC_B_FS6"])
-        self.assertEqual(list(down.rack), ["IDC_B_R07"])   # 냉각 이상이 난 랙 안의 장비
+        for r in down.itertuples():
+            n = int(r.device.split("_")[2][2:]); base = r.device.rsplit(str(n), 1)[0]
+            partner = f"{base}{n + 1 if n % 2 else n - 1}"
+            row = self.devs[self.devs.device == partner].iloc[0]
+            self.assertTrue(row.down_start != row.down_start or row.down_start == "" or pd.isna(row.down_start), partner)
 
 
 if __name__ == "__main__":

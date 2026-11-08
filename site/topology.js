@@ -14,7 +14,7 @@
    - links: 연결 (a장비 a포트 <-> b장비 b포트). b가 장비 목록에 없으면 외부(IX·해외 등). link는 그래프의 회선 이름.
             회선이 어느 센터 소속인지는 이름의 센터 코드(= a장비가 있는 센터)로 정한다.
    - 이중화: 모든 장비는 짝 장비가 있다 (FS1-FS2 ...). 짝 장비는 인터커넥트(_PAIR1)로 연결되고, 고객 회선 목록(lines)이 같다.
-   - devices.lines: 장비에 꽂힌 고객사 회선 (포트, 속도 1G/10G, 고객사, 홈 장비). 짝 장비도 같은 회선이 보인다.
+   - devices.lines: 장비에 꽂힌 고객사 회선 (포트, 속도 1G/10G, 고객사, 홈 장비, state: up = 사용 중, unused = 아직 안 씀(Link down), off = 아직 안 씀(Admin down)). 짝 장비도 같은 회선이 보인다.
    - faults: 포트에 심어 둔 이상 ("장비|포트": crc 오류 수, rx 광 수신값 dBm, down = 연결 끊김(Link down), admin = "down"이면 관리자가 내림). 고객사·회선 배정은 제가 임의로 정한 것입니다. */
 (function (root, factory) {
   const t = factory();
@@ -177,10 +177,12 @@
     const run = 1 + h % 3, lines = []; let n10 = 0, n1 = 0;
     for (let k = 0; k < n; k++) {
       const cu = pool[Math.floor(k / run) % pool.length], speed = !big && (h >> (k % 24)) % 5 === 0 ? 1 : 10;
-      lines.push({ port: linePort(d.vendor, speed, speed === 10 ? n10++ : n1++), speed, customer: cu.key, home: d.id });
+      const r = hashS(d.id + ":" + k) % 100, cut = big ? 85 : 68;   // 아직 쓰지 않는 회선: 일부는 Link down(선만 꽂아 둠), 일부는 Admin down(관리자가 내려 둠)
+      const state = k < 2 || r < cut ? "up" : r < cut + (100 - cut) * 0.65 ? "unused" : "off";   // 첫 두 줄은 항상 사용 중
+      lines.push({ port: linePort(d.vendor, speed, speed === 10 ? n10++ : n1++), speed, customer: cu.key, home: d.id, state });
     }
     d.lines = lines;
-    const pl = lines.map(x => Object.assign({}, x, { port: linePort(p.vendor, x.speed, 0) }));   // 짝 장비의 포트 이름은 종류에 맞게 다시 붙인다
+    const pl = lines.map(x => Object.assign({}, x, { port: linePort(p.vendor, x.speed, 0) }));   // 상태(state)도 그대로 복사   // 짝 장비의 포트 이름은 종류에 맞게 다시 붙인다
     let m10 = 0, m1 = 0; pl.forEach(x => { x.port = linePort(p.vendor, x.speed, x.speed === 10 ? m10++ : m1++); });
     p.lines = pl;
   });
@@ -197,8 +199,7 @@
     "IDC_G_FS1|xe-0/0/11": { down: true },                           // 구로 고객 접속 2 업링크: 연결이 끊김 (Admin up, Link down)
     "IDC_G_FS3|xe-0/0/10": { down: true },
     "IDC_B_AS5|XGigabitEthernet0/1/10": { crc: 12, rx: -9.8 },      // Huawei 접속 스위치 업링크: 작은 CRC 오류와 약한 광 수신
-    "IDC_B_FS1|xe-0/0/21": { crc: 0, rx: -9.8 },
-    "IDC_B_FS1|xe-0/0/12": { crc: 0, rx: -40 }                      // 과열로 꺼진 IDC_B_FS6 쪽 포트: 빛이 안 들어옴
+    "IDC_B_FS1|xe-0/0/21": { crc: 0, rx: -9.8 }
   };
 
   return { centers, customers, devices, links, faults };

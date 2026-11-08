@@ -232,7 +232,7 @@ test('이중화: 짝 장비끼리 연결(_PAIR1)이 있고, 모든 장비가 센
 
 test('이중화: 짝 장비는 같은 고객 회선 목록(홈 장비·고객사·속도)을 가진다', () => {
   for (const d of T.devices) {
-    const p = dev[d.partner], key = x => (x.lines || []).map(l => `${l.home}|${l.customer}|${l.speed}`).join(',');
+    const p = dev[d.partner], key = x => (x.lines || []).map(l => `${l.home}|${l.customer}|${l.speed}|${l.state}`).join(',');
     assert.equal(key(d), key(p), `${d.id} ↔ ${p.id}`);
   }
 });
@@ -260,4 +260,12 @@ test('밀도: 고객 회선 포트 이름이 제조사·속도 형식과 맞고 
 test('고객 회선의 고객사는 모두 같은 센터 소속이다 (고객사 첫 회선의 센터와 장비 센터가 같음)', () => {
   const home = Object.fromEntries(T.customers.map(c => [c.key, c.links[0].split('_')[1]]));
   for (const d of T.devices) for (const l of d.lines) assert.equal(home[l.customer], d.id.split('_')[1], `${d.id} ${l.customer}`);
+});
+
+test('아직 쓰지 않는 고객 회선: 약 20~45%가 Down이고, Link down(unused)과 Admin down(off)이 섞여 있다', () => {
+  const all = T.devices.flatMap(d => d.lines), idle = all.filter(l => l.state !== 'up'), p = idle.length / all.length;
+  assert.ok(p > 0.2 && p < 0.45, `미사용 비율 ${(p * 100).toFixed(0)}%`);
+  assert.ok(all.some(l => l.state === 'unused') && all.some(l => l.state === 'off'));
+  for (const l of all) assert.ok(['up', 'unused', 'off'].includes(l.state));
+  for (const d of T.devices) assert.ok(d.lines.some(l => l.state === 'up'), `${d.id}: 사용 중인 회선이 하나도 없음`);
 });

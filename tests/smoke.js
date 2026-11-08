@@ -136,17 +136,49 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('서버실-3D: 목록의 R07이 경고·위험 상태이고 필터에 잡힘', (await page.locator('#glList .gli[data-rack="IDC_B_R07"] .dot.crit').count()) === 1);
   await page.click('#glDevs tr[data-id="IDC_B_FS6"]');
   const t6 = await page.locator('#glDetail').innerText();
-  check('서버실-3D: 아래 장비 목록에서 IDC_B_FS6을 누르면 꺼짐 상태·알림이 보임', t6.includes('IDC_B_FS6') && t6.includes('꺼짐') && t6.includes('과열로 꺼짐'), t6.slice(0, 80));
+  check('서버실-3D: 아래 장비 목록에서 IDC_B_FS6을 누르면 꺼짐 상태·알림이 보임', t6.includes('IDC_B_FS6') && t6.includes('꺼짐') && t6.includes('과열 보호 종료') && t6.includes('터미널은 응답 없음'), t6.slice(0, 80));
   await page.click('[data-glmode=temp]');
   check('서버실-3D: 온도 보기로 바꿀 수 있음', (await page.locator('[data-glmode=temp].on').count()) === 1);
   await page.click('#glPorts');
-  check('서버실-3D: 포트·광케이블 자세히 창이 열리고 연결 포트가 보임', (await page.locator('#r3Detail').isVisible()) && (await page.locator('#r3Detail .pt.u').count()) >= 1);
+  check('서버실-3D: 꺼진 장비의 포트·광케이블 창: 전원 꺼짐 표시, 포트는 전부 Down(회색)이라 사용 중(초록)이 없음', (await page.locator('#r3Detail').isVisible()) && (await page.locator('#r3Detail .tag.crit').innerText()).includes('전원 꺼짐') && (await page.locator('#r3Detail .pt.u').count()) === 0 && (await page.locator('#r3Detail .pt.d, #r3Detail .pt.x').count()) >= 10);
   await page.keyboard.press('Escape');
   check('서버실-3D: Esc로 상세 창이 닫힘', !(await page.locator('#r3Detail').isVisible()));
   const [p3] = await Promise.all([ctx.waitForEvent('page'), page.click('#glTerm')]);
   await p3.waitForLoadState('load');
   check('서버실-3D: 오른쪽 상세에서 터미널 열기', (await p3.locator('#termTarget').innerText()).includes('IDC_B_FS6'));
+  check('서버실-3D: 꺼진 시각(16:15)에 연 장비 터미널은 응답 없음 (가상 시각이 팝업에 전달됨)', /Connection timed out/.test(await p3.locator('#termOut').innerText()) && (await p3.locator('#termTarget').innerText()).includes('전원 꺼짐'), (await p3.locator('#termTarget').innerText()));
   await p3.close();
+  // 조작: 아이패드 같은 터치(두 손가락 확대·이동), 이동/회전 모드, 화면 버튼
+  await page.click('#glFit'); await page.waitForFunction(() => !G.fly);
+  const touch = await page.evaluate(() => {
+    const cv = document.getElementById('glCanvas'), r = cv.getBoundingClientRect(), d0 = G.cs.dist, tx0 = G.cs.tx;
+    const ev = (type, id, x, y) => cv.dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: 'touch', clientX: r.left + x, clientY: r.top + y, bubbles: true, isPrimary: id === 21, buttons: type === 'pointerup' ? 0 : 1 }));
+    ev('pointerdown', 21, 300, 250); ev('pointerdown', 22, 400, 250); ev('pointermove', 21, 250, 250); ev('pointermove', 22, 450, 250);   // 벌리기: 확대
+    const d1 = G.cs.dist; ev('pointerup', 21, 250, 250); ev('pointerup', 22, 450, 250);
+    ev('pointerdown', 21, 300, 250); ev('pointerdown', 22, 400, 250); ev('pointermove', 21, 400, 250); ev('pointermove', 22, 500, 250);   // 둘 다 오른쪽으로: 이동
+    const tx1 = G.cs.tx; ev('pointerup', 21, 400, 250); ev('pointerup', 22, 500, 250);
+    return { d0, d1, tx0, tx1 };
+  });
+  check('터치: 두 손가락을 벌리면 확대되고, 두 손가락을 같이 움직이면 이동함', touch.d1 < touch.d0 - 0.3 && touch.tx1 !== touch.tx0, JSON.stringify(touch));
+  const mode = await page.evaluate(async () => {
+    const cv = document.getElementById('glCanvas'), r = cv.getBoundingClientRect(), drag = (x0, x1) => { const ev = (t, x, b) => cv.dispatchEvent(new PointerEvent(t, { pointerId: 31, pointerType: 'touch', clientX: r.left + x, clientY: r.top + 300, bubbles: true, isPrimary: true, buttons: b })); ev('pointerdown', x0, 1); ev('pointermove', x0 + (x1 - x0) / 2, 1); ev('pointermove', x1, 1); ev('pointerup', x1, 0); };
+    document.querySelector('[data-gm=pan]').click(); const a = { tx: G.cs.tx, az: G.cs.az }; drag(300, 420); const b = { tx: G.cs.tx, az: G.cs.az };
+    document.querySelector('[data-gm=rotate]').click(); drag(300, 420); const c = { tx: G.cs.tx, az: G.cs.az };
+    return { a, b, c };
+  });
+  check('조작 모드: "이동"이면 한 손가락 드래그가 이동(각도 그대로), "회전"이면 각도가 바뀜', mode.b.tx !== mode.a.tx && mode.b.az === mode.a.az && mode.c.az !== mode.b.az, JSON.stringify(mode));
+  await page.click('#glFit'); await page.waitForFunction(() => !G.fly);
+  const pad0 = await page.evaluate(() => ({ tx: G.cs.tx, az: G.cs.az, dist: G.cs.dist }));
+  const hb = async sel => { const bb = await page.locator(sel).boundingBox(); await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2); await page.mouse.down(); await page.waitForTimeout(400); await page.mouse.up(); };
+  await hb('[data-pan=right]'); const pad1 = await page.evaluate(() => G.cs.tx);
+  await hb('[data-rot="1"]'); const pad2 = await page.evaluate(() => G.cs.az);
+  await hb('#glPadIn'); const pad3 = await page.evaluate(() => G.cs.dist);
+  check('화면 버튼: 누르고 있으면 이동(→)·회전·확대(+)가 계속 움직임', pad1 > pad0.tx && pad2 !== pad0.az && pad3 < pad0.dist, JSON.stringify({ pad0, pad1, pad2, pad3 }));
+  await page.click('#glPadTog');
+  check('조작판 접기: 버튼이 숨겨지고 펼치기 버튼만 남음', !(await page.locator('[data-pan=up]').isVisible()) && (await page.locator('#glPadTog').innerText()).includes('펼치기'));
+  await page.click('#glPadTog');
+  const big = await page.locator('[data-pan=up]').boundingBox();
+  check('화면 버튼은 터치하기 쉬운 크기(44px 이상)', big.width >= 44 && big.height >= 44, `${big.width}x${big.height}`);
   await page.click('[data-tab=monitor]');
   const barMon = await page.locator('#centerBar').innerText();
   const order = await page.locator('#centerBar .cbtn').evaluateAll(els => els.map(e => e.dataset.center));
@@ -216,18 +248,30 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
 
   // 시나리오 4가지: 시간이 흘러가고, 단계(감지·확인·조치·결과)가 나오고, 닫으면 현재로 돌아온다
   const scenarios = [['calm', '평일 오후 7시', 4, ['그래프 15개 확인', '서버실 확인', '이상 없음']], ['drop', '트래픽 급감', 6, ['급감', 'IDC_B_FS2_INTL1', '광값', '예시미디어', '회복']],
-    ['linkDown', '업링크 회선 다운', 8, ['Admin', '트래픽(전/후)', '광값', 'ping', '연동망', '회복']], ['surge', '트래픽 폭주', 7, ['사전 연락', '분산', '하이드레이션', '경고선 80%', '사후 정리', '[사전 안내]']], ['temp', '서버실 온도 변화', 7, ['온도 경고', '빨강 깜박임', '터미널', '냉각 복구', '-40.00 dBm']]];
+    ['redundancy', '이중화로 무사히 넘기기', 8, ['이중화', '전원 꺼짐', '트래픽은 거의 그대로', '고객 영향 없음']], ['linkDown', '업링크 회선 다운', 8, ['Admin', '트래픽(전/후)', '광값', 'ping', '연동망', '회복']], ['surge', '트래픽 폭주', 7, ['사전 연락', '분산', '하이드레이션', '경고선 80%', '사후 정리', '[사전 안내]']], ['temp', '서버실 온도 변화', 7, ['온도 경고', '빨강 깜박임', '터미널', '냉각 복구', '-40.00 dBm']]];
   for (const [id, name, n, words] of scenarios) {
     await page.click('[data-tab=monitor]');
     await page.click('#scnBtn'); await page.click(`#scnMenu [data-scn=${id}]`);
+    await page.waitForSelector('#scnPop:not([hidden])', { timeout: 30000 });   // 첫 단계가 되면 팝업이 뜬다
+    const pop1 = await page.locator('#scnPop').innerText();
+    check(`시나리오 "${name}": 첫 단계에 팝업이 뜨고 설명과 단계 번호가 나옴`, /단계 1 \/ \d+/.test(pop1) && pop1.length > 120, pop1.slice(0, 60).replace(/\n/g, ' '));
     const t0 = await page.locator('#scnTime').innerText();
-    await page.waitForTimeout(2800);   // 첫 단계가 나오면 약 1.4초 멈추므로 그보다 길게 기다린다
+    await page.waitForTimeout(1500);
+    check(`시나리오 "${name}": 팝업이 열려 있는 동안 시간이 멈춤`, (await page.locator('#scnTime').innerText()) === t0);
+    await page.click('#scnPopNext');
+    await page.waitForTimeout(2600);
     const t1 = await page.locator('#scnTime').innerText();
-    check(`시나리오 "${name}": 시간이 자동으로 흘러감`, (await page.locator('#scnBar').isVisible()) && t0 !== t1, `${t0} -> ${t1}`);
-    await page.click('#scnSkip');
+    check(`시나리오 "${name}": '다음'을 누르면 시간이 다시 흐르거나 다음 단계 팝업이 뜸`, (await page.locator('#scnBar').isVisible()) && (t1 !== t0 || (await page.locator('#scnPop').isVisible())), `${t0} -> ${t1}`);
+    if (await page.locator('#scnPop').isVisible()) await page.click('#scnPopSkip'); else await page.click('#scnSkip');
     const txt = await page.locator('#scnSteps').textContent();
     const cnt = await page.locator('#scnSteps li').count();
     check(`시나리오 "${name}": 단계 ${n}개와 핵심 내용이 나옴`, cnt === n && words.every(w => txt.includes(w)), `단계 ${cnt}/${n}, 빠진 말: ${words.filter(w => !txt.includes(w)).join(',') || '없음'}`);
+    await page.click('#scnSteps li >> nth=0 >> [data-scnpop]');
+    const popTxt = await page.locator('#scnPop').innerText();
+    check(`시나리오 "${name}": '자세히 팝업'에 설명과 관련 장비·회선·랙 정보가 나옴`, (await page.locator('#scnPopBody .explain').count()) === 1 && /관련 (회선|랙|장비)/.test(popTxt), popTxt.slice(0, 80).replace(/\n/g, ' '));
+    await page.click('#scnPopNext');
+    check(`시나리오 "${name}": 팝업을 닫으면 사라짐`, !(await page.locator('#scnPop').isVisible()));
+    if (['linkDown', 'redundancy', 'temp', 'surge', 'calm', 'drop'].includes(id)) check(`시나리오 "${name}": 끝나면 '배울 점' 버튼이 생김`, await page.locator('#scnLesson').isVisible());
     if (id === 'drop') {
       check('급감 시나리오: IDC_B_FS2_IX1 패널이 강조 표시됨', (await page.locator('#p-IDC_B_FS2_IX1.hl').count()) === 1);
       await page.waitForTimeout(1200);   // 자동 스크롤이 끝나길 기다림
@@ -335,6 +379,20 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('#qcmd button');
   await page.press('#termIn', 'Enter');
   check('터미널 명령 출력 (첫 자주 쓰는 명령 = 회선 설명)', (await page.locator('#termOut').innerText()).includes('Admin Link Description'));
+  // 꺼진 장비: 그 시각에는 터미널이 응답하지 않고, 옆 장비 포트는 Down·빛 없음, 복구 뒤에는 정상
+  const O = await page.evaluate(() => { const ms = iso => parseT(iso), r = (id, c, iso) => runCmd(c, DEV[id], ms(iso)); return {
+    off: r('IDC_B_FS6', 'show interfaces descriptions', '2026-10-26T16:15'), on: r('IDC_B_FS6', 'show interfaces descriptions', '2026-10-26T16:30'), before: r('IDC_B_FS6', 'show interfaces descriptions', '2026-10-26T16:00'),
+    hub: r('IDC_B_FS1', 'show interfaces descriptions', '2026-10-26T16:15'), hubOpt: r('IDC_B_FS1', 'show interfaces diagnostics optics xe-0/0/12', '2026-10-26T16:15'), hubOk: r('IDC_B_FS1', 'show interfaces diagnostics optics xe-0/0/12', '2026-10-26T16:30'),
+    partner: r('IDC_B_FS5', 'show interfaces descriptions', '2026-10-26T16:15'), fs7: r('IDC_B_FS7', 'show interfaces descriptions', '2026-10-27T03:20'), fs8: r('IDC_B_FS8', 'show interfaces descriptions', '2026-10-27T03:20'),
+    after: DEV.IDC_B_FS6.ifs.every(f => f[5] === 'up' || f[11] || f[6] === 'down' || f[3] > -40) }; });
+  check('꺼진 장비(IDC_B_FS6 16:15): 터미널에 접속할 수 없다 (응답 없음, 전원 꺼짐)', /Connection timed out/.test(O.off) && /전원이 꺼져/.test(O.off) && !/Admin Link Description/.test(O.off), O.off.split('\n')[0]);
+  check('꺼지기 전(16:00)과 복구 뒤(16:30)에는 정상으로 터미널이 동작함', /Admin Link Description/.test(O.before) && /Admin Link Description/.test(O.on));
+  check('꺼진 장비와 이어진 옆 장비(허브 xe-0/0/12)의 포트는 Link down, 광 수신 -40 dBm, 복구 뒤에는 정상', /xe-0\/0\/12\s+up\s+down/.test(O.hub) && /-40\.00 dBm/.test(O.hubOpt) && !/-40\.00 dBm/.test(O.hubOk));
+  check('이중화: 짝 장비(IDC_B_FS5)는 꺼진 시간에도 정상 접속되고 고객 회선이 그대로 Up', /Admin Link Description/.test(O.partner) && /xe-1\/0\/0\s+up\s+up/.test(O.partner));
+  check('이중화 시나리오 장비(IDC_B_FS7 새벽 03:20 꺼짐): 접속 안 되고 짝 IDC_B_FS8은 정상 + 같은 회선 목록', /Connection timed out/.test(O.fs7) && /Admin Link Description/.test(O.fs8));
+  check('시간 덮어쓰기 뒤 원래 상태로 돌아옴 (포트 상태가 영구히 바뀌지 않음)', O.after);
+  const U = await page.evaluate(() => { const ls = DEV.IDC_B_FS3.ifs.filter(f => f[10]), p = DEV.IDC_B_FS4.ifs.filter(f => f[10]); return { n: ls.length, down: ls.filter(f => f[5] === 'down').length, off: ls.filter(f => f[6] === 'down').length, mirror: JSON.stringify(ls.map(f => [f[0], f[5], f[6]])) === JSON.stringify(p.map(f => [f[0], f[5], f[6]])), bad: ls.some(f => f[11] && portBad(f)) }; });
+  check('사용하지 않는 고객 회선은 Down으로 표시됨 (일부는 Link down, 일부는 Admin down), 짝 장비에도 같은 상태, 이상(빨강)으로 세지 않음', U.down >= 2 && U.down < U.n && U.mirror && !U.bad, JSON.stringify(U));
   // 업무 메모에서 가져온 명령: Admin/Link 차이, 고객사, ARP·ping, 로그, BGP (전부 가상 출력)
   const T = await page.evaluate(() => {
     const r = (id, c) => runCmd(c, DEV[id]);

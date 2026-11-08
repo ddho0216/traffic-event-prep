@@ -1,12 +1,12 @@
 /* 서버실-3D (WebGL, three.js): 서버실을 정면에서 보는 3D 랙 화면.
    - 랙 안에는 설계도(topology.js)의 네트워크 장비가 들어 있다. 패치 패널·케이블 정리대·PDU·빈 패널은 화면을 현실감 있게 하려는 가상 보조 장비로, 데이터 모델에는 없다.
-   - 장비 높이(Cisco 21U, Juniper 6U, Huawei 2U)와 랙 안 배치(U 위치)는 제가 만든 가상 그림이다.
+   - Cisco는 Nexus 7710(14U, I/O 8 + 슈퍼바이저 2)로 그렸다: 사진과 메모의 "7710"으로 추정한 것이고 모델은 확인하지 못했다. Juniper 6U·Huawei 2U와 랙 안 배치(U 위치)는 제가 만든 가상 그림이다.
    - three.js는 site/vendor에 넣어 두었고, 이 탭을 처음 열 때만 불러온다. 시점 조작은 직접 짠 간단한 컨트롤(좌우 ±70°로 제한, 관성 없음). */
-const G = { sel: null, mode: "status", row: 0, center: null, q: "", filt: "all", ready: false, loading: false, dirty: true, items: [], ray: [], hover: null };
+const G = { gmode: (window.matchMedia && matchMedia("(pointer: coarse)").matches) ? "pan" : "rotate", sel: null, mode: "status", row: 0, center: null, q: "", filt: "all", ready: false, loading: false, dirty: true, items: [], ray: [], hover: null };
 const LV_ORDER = { ok: 0, warn: 1, hot: 2, crit: 3 };
 const LV_HEX = { ok: "#2f6fb0", warn: "#c9a62f", hot: "#d2692f", crit: "#d03a30" };
 const LV_TXT = { ok: "정상", warn: "주의", hot: "경고", crit: "위험" };
-const KIND_TXT = { juniper: "Juniper 스위치", cisco: "Cisco 코어 섀시 (라우터급, 가정)", huawei: "Huawei 접속 스위치", patch: "패치 패널", mgr: "케이블 정리대", pdu: "PDU", blank: "빈 패널" };
+const KIND_TXT = { juniper: "Juniper 스위치", cisco: "Cisco Nexus 7710 (사진·메모로 추정, 모델 확인 못 함)", huawei: "Huawei 접속 스위치", patch: "패치 패널", mgr: "케이블 정리대", pdu: "PDU", blank: "빈 패널" };
 const hash = s => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
 
 /* ---------- 데이터: 랙 안 배치, 상태 ---------- */
@@ -74,8 +74,8 @@ function drawPorts(g, pl, a, b, x, y, w, h, cols, rows) {   // 포트 칸 (위�
     const c = Math.floor((k - a) / rows), rw = (k - a) % rows, f = pl.map.get(k);
     const px = x + c * cw, py = y + rw * ch;
     g.fillStyle = "#14181c"; rr(g, px + 2, py + ch * 0.28, cw - 4, ch * 0.66, 2); g.fill();
-    g.fillStyle = f ? "#2b323a" : "#1d2328"; g.fillRect(px + 4, py + ch * 0.36, cw - 8, ch * 0.46);
-    g.fillStyle = f ? (portBad(f) ? LEDC.crit : LEDC.ok) : LEDC.off; g.fillRect(px + cw / 2 - 2.5, py + ch * 0.1, 5, ch * 0.12);
+    g.fillStyle = f && f[5] !== "down" ? "#2b323a" : "#1d2328"; g.fillRect(px + 4, py + ch * 0.36, cw - 8, ch * 0.46);
+    g.fillStyle = f ? (portBad(f) ? LEDC.crit : f[5] === "down" ? LEDC.off : LEDC.ok) : LEDC.off; g.fillRect(px + cw / 2 - 2.5, py + ch * 0.1, 5, ch * 0.12);
   }
 }
 function drawLeds(g, x, y, st, size) { [st.power ? "ok" : "off", st.power ? st.status : "off", st.power ? st.fan : "off"].forEach((c, k) => { g.fillStyle = LEDC[c === "crit" ? "crit" : c]; g.beginPath(); g.arc(x + k * (size * 2.2), y, size, 0, 7); g.fill(); }); }
@@ -96,22 +96,26 @@ function devTexture(it, st, pl) {
       drawPorts(g, pl, 0, pl.total, 205, 6, 340, h - 12, pl.cols, 2);
       g.fillStyle = "#2a3138"; g.fillRect(565, 14, 58, h - 28);
       g.fillStyle = "#3a434b"; for (let k = 0; k < 6; k++) g.fillRect(570, 18 + k * ((h - 36) / 6), 48, 3);
-    } else {   // cisco 대형 섀시: 슈퍼바이저 2장 + 라인 카드 + 팬 + 전원부
+    } else {   // Cisco Nexus 7710 (사진·메모로 추정): 슬롯 10개 = 위 I/O 4 + 슈퍼바이저 2(가운데) + 아래 I/O 4, 맨 아래 전원부
       g.fillStyle = "#23282e"; g.fillRect(0, 0, w, h); g.strokeStyle = "#0b0e11"; g.lineWidth = 3; g.strokeRect(0, 0, w, h);
-      const cards = pl.total / 12, supH = 66, fanH = 44, psuH = 92, cardH = (h - supH * 2 - fanH - psuH - 28) / cards;
-      let y = 8;
+      const cards = Math.min(8, Math.ceil(pl.total / 12)), supH = 54, psuH = 60, ioH = (h - supH * 2 - psuH - 22) / 8;
+      let y = 8, c = 0;
+      const io = () => {   // I/O 모듈 슬롯: 포트가 있으면 라인 카드, 남는 슬롯은 빈 판
+        if (c < cards) { g.fillStyle = grad(g, y, y + ioH, "#bcc3c9", "#9ca4ab"); g.fillRect(10, y, w - 20, ioH - 4);
+          g.fillStyle = "#111519"; g.fillRect(10, y, 22, ioH - 4); g.fillRect(w - 32, y, 22, ioH - 4);
+          g.fillStyle = "#2a3138"; g.font = "bold 12px monospace"; g.fillText(`I/O ${c + 1}`, 42, y + 18);
+          drawPorts(g, pl, c * 12, c * 12 + 12, 100, y + 4, w - 160, ioH - 12, 6, 2);
+        } else { g.fillStyle = "#3b434a"; g.fillRect(10, y, w - 20, ioH - 4); g.fillStyle = "#14181c"; g.beginPath(); g.arc(24, y + ioH / 2 - 2, 5, 0, 7); g.arc(w - 24, y + ioH / 2 - 2, 5, 0, 7); g.fill(); }
+        c++; y += ioH;
+      };
+      for (let k = 0; k < 4; k++) io();
       for (let s = 0; s < 2; s++) { g.fillStyle = grad(g, y, y + supH, "#c9cfd4", "#9aa2a9"); g.fillRect(10, y, w - 20, supH - 6); g.fillStyle = "#111519"; g.fillRect(10, y, 26, supH - 6); g.fillRect(w - 36, y, 26, supH - 6);
-        g.fillStyle = "#2a3138"; g.font = "bold 14px monospace"; g.fillText(`SUP ${s + 1} · ${dv.id.slice(4)}`, 56, y + 24); drawLeds(g, 60, y + 44, st, 6);
-        for (let q = 0; q < 2; q++) { g.fillStyle = "#111519"; g.fillRect(300 + q * 70, y + 14, 56, 30); } y += supH; }
-      for (let c = 0; c < cards; c++) { g.fillStyle = grad(g, y, y + cardH, "#bcc3c9", "#9ca4ab"); g.fillRect(10, y, w - 20, cardH - 4);
-        g.fillStyle = "#111519"; g.fillRect(10, y, 22, cardH - 4); g.fillRect(w - 32, y, 22, cardH - 4);
-        g.fillStyle = "#2a3138"; g.font = "bold 13px monospace"; g.fillText(`LC${c + 1}`, 44, y + 20);
-        drawPorts(g, pl, c * 12, c * 12 + 12, 90, y + 4, w - 150, cardH - 12, 6, 2); y += cardH; }
-      y += 6; g.fillStyle = "repeating-linear-gradient(90deg,#1b2025,#1b2025)"; g.fillStyle = "#171b20"; g.fillRect(10, y, w - 20, fanH - 6);
-      g.fillStyle = "#2f373e"; for (let k = 0; k < 40; k++) g.fillRect(18 + k * 15, y + 6, 8, fanH - 18);
-      y += fanH;
-      for (let k = 0; k < 8; k++) { const px = 12 + k * ((w - 24) / 8); g.fillStyle = grad(g, y, y + psuH, "#2d343b", "#1c2227"); g.fillRect(px, y, (w - 24) / 8 - 6, psuH - 10);
-        g.fillStyle = "#0c0f12"; g.fillRect(px + 8, y + 16, (w - 24) / 8 - 22, 38); g.fillStyle = st.power ? LEDC.ok : LEDC.off; g.fillRect(px + 10, y + 64, 8, 8); }
+        g.fillStyle = "#2a3138"; g.font = "bold 13px monospace"; g.fillText(`NEXUS 7710 · SUP${s + 1} · ${dv.id.slice(4)}`, 50, y + 20); drawLeds(g, 56, y + 38, st, 6);
+        for (let q = 0; q < 2; q++) { g.fillStyle = "#111519"; g.fillRect(330 + q * 70, y + 12, 56, 28); } y += supH; }
+      for (let k = 0; k < 4; k++) io();
+      y += 6;
+      for (let k = 0; k < 8; k++) { const px = 12 + k * ((w - 24) / 8); g.fillStyle = grad(g, y, y + psuH, "#2d343b", "#1c2227"); g.fillRect(px, y, (w - 24) / 8 - 6, psuH - 8);
+        g.fillStyle = "#0c0f12"; g.fillRect(px + 8, y + 10, (w - 24) / 8 - 22, 26); g.fillStyle = st.power ? LEDC.ok : LEDC.off; g.fillRect(px + 10, y + 42, 8, 6); }
     }
     if (!st.power) { g.fillStyle = "rgba(0,0,0,.55)"; g.fillRect(0, 0, w, h); }
   });
@@ -202,27 +206,52 @@ function fitCam(reset) {
   const need = Math.max((rowW / 2 + 0.3) / Math.tan(hf / 2), (rackH() / 2 + 0.45) / Math.tan(vf / 2));
   Object.assign(G.cs, { az: 0, pol: 88, dist: need + SC.RD / 2, tx: rowW / 2 - SC.RW / 2, ty: rackH() / 2 + 0.05 }); placeCam();
 }
+const ZMIN = 1.3, ZMAX = 14;
+function panLimits() { const n = G.rowRacks ? G.rowRacks.length : 8; return { x0: -0.6, x1: (n - 1) * (SC.RW + SC.GAP) + 0.6 }; }
+function panTo(tx, ty) { const p = panLimits(); G.cs.tx = clamp(tx, p.x0, p.x1); G.cs.ty = clamp(ty, 0.2, 3); }
 function bindControls(cv) {
-  let d = null;
+  const P = new Map();   // 눌려 있는 손가락(마우스)들
+  let d = null, g2 = null;
   cv.addEventListener("contextmenu", e => e.preventDefault());
-  cv.addEventListener("pointerdown", e => { G.fly = null; d = { x: e.clientX, y: e.clientY, az: G.cs.az, pol: G.cs.pol, tx: G.cs.tx, ty: G.cs.ty, pan: e.button === 2 || e.shiftKey, moved: false, id: e.pointerId }; });
+  cv.addEventListener("pointerdown", e => {
+    G.fly = null; P.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (P.size === 2) {   // 두 손가락: 벌리고 모으기 = 확대·축소, 같이 움직이기 = 이동
+      const [a, b] = [...P.values()];
+      g2 = { d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, cs: Object.assign({}, G.cs) }; d = null;
+      try { cv.setPointerCapture(e.pointerId); } catch (er) { /* 무시 */ }
+      return;
+    }
+    d = { x: e.clientX, y: e.clientY, az: G.cs.az, pol: G.cs.pol, tx: G.cs.tx, ty: G.cs.ty, pan: e.button === 2 || e.shiftKey || G.gmode === "pan", moved: false, id: e.pointerId };
+  });
   cv.addEventListener("pointermove", e => {
+    if (P.has(e.pointerId)) P.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (g2 && P.size >= 2) {
+      const [a, b] = [...P.values()], dn = Math.hypot(a.x - b.x, a.y - b.y) || 1, mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      G.cs.dist = clamp(g2.cs.dist * g2.d0 / dn, ZMIN, ZMAX);
+      const k = G.cs.dist * 0.0012; panTo(g2.cs.tx - (mx - g2.mx) * k, g2.cs.ty + (my - g2.my) * k);
+      placeCam(); hideTip(); return;
+    }
     if (d) {
-      if (e.buttons === 0) { d = null; return; }
+      if (e.pointerType === "mouse" && e.buttons === 0) { d = null; return; }
       const dx = e.clientX - d.x, dy = e.clientY - d.y;
-      if (!d.moved && Math.abs(dx) + Math.abs(dy) > 5) { d.moved = true; try { cv.setPointerCapture(d.id); } catch (er) { /* 무시 */ } }
+      if (!d.moved && Math.abs(dx) + Math.abs(dy) > 6) { d.moved = true; try { cv.setPointerCapture(d.id); } catch (er) { /* 무시 */ } }
       if (d.moved) {
-        if (d.pan) { const k = G.cs.dist * 0.0012; G.cs.tx = d.tx - dx * k; G.cs.ty = clamp(d.ty + dy * k, 0.2, 3); }
+        if (d.pan) { const k = G.cs.dist * 0.0012; panTo(d.tx - dx * k, d.ty + dy * k); }
         else { G.cs.az = clamp(d.az - dx * 0.25, -70, 70); G.cs.pol = clamp(d.pol - dy * 0.2, 60, 100); }
         placeCam(); hideTip(); return;
       }
     }
-    hover(e);
+    if (e.pointerType === "mouse") hover(e);
   });
-  const end = e => { const was = d; d = null; if (was && !was.moved && e.type === "pointerup" && e.button === 0) pick(e); };
-  cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", () => { d = null; }); cv.addEventListener("lostpointercapture", () => { d = null; });
-  cv.addEventListener("pointerleave", hideTip);
-  cv.addEventListener("wheel", e => { e.preventDefault(); G.fly = null; G.cs.dist = clamp(G.cs.dist * (e.deltaY < 0 ? 0.9 : 1.1), 1.3, 14); placeCam(); }, { passive: false });
+  const end = e => {
+    P.delete(e.pointerId);
+    if (g2) { if (P.size < 2) { g2 = null; d = null; } return; }
+    const was = d; d = null;
+    if (was && !was.moved && e.type === "pointerup" && (e.button === 0 || e.pointerType !== "mouse")) pick(e);
+  };
+  cv.addEventListener("pointerup", end); cv.addEventListener("pointercancel", end);
+  cv.addEventListener("pointerleave", e => { if (e.pointerType === "mouse") hideTip(); });
+  cv.addEventListener("wheel", e => { e.preventDefault(); G.fly = null; G.cs.dist = clamp(G.cs.dist * (e.deltaY < 0 ? 0.9 : 1.1), ZMIN, ZMAX); placeCam(); }, { passive: false });
 }
 function rayAt(e) {
   const b = G.r.domElement.getBoundingClientRect(), v = new THREE.Vector2(((e.clientX - b.left) / b.width) * 2 - 1, -((e.clientY - b.top) / b.height) * 2 + 1);
@@ -294,7 +323,7 @@ function buildScene() {
   if (!G.ready) return;
   disposeRoot();
   const i = clamp(sr.end, 0, N - 1);
-  G.rowRacks.forEach((r, k) => G.root.add(buildRack(r, k, i, G.sel)));
+  withTime(msOf(i), () => G.rowRacks.forEach((r, k) => G.root.add(buildRack(r, k, i, G.sel))));   // 꺼진 장비 옆 포트는 Down으로 그려진다
   G.dirty = true;
 }
 function stepFly() {
@@ -335,15 +364,15 @@ function detailHtml(vr, rows, i) {
   const it = G.sel, uTxt = `U${it.u0}${it.u > 1 ? "–" + (it.u0 + it.u - 1) : ""}`;
   if (!DEV[it.id]) return `<h3>${esc(it.id)}</h3><p class="note">${KIND_TXT[it.kind]}</p><table class="kv"><tr><td>랙 위치</td><td>${it.rack} · ${uTxt}</td></tr><tr><td>종류</td><td>가상 보조 장비 (화면을 현실감 있게 하려고 넣은 것, 데이터 없음)</td></tr><tr><td>상태</td><td class="muted">정보 없음</td></tr></table>`;
   const d = DEV[it.id], dv = rk.devices.find(x => x.id === it.id), st = devState(rk, dv, i), pl = portPlan(d);
-  const bad = [...pl.map.values()].filter(portBad).length, cust = (d.customers || []).map(k => CUSTOMERS.find(c => c.key === k).name);
+  const bad = [...pl.map.values()].filter(portBad).length, off = outageAt(d.id, msOf(i)), cust = (d.customers || []).map(k => CUSTOMERS.find(c => c.key === k).name);
   const links = TOPOLOGY.links.filter(l => (l.a === d.id || l.b === d.id) && LINK[l.link]).map(l => `<tr><td>${esc(CUSTOMERS.filter(c => c.links.includes(l.link)).map(c => c.name).slice(0, 2).join(" · ") || l.link)}</td><td class="n">in ${g1(LINK[l.link].in[i])}G</td><td class="n">out ${g1(LINK[l.link].out[i])}G</td></tr>`).join("");
   const peers = d.ifs.filter(f => !f[10]).slice(0, 5).map(f => `<li>${f[0]} → ${esc(f[1])}${portBad(f) ? " <span class=\"crit-t\">이상</span>" : ""}</li>`).join("");
-  const ev = []; if (dv.fanWarn) ev.push("팬 경고가 계속 켜져 있음 (교체 대기 가정)"); if (dv.downStart) ev.push(`${md(parseT(dv.downStart))} ${hm(parseT(dv.downStart))} ~ ${hm(parseT(dv.downEnd))} 과열로 꺼짐`);
+  const ev = []; if (dv.fanWarn) ev.push("팬 경고가 계속 켜져 있음 (교체 대기 가정)"); if (dv.downStart) ev.push(`${md(parseT(dv.downStart))} ~ ${hm(parseT(dv.downEnd))} 꺼짐${dv.downWhy ? ` (${dv.downWhy})` : ""}`);
   const led = { ok: "정상", warn: "주의", crit: "장애", off: "꺼짐" };
   return `<h3>${d.id} <span class="tag ${stCls(!st.power ? "crit" : st.status === "crit" ? "crit" : st.status === "warn" ? "hot" : st.fan === "warn" ? "warn" : "ok")}">${!st.power ? "꺼짐" : st.status === "ok" && st.fan === "ok" ? "정상" : "주의"}</span></h3><p class="note">자산 ID: ${d.id}</p>` +
     `<table class="kv"><tr><td>종류</td><td>${KIND_TXT[d.vendor]}</td></tr><tr><td>역할</td><td>${esc(d.role)}</td></tr><tr><td>랙 위치</td><td>${d.rack} · ${uTxt}</td></tr>` +
     `<tr><td>LED</td><td>${ledHtml(st)} <span class="muted">전원 ${led[st.power ? "ok" : "off"]} · 상태 ${led[st.status]} · 팬 ${led[st.fan]}</span></td></tr><tr><td>랙 입구 온도</td><td class="${tempCls(rk.temp[i])}">${rk.temp[i].toFixed(1)}°C</td></tr><tr><td>장비 온도</td><td class="${tempCls(devTemp(rk, { u0: it.u0 }, i))}">${devTemp(rk, { u0: it.u0 }, i).toFixed(1)}°C <span class="muted">(입구 온도 + 높이 보정, 가정)</span></td></tr>` +
-    `<tr><td>포트</td><td>${pl.map.size}개 연결 / ${pl.total} (고객 회선 ${d.ifs.filter(f => f[10]).length}개: 10G ${d.ifs.filter(f => f[10] && f[9] === 10).length}, 1G ${d.ifs.filter(f => f[10] && f[9] === 1).length})${bad ? ` · <span class="crit-t">이상 ${bad}</span>` : ""}</td></tr><tr><td>이중화 짝</td><td>${d.partner} <span class="muted">(같은 고객 회선 목록)</span></td></tr>${cust.length ? `<tr><td>고객사</td><td>${esc(cust.join(" · "))}</td></tr>` : ""}` +
+    `<tr><td>포트</td><td>${pl.map.size}개 연결 / ${pl.total} (고객 회선 ${d.ifs.filter(f => f[10]).length}개: 사용 중 ${d.ifs.filter(f => f[10] && !f[11]).length}, 미사용 Down ${d.ifs.filter(f => f[10] && f[11]).length} · 10G ${d.ifs.filter(f => f[10] && f[9] === 10).length}, 1G ${d.ifs.filter(f => f[10] && f[9] === 1).length})${bad ? ` · <span class="crit-t">이상 ${bad}</span>` : ""}</td></tr>${off ? `<tr><td>접속</td><td class="crit-t">전원 꺼짐${off.why ? " (" + esc(off.why) + ")" : ""}: 터미널은 응답 없음, 포트 전부 Down</td></tr>` : ""}<tr><td>이중화 짝</td><td>${d.partner} <span class="muted">(같은 고객 회선 목록)</span></td></tr>${cust.length ? `<tr><td>고객사</td><td>${esc(cust.join(" · "))}</td></tr>` : ""}` +
     `<tr><td>CPU·메모리</td><td class="muted">네트워크 장비라 표시 안 함</td></tr></table>` +
     (links ? `<h4>연결 회선 트래픽 (이 시각)</h4><table class="kv">${links}</table>` : "") +
     `<h4>장비 간 연결 (일부)</h4><ul class="alist">${peers}</ul><h4>최근 알림·점검</h4><ul class="alist">${ev.length ? ev.map(x => `<li>${x}</li>`).join("") : "<li class=\"muted\">알림 없음</li>"}</ul>` +
@@ -355,7 +384,7 @@ function renderPanels(vr, rows, i) {
   const list = vr.filter(match);
   $("#glList").innerHTML = list.length ? list.map(r => { const lv = rackStatus(r, i); return `<div class="gli${G.sel && G.sel.rack === r.id ? " on" : ""}" data-rack="${r.id}"><span class="dot ${lv}"></span><b>${r.id}</b><span class="muted">장비 ${r.devices.length}</span><span class="tmp ${tempCls(r.temp[i])}">${r.temp[i].toFixed(1)}°</span></div>`; }).join("") : `<p class="note" style="padding:8px">조건에 맞는 랙이 없습니다.</p>`;
   $("#glCount").textContent = `${list.length} / ${vr.length}`;
-  $("#glDetail").innerHTML = detailHtml(vr, rows, i);
+  $("#glDetail").innerHTML = withTime(msOf(i), () => detailHtml(vr, rows, i));
   const rk = selRack(vr) || rows[G.row].racks[0];
   $("#glChart").innerHTML = `<h4>${rk.id} 온도 추이 <span class="muted">(점선 ${TEMP_WARN}/${TEMP_HOT}°C, 흰 선 = 기준 시각)</span></h4>` + bigChart(rk, i);
   const its = rackLayout(rk).sort((a, b) => b.u0 - a.u0);
@@ -363,7 +392,7 @@ function renderPanels(vr, rows, i) {
     return `<tr class="click${G.sel && G.sel.id === it.id ? " on" : ""}" data-id="${it.id}" data-kind="${it.kind}" data-rack="${rk.id}" data-u0="${it.u0}" data-u="${it.u}"><td>${it.u0}${it.u > 1 ? "–" + (it.u0 + it.u - 1) : ""}</td><td>${esc(it.id)}</td><td>${KIND_TXT[it.kind].split(" (")[0]}</td><td>${st ? (!st.power ? "꺼짐" : st.status === "ok" && st.fan === "ok" ? "정상" : "주의") : '<span class="muted">-</span>'}</td></tr>`; }).join("") + "</table>";
   const ev = [];
   ROOM_ALERTS.filter(a => inView(a.rack)).forEach(a => ev.push({ t: a.s, rack: a.rack, txt: `온도 ${a.max.toFixed(1)}°C 경고`, lv: "crit" }));
-  vr.forEach(r => r.devices.forEach(dv => { if (dv.downStart) ev.push({ t: idxOf(parseT(dv.downStart)), rack: r.id, txt: `${dv.id} 과열로 꺼짐`, lv: "crit" }); if (dv.fanWarn) ev.push({ t: 0, rack: r.id, txt: `${dv.id} 팬 경고 (지속)`, lv: "warn" }); }));
+  vr.forEach(r => r.devices.forEach(dv => { if (dv.downStart) ev.push({ t: idxOf(parseT(dv.downStart)), rack: r.id, txt: `${dv.id} 꺼짐${dv.downWhy ? ` (${dv.downWhy})` : ""}`, lv: "crit" }); if (dv.fanWarn) ev.push({ t: 0, rack: r.id, txt: `${dv.id} 팬 경고 (지속)`, lv: "warn" }); }));
   ev.sort((a, b) => b.t - a.t);
   $("#glAlerts").innerHTML = `<h4>최근 장애·경고 <span class="muted">(${viewLabel()})</span></h4><table><tr><th>시각</th><th>랙</th><th>내용</th></tr>` + (ev.length ? ev.map(e => `<tr class="click" data-t="${e.t}" data-rack="${e.rack}"><td>${e.t ? md(msOf(e.t)) : "상시"}</td><td>${e.rack}</td><td class="${e.lv === "crit" ? "crit-t" : "warn-t"}">${e.txt}</td></tr>`).join("") : `<tr><td colspan="3" class="muted">기록 없음</td></tr>`) + "</table>";
 }
@@ -397,8 +426,15 @@ function render3d() {
   $$("[data-glmode]").forEach(b => b.onclick = () => { G.mode = b.dataset.glmode; render3d(); });
   $$("[data-glf]").forEach(b => b.onclick = () => { G.filt = b.dataset.glf; render3d(); });
   $("#glSearch").addEventListener("input", e => { G.q = e.target.value; render3d(); });
-  $("#glZoomIn").onclick = () => { G.cs.dist = clamp(G.cs.dist * 0.8, 1.3, 14); placeCam(); };
-  $("#glZoomOut").onclick = () => { G.cs.dist = clamp(G.cs.dist * 1.25, 1.3, 14); placeCam(); };
+  $("#glZoomIn").onclick = () => { G.fly = null; G.cs.dist = clamp(G.cs.dist * 0.8, ZMIN, ZMAX); placeCam(); };
+  $("#glZoomOut").onclick = () => { G.fly = null; G.cs.dist = clamp(G.cs.dist * 1.25, ZMIN, ZMAX); placeCam(); };
+  const hold = (el, fn) => { let t = null; const stop = () => { clearInterval(t); t = null; }; el.addEventListener("pointerdown", e => { e.preventDefault(); G.fly = null; fn(); stop(); t = setInterval(fn, 70); }); ["pointerup", "pointerleave", "pointercancel"].forEach(ev => el.addEventListener(ev, stop)); };
+  $$("[data-pan]").forEach(b => hold(b, () => { const k = G.cs.dist * 0.03, m = { left: [-1, 0], right: [1, 0], up: [0, 0.6], down: [0, -0.6] }[b.dataset.pan]; panTo(G.cs.tx + m[0] * k, G.cs.ty + m[1] * k); placeCam(); }));
+  $$("[data-rot]").forEach(b => hold(b, () => { G.cs.az = clamp(G.cs.az + (+b.dataset.rot) * 2, -70, 70); placeCam(); }));
+  hold($("#glPadIn"), () => { G.cs.dist = clamp(G.cs.dist * 0.96, ZMIN, ZMAX); placeCam(); });
+  hold($("#glPadOut"), () => { G.cs.dist = clamp(G.cs.dist / 0.96, ZMIN, ZMAX); placeCam(); });
+  $("#glPadTog").onclick = () => { const m = $("#glPad").classList.toggle("min"); $("#glPadTog").textContent = m ? "조작판 펼치기" : "조작판 접기"; $("#glPadTog").setAttribute("aria-expanded", String(!m)); };
+  $$("[data-gm]").forEach(b => { b.classList.toggle("on", b.dataset.gm === G.gmode); b.onclick = () => { G.gmode = b.dataset.gm; $$("[data-gm]").forEach(x => x.classList.toggle("on", x.dataset.gm === G.gmode)); }; });
   $("#glFit").onclick = () => { if (G.ready) flyTo(fitTarget()); };
   $("#glHome").onclick = () => { if (G.ready) flyTo(Object.assign({}, G.cs, { az: 0, pol: 88 })); };
   $("#glList").addEventListener("click", ev => { const el = ev.target.closest(".gli"); if (el) { G.sel = { kind: "rack", rack: el.dataset.rack }; G.jump = true; G.focus = { rack: el.dataset.rack, u0: 0 }; render3d(); } });

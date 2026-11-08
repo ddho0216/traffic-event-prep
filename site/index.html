@@ -49,9 +49,18 @@
     <div class="scn-prog"><div id="scnProg"></div></div>
     <button class="btn sm" id="scnPause">일시정지</button>
     <button class="btn sm" id="scnSkip">끝까지</button>
+    <button class="btn sm" id="scnLesson" hidden>배울 점</button>
     <button class="btn sm" id="scnClose">닫고 현재로</button>
   </div>
   <ol class="scn-steps" id="scnSteps"></ol>
+</div>
+<div class="scnpop" id="scnPop" hidden>
+  <div class="scnpop-box" role="dialog" aria-modal="true" aria-labelledby="scnPopTitle">
+    <div class="scnpop-head"><span class="tag" id="scnPopKind"></span><b class="mono" id="scnPopTime"></b><span class="muted" id="scnPopNo"></span><span class="sp"></span><button class="btn sm" id="scnPopX" aria-label="닫기">닫기</button></div>
+    <h3 id="scnPopTitle"></h3>
+    <div class="scnpop-body" id="scnPopBody"></div>
+    <div class="scnpop-foot"><button class="btn" id="scnPopSkip">끝까지 건너뛰기</button><span class="sp"></span><button class="btn pri" id="scnPopNext">다음 ▶</button></div>
+  </div>
 </div>
 <!-- 1. 관제 -->
 <section class="tab on" id="tab-monitor">
@@ -216,7 +225,7 @@
     <button class="btn" data-r3="2026-10-26T15:55" data-center="B" data-rack="IDC_B_R07">냉각 이상</button>
     <button class="btn" data-r3="2026-10-26T16:15" data-center="B" data-rack="IDC_B_R07">장비 꺼짐</button>
     <span class="sp"></span>
-    <span class="note" style="margin:0">모두 가상 데이터. 랙이나 장비를 누르면 그쪽으로 확대됩니다(그 상태에서 드래그 = 회전, 오른쪽 드래그 또는 Shift+드래그 = 이동, 휠 = 확대·축소, '화면 맞춤' = 전체 보기). 장비마다 온도 하나가 붙고, 값은 랙 입구 온도에 높이 보정을 더한 제 가정입니다. 장비 높이·랙 안 배치와 패치 패널·PDU 같은 보조 장비는 제가 만든 가상 그림입니다.</span>
+    <span class="note" style="margin:0">모두 가상 데이터. 랙이나 장비를 누르면 그쪽으로 확대됩니다. 마우스: 드래그 = 회전, 오른쪽 드래그·Shift+드래그 = 이동, 휠 = 확대·축소. 아이패드·터치: 한 손가락 = 아래 '회전/이동' 선택대로, 두 손가락 = 확대·축소와 이동. 화면 오른쪽 아래 버튼으로도 움직일 수 있고 '화면 맞춤' = 전체 보기. 장비마다 온도 하나가 붙고, 값은 랙 입구 온도에 높이 보정을 더한 제 가정입니다. 장비 높이·랙 안 배치와 패치 패널·PDU 같은 보조 장비는 제가 만든 가상 그림입니다.</span>
   </div>
   <div class="glgrid">
     <aside class="glleft card">
@@ -224,7 +233,13 @@
       <div class="glchips"><button class="btn sm on" data-glf="all">전체</button><button class="btn sm" data-glf="ok">정상</button><button class="btn sm" data-glf="warn">주의</button><button class="btn sm" data-glf="crit">경고·위험</button><span class="muted" id="glCount"></span></div>
       <div id="glList"></div>
     </aside>
-    <div class="glwrap" id="glWrap"><canvas id="glCanvas"></canvas><div class="gltip" id="glTip" hidden></div><div class="glhint" id="glHint"></div>
+    <div class="glwrap" id="glWrap"><canvas id="glCanvas"></canvas><div class="gltip" id="glTip" hidden></div>
+      <div class="glpad" id="glPad">
+        <button class="btn" id="glPadTog" aria-expanded="true">조작판 접기</button>
+        <div class="glmode"><button class="btn" data-gm="rotate">회전</button><button class="btn" data-gm="pan">이동</button></div>
+        <div class="gldpad"><span></span><button data-pan="up" aria-label="위로">↑</button><span></span><button data-pan="left" aria-label="왼쪽">←</button><button data-pan="down" aria-label="아래로">↓</button><button data-pan="right" aria-label="오른쪽">→</button></div>
+        <div class="glrz"><button data-rot="1" aria-label="왼쪽에서 보기">회전 ←</button><button data-rot="-1" aria-label="오른쪽에서 보기">회전 →</button><button id="glPadIn" aria-label="확대">+</button><button id="glPadOut" aria-label="축소">−</button></div>
+      </div><div class="glhint" id="glHint"></div>
       <div class="r3legend"><span class="sw ok"></span>정상 <span class="sw warn"></span>주의 <span class="sw hot"></span>경고 <span class="sw crit"></span>위험 <span class="muted">(온도 보기: 파랑→초록→노랑→주황→빨강)</span></div></div>
     <aside class="glright card" id="glDetail"></aside>
   </div>
