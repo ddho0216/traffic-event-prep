@@ -695,15 +695,40 @@ function runCmdNow(raw, dev, t) {
   for (const [re, fn] of DEV_CMDS[d.vendor]) { const m = cmd.match(re); if (m) return fn(d, m); }
   return VENDOR_ERR[d.vendor];
 }
+/* 자주 쓰던 명령: 무엇을 위해 치는지 목적별로 묶고, 마우스를 올리면(터치는 아래 한 줄) 설명이 보인다 */
+const CMD_GROUPS = [
+  ["1. 회선 상태 확인", "장애가 나면 가장 먼저 칩니다. 어떤 회선이 Up인지 Down인지, 어느 고객사 회선인지 봅니다."],
+  ["2. 광값·CRC 확인", "회선이 이상할 때 광 케이블 접촉 불량이나 SFP 불량인지 확인합니다."],
+  ["3. 로그 확인", "언제 어떤 포트가 내려갔다 올라왔는지 시간 순서로 봅니다."],
+  ["4. IP·연결 확인", "상대 장비까지 실제로 닿는지, 이 IP가 어느 회선으로 가는지 확인합니다."],
+  ["5. 설정 확인", "포트에 어떤 설명과 IP가 설정되어 있는지 확인합니다."]
+];
+const CMD_INFO = [   // [명령에 들어 있는 말, 묶음 번호, 한 줄 설명, 무엇을 위해, 읽는 법]
+  [/descriptions?$|interfaces? brief$|interface description$/i, 0, "Up/Down과 고객사를 한눈에", "전체 인터페이스의 상태와 설명(어느 회선·어느 고객사인지)을 한 번에 봅니다.", "Admin = 관리자가 켜 둔 상태, Link = 실제 연결 상태입니다. Admin up + Link down = 일부러 내린 게 아니라 끊긴 것(선·상대 장비 문제). Admin down = 누가 일부러 내린 것(아직 안 쓰는 회선일 수 있음). 장비에 따라 descriptions로 up/down이 안 보이면 brief로 봅니다."],
+  [/optics|transceiver/i, 1, "빛이 들어오는지(수신 광값)", "광 모듈이 보내고 받는 빛의 세기를 봅니다. 케이블 접촉 불량이나 SFP 불량이 의심될 때 칩니다.", "수신 광값이 대략 -10dBm보다 낮으면 약한 것이고, -40dBm이면 빛이 전혀 안 들어오는 것(끊김이나 상대 장비 꺼짐)입니다."],
+  [/CRC\|physical interface|CRC\|xe/i, 1, "전 회선 CRC를 회선 이름과 함께", "모든 회선의 CRC 오류를 한 번에 훑어서 어느 회선에 오류가 있는지 찾습니다.", "숫자가 0이 아닌 회선이 의심 대상입니다. 같은 명령을 시간을 두고 다시 쳐서 숫자가 계속 늘어나는지도 봅니다."],
+  [/CRC/i, 1, "이 회선의 CRC 오류 수", "선로에서 깨진 패킷이 들어오는지 봅니다. 광 케이블 접촉 불량이나 SFP 불량이면 늘어납니다.", "0이면 정상입니다. 0이 아니고 계속 늘어나면 케이블·SFP를 의심합니다. 광값(수신)과 같이 봅니다."],
+  [/log/i, 2, "언제 무슨 일이 있었는지", "포트가 내려가거나 올라간 시각, 광 경고 같은 기록을 시간순으로 봅니다.", "Down 기록의 시각이 장애 시작 시각입니다. 같은 포트가 반복해서 내려갔다 올라가면 접촉 불량을 의심합니다."],
+  [/arp/i, 3, "상대 IP·MAC 주소 확인", "이 포트에 연결된 상대의 IP와 MAC 주소를 찾습니다.", "링크가 Down이면 아무것도 안 나옵니다. L2 장비(Huawei)는 IP가 없어서 MAC 주소로 찾습니다."],
+  [/ping/i, 3, "상대까지 실제로 닿는지", "상대 장비까지 통신이 되는지, 얼마나 손실이 나는지 100번 보내 봅니다.", "손실 0%가 정상입니다. 일부 손실이면 회선 품질 문제, 100%면 상대까지 안 닿는 것입니다."],
+  [/bgp/i, 3, "BGP 상대(피어)가 살아 있는지", "BGP로 연결된 상대들의 상태를 봅니다. 장애 때 죽었다 살아난 회선을 추릴 때 씁니다.", "시간이 길고 숫자가 보이면 정상, Active는 연결이 끊긴 것입니다."],
+  [/route/i, 3, "이 IP가 어느 회선으로 가는지", "특정 IP로 가는 경로(via 회선)를 찾습니다. 고객사 IP가 어느 회선인지 찾을 때 씁니다.", "via 뒤에 나오는 포트가 그 IP가 지나는 회선입니다. 그 포트를 descriptions로 보면 고객사를 알 수 있습니다."],
+  [/configuration|running-config/i, 4, "포트 설정(설명·IP·내림 여부)", "이 포트에 설정된 설명(회선·고객사), IP, 포트를 내렸는지 여부를 봅니다.", "disable·shutdown이 있으면 관리자가 내려 둔 포트입니다. IP는 ping과 ARP로 확인할 때 씁니다."]
+];
+const cmdInfo = c => CMD_INFO.find(x => x[0].test(c)) || [null, 4, "", "", ""];
 function quickCmds() {
-  const d = devNow(), bad = d.ifs.find(f => !f[11] && (f[2] > 50 || f[3] < -9)) || d.ifs.find(f => !f[11]) || d.ifs[0], ok = d.ifs[0];
-  const pp = d.ifs.find(f => f[8] && f[5] === "up"), ip = pp ? pp[8] : "";
+  const d = devNow(), bad = d.ifs.find(f => !f[11] && (f[2] > 50 || f[3] < -9)) || d.ifs.find(f => !f[11]) || d.ifs[0];
+  const pp = d.ifs.find(f => f[8] && f[5] === "up"), ip = pp ? pp[8] : "", hw = bad[0].replace("XGigabitEthernet", "XGigabitEthernet ");
   const list = {
-    juniper: [`show interfaces descriptions`, `show interfaces diagnostics optics ${bad[0]}`, `show interfaces extensive ${bad[0]} | match CRC`, `show interfaces extensive | match "CRC|physical interface"`, `show log messages | last 20`, ...(ip ? [`show arp | match ${pp[0]}`, `ping ${ip} rapid count 100`] : []), `show bgp summary`],
-    cisco: [`show interfaces description`, `show interfaces brief`, `show interface ${bad[0]} | include CRC`, `show logging last 100`, ...(ip ? [`ping ${ip} repeat 100`] : []), `show bgp summary`],
-    huawei: [`display interface description`, `display transceiver interface ${bad[0].replace("XGigabitEthernet", "XGigabitEthernet ")} verbose`, `display interface ${bad[0].replace("XGigabitEthernet", "XGigabitEthernet ")} | include CRC`, `display logbuffer`, `display current-configuration interface ${bad[0]}`]
+    juniper: [`show interfaces descriptions`, `show interfaces diagnostics optics ${bad[0]}`, `show interfaces extensive ${bad[0]} | match CRC`, `show interfaces extensive | match "CRC|physical interface"`, `show log messages | last 20`, ...(ip ? [`show arp | match ${pp[0]}`, `ping ${ip} rapid count 100`, `show route ${ip}`] : []), `show bgp summary`, `show configuration interfaces ${bad[0]} | display set`],
+    cisco: [`show interfaces description`, `show interfaces brief`, `show interface ${bad[0]} | include CRC`, `show logging last 100`, ...(ip ? [`ping ${ip} repeat 100`, `show route ${ip}`] : []), `show bgp summary`, `show running-config interface ${bad[0]}`],
+    huawei: [`display interface description`, `display transceiver interface ${hw} verbose`, `display interface ${hw} | include CRC`, `display logbuffer`, `display current-configuration interface ${bad[0]}`]
   }[d.vendor];
-  $("#qcmd").innerHTML = [...new Set(list)].map(c => `<button data-c="${esc(c)}">${esc(c)}</button>`).join("");   // 포트가 하나뿐인 장비는 같은 명령이 두 번 나오지 않게
+  const cmds = [...new Set(list)];   // 포트가 하나뿐인 장비는 같은 명령이 두 번 나오지 않게
+  $("#qcmd").innerHTML = CMD_GROUPS.map(([title, desc], g) => {
+    const mine = cmds.filter(c => cmdInfo(c)[1] === g); if (!mine.length) return "";
+    return `<div class="qgrp"><h4 title="${esc(desc)}">${title} <i class="help" aria-hidden="true">?</i></h4><p class="gdesc">${esc(desc)}</p>` + mine.map(c => { const x = cmdInfo(c); return `<button data-c="${esc(c)}" title="${esc(`무엇을 위해: ${x[3]}\n읽는 법: ${x[4]}`)}"><code>${esc(c)}</code><span class="why">${esc(x[2])}</span></button>`; }).join("") + "</div>";
+  }).join("");
 }
 const termHist = []; let hp = 0;
 function termPrint(html) { const t = $("#termOut"); t.insertAdjacentHTML("beforeend", html); t.scrollTop = t.scrollHeight; }
@@ -763,6 +788,8 @@ function openDeviceTerminal(devId) {   // 랙 안 장비를 누르면 그 장비
   ["devTbl", "custTbl", "linkTbl"].forEach(id => $("#" + id).addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { selectDevice(tr.dataset.dev); $("#termIn").focus(); window.scrollTo({ top: 0, behavior: "smooth" }); } }));
   renderDesign();
   $("#termClear").onclick = termBanner;
+  $("#runbookBtn").onclick = () => { const d = $("#runbook"); d.open = !d.open; if (d.open) d.scrollIntoView({ behavior: "smooth", block: "start" }); $("#runbookBtn").textContent = d.open ? "장애 매뉴얼 접기" : "장애 매뉴얼 열기"; };
+  $("#runbook").addEventListener("toggle", () => { $("#runbookBtn").textContent = $("#runbook").open ? "장애 매뉴얼 접기" : "장애 매뉴얼 열기"; });
   $("#qcmd").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { $("#termIn").value = b.dataset.c; $("#termIn").focus(); } });
   $("#termIn").addEventListener("keydown", e => {
     if (e.key === "Enter") {

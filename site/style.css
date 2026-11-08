@@ -251,3 +251,26 @@ body.popup #centerBar{display:none}
 .scn-steps .btn.sm{margin-left:6px;padding:1px 8px;font-size:11px}
 .glpad.min>:not(#glPadTog){display:none}
 .glpad #glPadTog{min-height:36px;font-size:13px}
+
+/* 터미널: 접이식 매뉴얼, 목적별 명령 */
+details.fold{padding:0}
+details.fold>summary{cursor:pointer;padding:10px 14px;list-style:none;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+details.fold>summary::-webkit-details-marker{display:none}
+details.fold>summary::before{content:"▸";color:var(--accent);display:inline-block;width:12px}
+details.fold[open]>summary::before{content:"▾"}
+details.fold>*:not(summary){margin-left:14px;margin-right:14px}
+details.fold>*:last-child{margin-bottom:14px}
+.qgrp{margin-bottom:10px}
+.qgrp h4{margin:0 0 2px;font-size:12.5px}
+.qgrp .help{display:inline-block;width:14px;height:14px;line-height:14px;text-align:center;font-style:normal;font-size:10px;border:1px solid var(--muted);border-radius:50%;color:var(--muted);cursor:help}
+.qgrp .gdesc{margin:0 0 4px;font-size:11.5px;color:var(--muted);line-height:1.5}
+.qcmd button{display:flex;flex-direction:column;gap:2px;margin-bottom:4px;width:100%}
+.qcmd button code{font-family:var(--mono);font-size:12px;word-break:break-all}
+.qcmd button .why{font-family:var(--sans,inherit);font-size:11.5px;color:var(--muted)}
+
+/* 설계도 그림 */
+.dgwrap{overflow:auto;background:#0b1015;border:1px solid var(--line);border-radius:3px;margin-top:8px}
+.dgsvg{width:100%;height:auto;display:block;min-width:900px}
+.dgsvg [data-dev]:hover rect{stroke:#fff}
+details.fold.sub{margin-top:10px;border:1px solid var(--line);border-radius:3px}
+#designBox .toolbar{margin-top:6px}

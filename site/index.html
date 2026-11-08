@@ -291,18 +291,18 @@
   <div class="cols" style="grid-template-columns:2fr 1fr">
     <div>
       <div class="toolbar"><label>제조사 <select id="vendorSel"></select></label>
-      <label>장비 <select id="devSel"></select></label><button class="btn" id="termClear">화면 지우기</button></div>
+      <label>장비 <select id="devSel"></select></label><button class="btn" id="termClear">화면 지우기</button><button class="btn" id="runbookBtn" title="장애가 났을 때 순서대로 따라 할 수 있는 매뉴얼을 펼칩니다">장애 매뉴얼 열기</button></div>
       <div class="term" id="termOut"></div>
       <div class="termin"><span class="p" id="termPrompt"></span><input type="text" id="termIn" autocomplete="off" spellcheck="false" placeholder="명령 입력 후 Enter (위/아래 화살표: 이전 명령)"></div>
     </div>
     <div class="card">
-      <h3>자주 쓰던 명령</h3>
+      <h3>자주 쓰던 명령 <small class="muted">(마우스를 올리면 설명)</small></h3>
       <div class="qcmd" id="qcmd"></div>
-      <p class="note">누르면 입력창에 채워집니다. 장비 종류에 맞는 명령만 동작합니다. <span class="crit-t">IDC_B_FS2 xe-0/0/3(해외 연동), IDC_A_FR1 Te1/0/1(안산 Cisco 백본), IDC_B_FS7·IDC_B_AS5 업링크 등에 CRC와 광 수신값 이상이, IDC_G_FS1 xe-0/0/11에는 Link down(Admin up), IDC_B_FS1 xe-0/0/14에는 Admin down이 심어져 있습니다.</span></p>
+      <p class="note">목적별로 묶여 있고, 누르면 입력창에 채워집니다. 마우스를 올리면 '무엇을 위해 치는지'와 '결과를 읽는 법'이 보입니다(터치는 명령 아래 한 줄 설명). 장비 종류에 맞는 명령만 동작합니다. <span class="crit-t">IDC_B_FS2 xe-0/0/3(해외 연동), IDC_A_FR1 Te1/0/1(안산 Cisco 백본), IDC_B_FS7·IDC_B_AS5 업링크 등에 CRC와 광 수신값 이상이, IDC_G_FS1 xe-0/0/11에는 Link down(Admin up), IDC_B_FS1 xe-0/0/14에는 Admin down이 심어져 있습니다.</span></p>
     </div>
   </div>
-  <div class="card" id="runbook">
-    <h3>장애가 터졌을 때 (업무 메모를 일반화한 순서)</h3>
+  <details class="card fold" id="runbook">
+    <summary><b>장애가 터졌을 때 (매뉴얼)</b> <span class="muted">평소에는 접어 두고, 장애가 났을 때 눌러서 펼쳐 보세요</span></summary>
     <p class="note">제 업무 메모의 명령어와 순서를 이 가상 환경에 맞게 정리한 것입니다. 실제 고객사 이름·IP·내부 도구의 메뉴 경로는 쓰지 않았고, 아래 명령은 위 터미널에서 그대로 연습할 수 있습니다. 시나리오 "업링크 회선 다운"에서 이 순서를 따라가 볼 수 있습니다.</p>
     <ol class="runbook">
       <li><b>정확한 장비·회선 확인</b>: <code>show interfaces descriptions</code>(Cisco는 <code>description</code> 또는 <code>brief</code>, Huawei는 <code>display interface description</code>). <b>Admin</b>은 관리자가 켜 둔 상태, <b>Link</b>는 실제 연결 상태입니다. Admin up + Link down = 일부러 내린 게 아니라 끊긴 것, Admin down = 누가 일부러 내린 것. 고객 회선은 줄마다 장비·고객사·속도(1G/10G)가 같이 보입니다. 장비에 따라 descriptions로 up/down이 안 보이면 brief로 확인합니다.</li>
@@ -314,16 +314,24 @@
       <li><b>연동망에 문의할 때</b>: 가. NOC 작업 유/무, 나. 연동 구간(타 부서·타 ISP) 작업·이슈 유/무, 다. 보안 관련 이슈 유/무. 통화한 분의 성함을 꼭 확인해 기록합니다.</li>
       <li><b>발생 문자 전송·고객사 연락</b>, 경과나 원인을 알게 되면 바로 전달하고 확인한 내용은 조장에게 전달합니다.</li>
     </ol>
-  </div>
-  <h2>설계도 (가상) <small>제가 만든 초안입니다. 행을 누르면 그 장비로 연결됩니다. 전체 장비와 연결이 보입니다.</small></h2>
-  <p class="note" id="designSum" style="margin:0 0 8px;color:var(--text)"></p>
-  <div class="cols">
-    <div class="card" style="padding:0"><table id="devTbl"></table></div>
-    <div>
-      <div class="card" style="padding:0;margin-bottom:12px"><table id="custTbl"></table></div>
-      <div class="card" style="padding:0"><table id="linkTbl"></table></div>
-    </div>
-  </div>
+  </details>
+  <details class="card fold" id="designBox">
+    <summary><b>설계도 (가상)</b> <span class="muted">그림으로 보는 구성도입니다. 평소에는 접어 두고 필요할 때 펼쳐 보세요</span></summary>
+    <p class="note" id="designSum" style="margin:0 0 8px;color:var(--text)"></p>
+    <div class="toolbar"><span class="seg" id="dgTabs"></span><button class="btn pri" id="dgPdf">PDF로 내려받기</button><span class="muted" id="dgMsg"></span></div>
+    <div class="dgwrap"><div id="dgView"></div></div>
+    <p class="note">제가 만든 초안입니다. 장비를 누르면 그 장비의 터미널로 이동합니다. PDF에는 전체·센터별 구성도와 고객사·그래프 회선·장비 표가 들어갑니다.</p>
+    <details class="fold sub" id="dgTables">
+      <summary>표로 보기 <span class="muted">(장비·고객사·연결, 행을 누르면 그 장비로 연결)</span></summary>
+      <div class="cols">
+        <div class="card" style="padding:0"><table id="devTbl"></table></div>
+        <div>
+          <div class="card" style="padding:0;margin-bottom:12px"><table id="custTbl"></table></div>
+          <div class="card" style="padding:0"><table id="linkTbl"></table></div>
+        </div>
+      </div>
+    </details>
+  </details>
 </section>
 </main>
 
@@ -332,5 +340,6 @@
 <script src="lib.js"></script>
 <script src="app.js"></script>
 <script src="room3d.js"></script>
+<script src="design.js"></script>
 </body>
 </html>
