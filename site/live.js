@@ -150,16 +150,18 @@
 
   /* ---------- 업링크 회선 다운 (사이트의 실제 가상 데이터를 그대로 사용) ---------- */
   SCEN.linkDown = (() => {
-    const ID = "IDC_A_FS1_UP1", DV = "IDC_A_FS1", PORT = "xe-0/0/0", WIN0 = "2026-10-21T14:00", END = 65, START = 10, DEADLINE = 8;
+    const ID = "IDC_A_FS1_UP1", DV = "IDC_A_FS1", PORT = "xe-0/0/0", WIN0 = "2026-10-21T14:00", END = 60, START = 10, DEADLINE = 8;
     const t0 = () => parseT(WIN0), L = () => LINK[ID];
     const idxAt = ms => Math.floor((ms - T0) / STEP);
-    const val = m => L().out[idxAt(t0() + Math.floor(m) * 60000)];
-    const prev = m => L().out[idxAt(t0() + Math.floor(m) * 60000) - PER_DAY];
-    const iso = m => isoLocal(t0() + Math.floor(m) * 60000);
-    let dS = 20, dE = 45;
-    for (let m = 0; m <= END; m++) { if (val(m) < 3) { dS = m; break; } }
-    for (let m = dS + 1; m <= END; m++) { if (val(m) > 10) { dE = m; break; } }
-    const ALERT = dS + 3;
+    const rawVal = mm => L().out[idxAt(t0() + Math.floor(mm) * 60000)];
+    let rS = 20, rE = 50;   // 실제 데이터에서 다운이 시작·끝나는 분
+    for (let m = 0; m <= 90; m++) { if (rawVal(m) < 3) { rS = m; break; } }
+    for (let m = rS + 1; m <= 90; m++) { if (rawVal(m) > 10) { rE = m; break; } }
+    const dS = rS, len = Math.round((rE - rS) * 2 / 3), dE = dS + len, ALERT = dS + 3;   // 복구까지 기다리는 시간을 2/3로 줄였다 (실제 데이터의 다운 구간을 압축)
+    const dm = m => m <= dS ? m : (m <= dE ? dS + (m - dS) * 1.5 : m + (rE - rS - len));   // 가상 분 → 실제 데이터 분
+    const val = m => rawVal(dm(m));
+    const prev = m => L().out[idxAt(t0() + Math.floor(dm(m)) * 60000) - PER_DAY];
+    const iso = m => isoLocal(t0() + Math.floor(dm(m)) * 60000);
     const CAUSE = {
       work: { name: "상대 구간 작업", cause: "상대 센터(IDC_S_FS1) 구간 작업", act: "상대 구간 작업 종료로 자동 복구", noc: "있음 · 상대 센터(IDC_S_FS1) 포트 점검 작업을 진행했고, 사전 공지가 빠졌습니다. 끝나면 연결이 자동 복구됩니다", seg: "없음", sec: "없음" },
       transient: { name: "일시적인 오류", cause: "일시적인 회선 오류 (원인 미상)", act: "자동 복구 후 재발 감시", noc: "없음 · 작업 이력이 없습니다", seg: "없음 · 구간 이슈가 없습니다", sec: "없음" },
@@ -271,6 +273,130 @@
         ];
       },
       note: "가상 데이터(사이트의 안산 업링크 다운 구간)로 만든 결과입니다. 복구 원인과 문의 회신은 제가 만든 가상 사례입니다."
+    };
+  })();
+
+  /* ---------- 트래픽 급감 (국내 연동 IX, 사이트의 실제 가상 데이터를 그대로 사용) ---------- */
+  SCEN.drop = (() => {
+    const ID = "IDC_B_FS2_IX1", INTL = "IDC_B_FS2_INTL1", DV = "IDC_B_FS2", PORT = "xe-0/0/2", WIN0 = "2026-10-23T19:50", START = 10, DEADLINE = 8, K = 2 / 3;
+    const t0 = () => parseT(WIN0), L = () => LINK[ID], LI = () => LINK[INTL];
+    const idxAt = ms => Math.floor((ms - T0) / STEP);
+    const rawAt = (series, mm) => series[idxAt(t0() + Math.floor(mm) * 60000)];
+    const rawPrev = (series, mm) => series[idxAt(t0() + Math.floor(mm) * 60000) - PER_DAY];
+    let rS = 20, rE = 70;   // 실제 데이터에서 급감이 시작·끝나는 분
+    for (let m = 0; m <= 90; m++) { if (rawAt(L().out, m) < 0.4 * rawPrev(L().out, m)) { rS = m; break; } }
+    for (let m = rS + 1; m <= 90; m++) { if (rawAt(L().out, m) > 0.8 * rawPrev(L().out, m)) { rE = m; break; } }
+    const dS = rS, len = Math.round((rE - rS) * K), dE = dS + len, END = dE + 25, ALERT = dS + 3;   // 복구까지 기다리는 시간을 2/3로 줄였다
+    const dm = m => m <= dS ? m : (m <= dE ? dS + (m - dS) / K : m + (rE - rS - len));
+    const val = m => rawAt(L().out, dm(m)), prev = m => rawPrev(L().out, dm(m)), intl = m => rawAt(LI().out, dm(m)), intlPrev = m => rawPrev(LI().out, dm(m));
+    const iso = m => isoLocal(t0() + Math.floor(dm(m)) * 60000);
+    const runLive = (cmd, m) => runOn(DV, cmd, [], iso(m)).split("\n").slice(1).join("\n");
+    const cust = () => (typeof CUSTOMERS !== "undefined" ? CUSTOMERS.filter(c => (c.links || []).includes(ID)).map(c => c.name) : []);
+    const CMDS = { ip: "show interfaces descriptions", opt: `show interfaces diagnostics optics ${PORT}`, crc: `show interfaces extensive ${PORT} | match CRC`, bgp: "show bgp summary" };
+    const REPLY = { noc: "있음 · 상대 IX 사업자 장비 이상으로 복구 작업 중입니다", seg: "있음 · IX 구간에서 트래픽 일부가 빠지고 있습니다 (원인 확인 중)", sec: "없음 · 공격·보안 이슈는 없습니다" };
+    const runShow = cmd => { term(`admin@${DV}> ${cmd}`); term(runLive(cmd, cur())); };
+    const spark = (fn, cap, w, h, upto, color) => {
+      const x = m => 4 + (w - 8) * m / END, y = v => 3 + (h - 6) * (1 - v / cap), pts = []; for (let m = 0; m <= upto; m++) pts.push(`${x(m)},${y(fn(m))}`);
+      return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none"><polyline fill="none" stroke="${color}" stroke-width="1.8" points="${pts.join(" ")}"/></svg>`;
+    };
+    return {
+      id: "drop", name: "트래픽 급감", clock0: 19 * 60 + 50, date: "10/23", start: START, end: END, alertAt: ALERT, deadline: DEADLINE, stages: ["발생", "경과", "완료"],
+      linkTitle: `${ID} · out`, linkDesc: "분당 국내 연동(IX) · 점선=전날 같은 시각", dev: DV,
+      termQuick: [["회선 설명", CMDS.ip], ["광값", CMDS.opt], ["CRC", CMDS.crc], ["BGP 요약", CMDS.bgp]],
+      cardTitle: "우회 회선 · 영향 고객사 · 연동망 문의 결과", cardSave: false,
+      init: () => ({ asked: {}, notice: false }),
+      sub: () => alerted() ? `알림 ${fmt(ALERT)}${S.ack != null ? ` · 내가 확인 ${fmt(S.ack)}` : ""}` : "정상 감시 중",
+      intro: `가상 장비 ${DV} (juniper)에 연결됨. 실제 장비가 아닙니다. 명령 결과는 가상 시계의 현재 시각 기준으로 나옵니다.`,
+      chart() {
+        const W = 760, H = 168, Lm = 36, B = 16, T = 6, R = 6, n = END, upto = cur(), cap = Math.ceil(Math.max(...Array.from({ length: n + 1 }, (_, m) => Math.max(val(m), prev(m) || 0))) * 1.2 / 10) * 10;
+        const x = m => Lm + (W - Lm - R) * m / n, y = v => T + (H - T - B) * (1 - v / cap);
+        let g = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${ID} out 그래프">`;
+        for (const v of [0, cap / 2, cap]) g += `<line x1="${Lm}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="#26323d"/><text x="${Lm - 5}" y="${y(v) + 3}" fill="#7b8a98" font-size="10" text-anchor="end">${Math.round(v)}G</text>`;
+        for (let m = 0; m <= n; m += 20) g += `<text x="${x(m)}" y="${H - 3}" fill="#7b8a98" font-size="10" text-anchor="middle">${fmt(m)}</text>`;
+        const ref = []; for (let m = 0; m <= n; m++) ref.push(`${x(m)},${y(prev(m) || 0)}`);
+        g += `<polyline fill="none" stroke="#3b4f61" stroke-width="1.2" stroke-dasharray="3 3" points="${ref.join(" ")}"/>`;
+        const pts = []; for (let m = 0; m <= upto; m++) pts.push(`${x(m)},${y(val(m))}`);
+        const bad = val(upto) < 0.5 * (prev(upto) || 1);
+        g += `<polyline fill="none" stroke="${bad ? "#ff8f84" : "#59b4f5"}" stroke-width="2" points="${pts.join(" ")}"/><circle cx="${x(upto)}" cy="${y(val(upto))}" r="3.5" fill="${bad ? "#ff8f84" : "#59b4f5"}"/>`;
+        if (upto >= dS) g += `<line x1="${x(dS)}" x2="${x(dS)}" y1="${T}" y2="${H - B}" stroke="#e8a23b" stroke-dasharray="3 3"/><text x="${x(dS) + 3}" y="${T + 10}" fill="#e8a23b" font-size="10">급감 시작 ${fmt(dS)}</text>`;
+        if (upto >= dE) g += `<line x1="${x(dE)}" x2="${x(dE)}" y1="${T}" y2="${H - B}" stroke="#47c28b" stroke-dasharray="3 3"/><text x="${x(dE) + 3}" y="${T + 22}" fill="#47c28b" font-size="10">회복 ${fmt(dE)}</text>`;
+        return { svg: g + "</svg>", now: `${gb(val(upto))}G`, bad };
+      },
+      alertBar() {
+        const m = cur(), v = val(m), p = prev(m) || 0;
+        if (!alerted()) return ["idle", '● 알림 없음 · 정상 감시 중 <span class="muted">(전날 같은 시각보다 크게 낮아지고 1~3분이 지나야 알림이 뜹니다)</span>'];
+        if (m >= dE && v > 0.8 * p) return ["ok", `● ${ID} 회복됨 <span class="muted">${fmt(m)} · out ${gb(v)}G</span>`];
+        return ["hot", `<span class="lv-dot"></span>${ID} out 급감 감지 <span class="muted">${fmt(ALERT)} · 급감 시작 ${fmt(dS)} · 지연 ${ALERT - dS}분 · 전날 같은 시각 ${gb(p)}G → ${gb(v)}G (평소의 ${Math.round(v / p * 100)}%)</span>` +
+          (S.ack == null ? `<button class="btn" id="lvAck" type="button">확인하기</button>` : `<span class="muted" style="margin-left:auto">내가 확인 ${fmt(S.ack)}</span>`)];
+      },
+      card() {
+        if (S.ack == null) return { sub: "", html: '<p class="muted lv-empty">알림을 확인하면 우회 회선과 영향 고객사, 연동망 문의 결과가 표시됩니다.</p>' };
+        const m = cur(), row = (k, q) => `<tr><th>${q}</th><td>${S.asked[k] ? esc(REPLY[k]) : '<span class="muted">아직 문의 안 함</span>'}</td></tr>`;
+        return {
+          sub: `해외 연동 ${INTL} out ${gb(intl(m))}G (전날 같은 시각 ${gb(intlPrev(m) || 0)}G)`,
+          html: `<div class="lv-2"><div><div class="muted lv-h">${INTL} out (해외 연동)</div>${spark(intl, Math.ceil(Math.max(...Array.from({ length: END + 1 }, (_, k) => intl(k))) * 1.15 / 10) * 10, 300, 70, m, "#e8a23b")}<div class="muted lv-h" style="margin-top:6px">영향 고객사 (이 회선을 쓰는 곳)</div><div>${cust().map(esc).join(" · ") || "-"}</div></div>
+          <div><div class="muted lv-h">상대 IX 사업자에 문의한 결과</div><table class="kv2">${row("noc", "NOC 작업 유/무")}${row("seg", "연동 구간 작업·이슈")}${row("sec", "보안 관련 이슈")}</table></div></div>`
+        };
+      },
+      rows() {
+        const can = S.ack != null, n = Object.keys(S.asked).length, rec = cur() >= dE, m = cur();
+        const b = (a, label, en) => `<button class="btn sm" data-a="${a}" ${can && en !== false ? "" : "disabled"}>${label}</button>`;
+        return [
+          ["ev", "이벤트(경기) 일정인지 확인", done("ev") ? `일정 없음 → 경기 하프타임 같은 정상 하락이 아님 (${fmt(S.done.ev)})` : "경기 일정이 있으면 급감이 아닐 수 있습니다", done("ev") ? "" : b("ev", "일정 조회")],
+          ["tr", "급감 정도 확인", done("tr") ? `전날 같은 시각 ${gb(prev(dS) || 0)}G → ${gb(val(dS))}G (평소의 ${Math.round(val(dS) / (prev(dS) || 1) * 100)}%)` : "그래프 값을 전날과 비교해 읽습니다", done("tr") ? "" : b("tr", "그래프 값 읽기")],
+          ["intl", "우회 확인", done("intl") ? `해외 연동 ${gb(intlPrev(dS) || 0)}G → ${gb(intl(Math.min(m, dE - 1)))}G 증가: 빠진 트래픽 일부가 우회 중 (${fmt(S.done.intl)})` : "빠진 트래픽이 다른 회선으로 갔는지 봅니다", done("intl") ? "" : b("intl", "해외 연동 회선 보기")],
+          ["opt", "우리 쪽 포트 광값·CRC 확인", done("opt") ? `광 수신 정상 범위, CRC 증가 없음 → 우리 쪽 문제는 아님 (${fmt(S.done.opt)})` : "우리 쪽 광 문제인지 먼저 확인합니다", done("opt") ? "" : b("opt", "광값·CRC 확인")],
+          ["sms", "발생 문자 보내기", done("sms") ? `발송 ${fmt(S.done.sms)} (알림 후 ${Math.round(S.done.sms - ALERT)}분)` : `알림 후 ${DEADLINE}분 안에 보냅니다`, ""],
+          ["ask", "상대 IX 사업자에 문의", done("ask") ? `3가지 문의 완료 (${fmt(S.done.ask)})` : `NOC 작업 / 구간 작업·이슈 / 보안 이슈 (${n}/3)`,
+            done("ask") ? "" : `<span class="lv-opts">${b("ask-noc", "NOC 작업 유/무", !S.asked.noc)}${b("ask-seg", "구간 작업·이슈", !S.asked.seg)}${b("ask-sec", "보안 이슈", !S.asked.sec)}</span>`],
+          ["notice", "영향 고객사에 상황 안내", done("notice") ? `${cust().join("·") || "고객사"}에 안내 (${fmt(S.done.notice)})` : "연동망 회신을 받은 뒤 고객사에 알립니다", done("notice") ? "" : b("notice", "고객사에 안내", done("ask"))],
+          ["rec", "회복 확인", done("rec") ? `회복 확인 (${fmt(S.done.rec)})` : rec ? "그래프가 돌아왔습니다. 광값과 우회 회선도 다시 확인합니다" : "그래프가 돌아오면 다시 확인합니다", done("rec") ? "" : b("rec", "그래프·광값 다시 확인", rec)],
+          ["fin", "완료 문자 · 복구 안내", done("fin") ? `완료 문자 ${fmt(S.done.fin)}` : "회복을 확인한 뒤에만 완료로 보냅니다", ""]
+        ];
+      },
+      act(a) {
+        const m = cur();
+        if (a === "ev") { addLog("이벤트 일정 조회 → 해당 시간 경기 일정 없음"); mark("ev"); }
+        else if (a === "tr") { addLog(`급감 확인: 전날 같은 시각 ${gb(prev(dS) || 0)}G → ${gb(val(dS))}G`); mark("tr"); }
+        else if (a === "intl") { addLog(`해외 연동 ${INTL} 증가 확인 → 일부 우회 중`); mark("intl"); paint(); }
+        else if (a === "opt") { runShow(CMDS.opt); runShow(CMDS.crc); addLog("우리 쪽 광값·CRC 정상 → 우리 쪽 문제 아님"); mark("opt"); }
+        else if (a.startsWith("ask-")) {
+          const k = a.slice(4), q = { noc: "NOC 작업 유/무", seg: "연동 구간 작업·이슈 유/무", sec: "보안 관련 이슈 유/무" }[k];
+          S.asked[k] = true; addLog(`상대 IX 사업자 문의: ${q} → ${REPLY[k]}`, true);
+          if (S.asked.noc && S.asked.seg && S.asked.sec) mark("ask"); else todo(); paint();
+        }
+        else if (a === "notice") { addLog(`영향 고객사(${cust().join("·")})에 상황 안내`, true); mark("notice"); }
+        else if (a === "rec") { runShow(CMDS.opt); addLog("회복 확인: 그래프와 광값 정상, 우회 회선도 평소로 돌아옴", true); mark("rec"); }
+      },
+      draft(stage) {
+        const acts = S.log.filter(x => x.act).map(x => ({ t: fmt(x.m), txt: x.text }));
+        const base = { stage, center: "분당", title: "국내 연동(IX) 트래픽 급감", target: `${DV} ${PORT} (${ID})`, from: `10/23 ${fmt(dS)}`, voc: "파악중" };
+        if (stage === "발생") return smsNotice({ ...base, cause: "국내 연동 트래픽 급감, 확인 중", impact: "해외 연동 회선으로 일부 우회 중 (확인 중)", actions: [] });
+        if (stage === "경과") return smsNotice({ ...base, cause: S.done.ask ? "상대 IX 사업자 장비 이상 (복구 작업 중)" : "국내 연동 트래픽 급감, 상대 구간 확인 중", impact: "해외 연동으로 우회해 서비스 유지 (일부 구간 지연 가능)", voc: "없음", actions: acts });
+        const t = fmt(S.done.rec != null ? S.done.rec : S.t);
+        return smsNotice({ ...base, to: `10/23 ${t}`, cause: "상대 IX 사업자 장비 이상", impact: "해외 연동 우회로 서비스 유지, 고객 영향 없음 (가상)", voc: "없음", actions: acts.concat([{ t, txt: "회복 확인", sub: ["상대 IX 사업자 복구 작업 완료로 회복"] }]) });
+      },
+      stageOk: st => ({ 발생: true, 경과: done("sms"), 완료: done("rec") })[st],
+      onSend(st) { if (st === "발생") mark("sms"); else if (st === "완료") { addLog("복구 안내 메일 발송 (가상)"); mark("fin"); finish(); } else todo(); },
+      run(c) {
+        if (c === "help" || c === "?") return "가상 장비 명령(Juniper 형식) 예: " + Object.values(CMDS).join(" / ");
+        return runLive(c, cur());
+      },
+      finishRows() {
+        const used = S.done.sms != null ? S.done.sms - ALERT : null, ackd = S.ack != null ? S.ack - ALERT : null;
+        return [
+          ["알림 → 내가 확인", ackd == null ? "확인 안 함" : `${ackd.toFixed(1)}분`],
+          ["알림 → 발생 문자", used == null ? "안 보냄" : `${used.toFixed(1)}분 (${used <= DEADLINE ? "기한 8분 안" : "기한 초과"})`],
+          ["경기 일정 확인", done("ev") ? "함 (급감과 경기 하락을 구분)" : "안 함 (하프타임 같은 정상 하락인지 먼저 봅니다)"],
+          ["우회 확인", done("intl") ? "함" : "안 함"],
+          ["우리 쪽 광값 확인", done("opt") ? "함 (우리 쪽 문제 아님)" : "안 함"],
+          ["상대 IX 문의 3가지", done("ask") ? "모두 함" : "다 하지 않음"],
+          ["고객사 안내", done("notice") ? "함" : "안 함"],
+          ["급감 구간", `${fmt(dS)} ~ ${fmt(dE)} (${dE - dS}분)`],
+          ["문자 순서", `발생${S.sent.경과 != null ? " → 경과" : ""} → 완료 (회복 확인 ${done("rec") ? "후" : "전"})`]
+        ];
+      },
+      note: "가상 데이터(사이트의 국내 연동 급감 구간)로 만든 결과입니다. 상대 IX 사업자의 회신 내용은 제가 만든 가상 사례입니다."
     };
   })();
 

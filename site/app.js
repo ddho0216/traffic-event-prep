@@ -1278,7 +1278,7 @@ function buildScenarios(opts) {   // opts.cause: 업링크 회선 다운의 복�
 
   return { calm, drop, linkDown, surge, ddos, temp, redundancy };
 }
-const SCN_LIST = [["live", "DDoS 공격 수신 · 직접 대응 (시험판)", "알림이 늦게 뜨고, 값을 직접 확인·판단·조치하는 실시간 방식"], ["liveLinkDown", "업링크 회선 다운 · 직접 대응 (시험판)", "안산 업링크 Down: 알림 확인 → 회선·광값·ping → 연동망 문의 → 원인 판단 → 복구 확인 → 완료 문자"], ["calm", "평일 오후 7시", "저녁 피크 전 평소 점검 (이상 없음)"], ["drop", "트래픽 급감", "국내 연동(IX)이 갑자기 빠짐: 원인 확인과 조치"], ["linkDown", "업링크 회선 다운 · 슬라이드로 보기", "안산 업링크 Down: 회선·트래픽·광값·ping·연동망 문의, 복구 원인은 시작할 때 고름"], ["surge", "트래픽 폭주", "월드컵 8강: 사전 연락·분산·모니터링"], ["ddos", "DDoS 공격 수신 · 슬라이드로 보기", "일정에 없는 급증 → 공격 확인·전파 → 블랙홀 차단 → 해제"], ["redundancy", "이중화로 무사히 넘기기", "장비 한 대가 꺼져도 짝 장비가 고객 회선을 받아 큰 장애 없이 넘김"], ["temp", "서버실 온도 변화", "분당 IDC_B_R08 냉각 이상: 육안점검·터미널 확인·복구"]];
+const SCN_LIST = [["live", "DDoS 공격 수신 · 직접 대응 (시험판)", "알림이 늦게 뜨고, 값을 직접 확인·판단·조치하는 실시간 방식"], ["liveLinkDown", "업링크 회선 다운 · 직접 대응 (시험판)", "안산 업링크 Down: 알림 확인 → 회선·광값·ping → 연동망 문의 → 원인 판단 → 복구 확인 → 완료 문자"], ["liveDrop", "트래픽 급감 · 직접 대응 (시험판)", "국내 연동(IX) 급감: 알림 확인 → 경기 일정·우회·광값 → 상대 사업자 문의 → 고객사 안내 → 회복 확인 → 완료 문자"], ["surge", "트래픽 폭주", "월드컵 8강: 사전 연락·분산·모니터링"], ["redundancy", "이중화로 무사히 넘기기", "장비 한 대가 꺼져도 짝 장비가 고객 회선을 받아 큰 장애 없이 넘김"], ["temp", "서버실 온도 변화", "분당 IDC_B_R08 냉각 이상: 육안점검·터미널 확인·복구"]];
 let scn = null;
 function stopScn() { if (scn && scn.timer) clearInterval(scn.timer); scn = null; HL.clear(); const p = $("#scnPop"); if (p) p.hidden = true; }
 function scnSetView(at) {   // at: 보여 줄 시각(기본은 지금 진행 시각). 이전 단계를 볼 때는 그 단계의 시각으로 보여 준다
@@ -1380,7 +1380,7 @@ function startScn(id, opts) {
   menu.innerHTML = SCN_LIST.map(([id, name, desc]) => `<button data-scn="${id}">${name}<small>${desc}</small></button>`).join("");
   const closeMenu = () => { menu.hidden = true; btn.setAttribute("aria-expanded", "false"); };
   btn.addEventListener("click", e => { e.stopPropagation(); if (menu.hidden) { menu.hidden = false; btn.setAttribute("aria-expanded", "true"); } else closeMenu(); });
-  menu.addEventListener("click", e => { const b = e.target.closest("[data-scn]"); if (b) { closeMenu(); if (b.dataset.scn === "live") { showTab("live"); if (window.LIVE) LIVE.load("ddos"); } else if (b.dataset.scn === "liveLinkDown") { window.ldRoute = "live"; $("#scnCausePop").hidden = false; } else if (b.dataset.scn === "linkDown") { window.ldRoute = "slides"; $("#scnCausePop").hidden = false; } else startScn(b.dataset.scn); } });
+  menu.addEventListener("click", e => { const b = e.target.closest("[data-scn]"); if (b) { closeMenu(); if (b.dataset.scn === "live") { showTab("live"); if (window.LIVE) LIVE.load("ddos"); } else if (b.dataset.scn === "liveDrop") { showTab("live"); if (window.LIVE) LIVE.load("drop"); } else if (b.dataset.scn === "liveLinkDown") { window.ldRoute = "live"; $("#scnCausePop").hidden = false; } else if (b.dataset.scn === "linkDown") { window.ldRoute = "slides"; $("#scnCausePop").hidden = false; } else startScn(b.dataset.scn); } });
   $$("[data-ldcause]").forEach(b => { b.onclick = () => { $("#scnCausePop").hidden = true; if (window.ldRoute === "live" && window.LIVE) { showTab("live"); LIVE.load("linkDown", { cause: b.dataset.ldcause }); } else startScn("linkDown", { cause: b.dataset.ldcause }); }; });   // 업링크 회선 다운은 복구 원인을 먼저 고른다
   $("#ldCauseCancel").onclick = () => { $("#scnCausePop").hidden = true; };
   document.addEventListener("click", e => { if (!menu.hidden && !menu.contains(e.target) && e.target !== btn) closeMenu(); });

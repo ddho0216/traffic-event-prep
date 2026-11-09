@@ -218,7 +218,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('완료 문자: 원인(광 케이블·SFP 불량), 조치(문의·교체 요청·복구 확인) 시간표, 시작~끝 일시가 직접 한 일대로 들어감', /\[주의_안산_완료\]/.test(ldn) && ldn.includes('광 케이블·SFP 불량') && ldn.includes('현장에 광 케이블·SFP 교체 요청') && ldn.includes('회선 복구 확인') && /■ 일시 : 10\/21 14:20 ~ 10\/21 14:5\d/.test(ldn));
   await page.click('#lvSend'); await page.keyboard.press('Escape');
   const ldr = await page.locator('#lvResBody').innerText();
-  check('끝나면 결과: 실제 원인(광 케이블·SFP 고장), 내 조치가 맞았는지, 다운 구간, 문자 순서가 나옴', ldr.includes('광 케이블·SFP 고장') && ldr.includes('현장 교체 요청 (맞음)') && ldr.includes('14:20 ~ 14:50') && ldr.includes('발생 → 완료'), ldr.replace(/\s+/g, ' ').slice(0, 100));
+  check('끝나면 결과: 실제 원인(광 케이블·SFP 고장), 내 조치가 맞았는지, 다운 구간, 문자 순서가 나옴', ldr.includes('광 케이블·SFP 고장') && ldr.includes('현장 교체 요청 (맞음)') && ldr.includes('14:20 ~ 14:40') && ldr.includes('발생 → 완료'), ldr.replace(/\s+/g, ' ').slice(0, 100));
   await page.evaluate(() => LIVE.load('linkDown', { cause: 'work' }));
   await page.evaluate(() => LIVE.jump(26)); await page.click('#lvAck'); await page.click('#lvTodo [data-a=ask-noc]'); await page.click('#lvTodo [data-a=ask-seg]'); await page.click('#lvTodo [data-a=ask-sec]');
   check('원인이 상대 구간 작업이면 NOC 문의 회신에 상대 센터 작업과 사전 공지 누락이 나옴', (await page.locator('#lvComp').innerText()).includes('사전 공지가 빠졌'));
@@ -226,10 +226,42 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('#lvStage [data-st=완료]'); await page.click('#lvSend'); await page.keyboard.press('Escape');
   check('상대 작업이 원인인데 현장 교체를 요청하면 결과에 "불필요했음"으로 나옴', (await page.locator('#lvResBody').innerText()).includes('이번에는 불필요했음'));
   await page.evaluate(() => LIVE.load('ddos'));
-  // 시나리오 목록은 실시간 대응 화면에 있다: 직접 대응(실시간) + 기존 7개
+  // 실시간 대응: 트래픽 급감 (국내 연동 IX, 사이트의 실제 가상 데이터)
+  await goTab('live'); await page.click('#scnBtn'); await page.click('#scnMenu [data-scn=liveDrop]');
+  check('트래픽 급감(직접 대응)을 고르면 실시간 대응 화면에서 바로 시작됨', (await page.evaluate(() => LIVE.scenario.id)) === 'drop' && (await page.locator('#lvTitle').innerText()) === '트래픽 급감' && (await page.evaluate(() => LIVE.state.t)) === 10);
+  await page.evaluate(() => LIVE.jump(22));
+  check('급감이 시작된 뒤에도(20:12) 알림은 아직 안 뜸 (지연 3분)', !(await page.locator('#lvAlert.hot').count()));
+  await page.evaluate(() => LIVE.jump(23));
+  const dal = await page.locator('#lvAlert').innerText();
+  check('20:13에 알림이 뜨고 급감 시작 20:10, 전날 같은 시각 값과 평소 대비 %가 적힘', (await page.locator('#lvAlert.hot').isVisible()) && /급감 시작 20:10/.test(dal) && /지연 3분/.test(dal) && /평소의 \d+%/.test(dal), dal.replace(/\n/g, ' ').slice(0, 90));
+  await page.click('#lvAck');
+  check('알림을 확인하면 우회 회선(해외 연동)과 영향 고객사가 카드에 보임', (await page.locator('#lvComp').innerText()).includes('IDC_B_FS2_INTL1') && (await page.locator('#lvComp').innerText()).includes('예시미디어'));
+  await page.click('#lvTodo [data-a=ev]'); await page.click('#lvTodo [data-a=tr]'); await page.click('#lvTodo [data-a=intl]');
+  await page.click('#lvTodo [data-a=opt]');
+  const dt = (await lv()).term;
+  check('우리 쪽 광값은 정상 범위(-3 dBm대)로 나오고 터미널에 CRC 명령도 실행됨', /-3\.\d\d dBm/.test(dt) && dt.includes('match CRC'));
+  check('문의를 하기 전에는 고객사 안내 버튼이 막혀 있음', await page.locator('#lvTodo [data-a=notice]').isDisabled());
+  await page.click('#lvTodo [data-a=ask-noc]'); await page.click('#lvTodo [data-a=ask-seg]'); await page.click('#lvTodo [data-a=ask-sec]');
+  check('상대 IX 사업자에 3가지를 문의하면 회신이 카드에 나옴(장비 이상 복구 중)', (await page.locator('#lvComp').innerText()).includes('장비 이상'));
+  await page.click('#lvTodo [data-a=notice]');
+  await page.click('#lvSend'); await page.keyboard.press('Escape');
+  const dsm = await page.inputValue('#lvDraft');
+  check('발생 문자: [주의_분당_발생] 국내 연동(IX) 트래픽 급감, 영향은 "해외 연동으로 일부 우회 중(확인 중)"', /\[주의_분당_발생\] 국내 연동\(IX\) 트래픽 급감/.test(dsm) && dsm.includes('해외 연동 회선으로 일부 우회 중'));
+  check('회복되기 전에는 "회복 확인" 버튼이 막혀 있음', await page.locator('#lvTodo [data-a=rec]').isDisabled());
+  await page.evaluate(() => LIVE.jump(60));
+  check('회복 시각이 지나면 그래프가 돌아오고 알림 줄이 "회복됨"으로 바뀜 (대기 시간은 실제 구간의 2/3로 줄임)', (await page.locator('#lvAlert.ok').isVisible()) && parseFloat((await lv()).now) > 20);
+  await page.click('#lvTodo [data-a=rec]');
+  await page.click('#lvStage [data-st=완료]');
+  const ddn = await page.inputValue('#lvDraft');
+  check('완료 문자: 원인(상대 IX 사업자 장비 이상), 직접 한 조치(문의·고객사 안내·회복 확인)가 시간표로 들어감', ddn.includes('_완료]') && ddn.includes('상대 IX 사업자 장비 이상') && ddn.includes('고객사') && ddn.includes('회복 확인') && ddn.includes('NOC 작업'));
+  await page.click('#lvSend'); await page.keyboard.press('Escape');
+  const drr = await page.locator('#lvResBody').innerText();
+  check('끝나면 결과: 경기 일정 확인, 우회 확인, 광값 확인, 문의 3가지, 고객사 안내, 급감 구간, 문자 순서', ['경기 일정 확인', '함 (급감과 경기 하락을 구분)', '우회 확인', '우리 쪽 광값 확인', '모두 함', '고객사 안내', '급감 구간', '발생 → 완료'].every(w => drr.includes(w)), drr.replace(/\s+/g, ' ').slice(0, 90));
+  await page.evaluate(() => LIVE.load('ddos'));
+  // 시나리오 목록은 실시간 대응 화면에 있다: 직접 대응(실시간) + 남은 슬라이드
   await goTab('live'); await page.click('#scnBtn');
   const menuIds = await page.evaluate(() => [...document.querySelectorAll('#scnMenu [data-scn]')].map(b => b.dataset.scn));
-  check('실시간 대응 화면의 시나리오 목록: 직접 대응(live·liveLinkDown)이 맨 위, 기존 7개(평일 오후·급감·회선 다운·폭주·DDoS 슬라이드·이중화·서버실 온도)가 그대로 있음', JSON.stringify(menuIds) === JSON.stringify(['live', 'liveLinkDown', 'calm', 'drop', 'linkDown', 'surge', 'ddos', 'redundancy', 'temp']), menuIds.join(','));
+  check('실시간 대응 화면의 시나리오 목록: 직접 대응 3개(DDoS·회선 다운·급감)가 맨 위, 아직 바꾸지 않은 3개(폭주·이중화·서버실 온도)가 이어짐 (평일 오후 7시와 슬라이드로 보기는 뺌)', JSON.stringify(menuIds) === JSON.stringify(['live', 'liveLinkDown', 'liveDrop', 'surge', 'redundancy', 'temp']), menuIds.join(','));
   await goTab('monitor'); await goTab('live'); await page.click('#scnBtn'); await page.click('#scnMenu [data-scn=live]');
   check('목록에서 "직접 대응"을 고르면 실시간 대응이 처음 상태(03:15)로 시작함', (await page.locator('#tab-live').isVisible()) && (await page.evaluate(() => LIVE.state.t)) === 15);
   const vis = {};
@@ -406,7 +438,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   // 시나리오 4가지: 시간이 흘러가고, 단계(감지·확인·조치·결과)가 나오고, 닫으면 현재로 돌아온다
   // 시나리오 이전/다음: 팝업과 위쪽 막대 모두
   await goTab('monitor');
-  await goTab('live'); await page.click('#scnBtn'); await page.click('#scnMenu [data-scn=calm]');
+  await page.evaluate(() => startScn('calm'));
   await page.waitForSelector('#scnPop:not([hidden])');
   check('시나리오 팝업: 1단계에서는 "이전"이 막혀 있음', await page.locator('#scnPopPrev').isDisabled());
   await page.click('#scnPopNext');
@@ -425,7 +457,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('위쪽 막대의 "다음 단계"는 다음 단계 시각으로 바로 건너뛰어 그 단계 팝업을 띄움', (await page.locator('#scnPop').isVisible()) && (await page.locator('#scnPopNo').innerText()).startsWith('단계 3 /'));
   await page.click('#scnPopSkip'); await page.click('#scnClose');
   // 급감 시나리오 내용: 광값 기준표, [TEP IDC] 메일 제목, 복구 메일
-  await goTab('live'); await page.click('#scnBtn'); await page.click('#scnMenu [data-scn=drop]');
+  await page.evaluate(() => startScn('drop'));
   await page.waitForSelector('#scnPop:not([hidden])'); await page.click('#scnPopSkip');
   const dropPop = async k => { await page.click(`#scnSteps li >> nth=${k} >> [data-scnpop]`); const t = await page.locator('#scnPop').innerText(); await page.click('#scnPopX'); return t; };
   const pop3 = await dropPop(2);
@@ -453,7 +485,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('서버실 온도 시나리오: 발생·완료 문자, 이중화로 영향 없음이 서비스영향에 적힘', smsCheck(sms.t1, '발생', '분당') && smsCheck(sms.t2, '완료', '분당') && /짝 장비 IDC_B_FS5/.test(sms.t2) && /영향 없음/.test(sms.t2));
   check('이중화 시나리오: 발생(영향 없음) → 경과(장비는 돌아왔지만 교체가 남음) → 완료(전체 정상 확인) 순서로 문자가 나옴', smsCheck(sms.r1.split('\n').slice(1).join('\n'), '발생', '분당') && sms.r2.includes('[주의_분당_경과]') && sms.r2.includes('아직 \'완료\'가 아니라 \'경과\'') && sms.r3.includes('[주의_분당_완료]') && sms.r3.includes('전체 상태 정상 확인') && !sms.r2.split('[경과 문자 예시]')[1].includes('■ 전파'));
   // 업링크 회선 다운: 복구 원인을 고른다 (상대 구간 작업 / 일시 오류 / 광 케이블·SFP 교체)
-  await goTab('live'); await page.click('#scnBtn'); await page.click('#scnMenu [data-scn=linkDown]');
+  await page.evaluate(() => { window.ldRoute = 'slides'; document.getElementById('scnCausePop').hidden = false; });
   check('업링크 회선 다운을 고르면 먼저 복구 원인(3가지)을 고르는 창이 뜨고 취소할 수 있음', (await page.locator('#scnCausePop').isVisible()) && (await page.locator('[data-ldcause]').count()) === 3 && !(await page.locator('#scnBar').isVisible()));
   await page.click('#ldCauseCancel');
   check('원인 선택을 취소하면 시나리오가 시작되지 않음', !(await page.locator('#scnCausePop').isVisible()) && !(await page.locator('#scnBar').isVisible()));
@@ -482,8 +514,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
     ['redundancy', '이중화로 무사히 넘기기', 8, ['이중화', '전원 꺼짐', '트래픽은 거의 그대로', '고객 영향 없음']], ['linkDown', '업링크 회선 다운', 9, ['Admin', '트래픽(전/후)', '광값', 'ping', '연동망', '원인 확인', '회복']], ['ddos', 'DDoS 공격 수신', 10, ['DDoS', '공격량', '클린존', '블랙홀', '정상화', '해제']], ['surge', '트래픽 폭주', 7, ['사전 연락', '분산', '하이드레이션', '경고선 80%', '사후 정리', '[TEP IDC]']], ['temp', '서버실 온도 변화', 7, ['온도 경고', '빨강 깜박임', '터미널', '냉각 복구', '-40.00 dBm']]];
   for (const [id, name, n, words] of scenarios) {
     await goTab('monitor');
-    await goTab('live'); await page.click('#scnBtn'); await page.click(`#scnMenu [data-scn=${id}]`);
-    if (id === 'linkDown') await page.click('[data-ldcause=work]');   // 복구 원인을 먼저 고른다
+    await page.evaluate(([i]) => startScn(i, i === 'linkDown' ? { cause: 'work' } : undefined), [id]);   // 슬라이드 버전은 목록에서 뺐지만 코드는 남아 있다
     await page.waitForSelector('#scnPop:not([hidden])', { timeout: 30000 });   // 첫 단계가 되면 팝업이 뜬다
     const pop1 = await page.locator('#scnPop').innerText();
     check(`시나리오 "${name}": 첫 단계에 팝업이 뜨고 설명과 단계 번호가 나옴`, /단계 1 \/ \d+/.test(pop1) && pop1.length > 120, pop1.slice(0, 60).replace(/\n/g, ' '));

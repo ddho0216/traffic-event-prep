@@ -364,3 +364,5 @@ nav.tabs .beta{font-size:10px;color:var(--warn);border:1px solid #54421d;border-
 .lv-timer.ok{border-color:#1f4a3a;background:#0f1a14}.lv-timer.ok b{color:var(--ok)}.lv-timer.late{border-color:#5a2a27;background:#1c1214}.lv-timer.late b{color:var(--crit)}.lv-timer.warn b{color:var(--crit)}
 #lvDraft{width:100%}
 @media (max-width:1000px){.lv-grid{grid-template-columns:1fr}.lv-graph,.lv-term,.lv-comp,.lv-log,.lv-todo,.lv-sms{grid-column:1;grid-row:auto}.lv-3{grid-template-columns:1fr}}
+
+.lv-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media (max-width:1000px){.lv-2{grid-template-columns:1fr}}
