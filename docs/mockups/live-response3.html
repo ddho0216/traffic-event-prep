@@ -96,6 +96,32 @@ if(V=="C"){
  <div><h5>고객 카드</h5><div class="kv"><span>고객사</span><b>가상물산</b><span>대상 IP</span><span class="mono">198.51.100.77</span><span>회선</span><span>IDC_B_FS3 · 10G</span><span>클린존</span><b style="color:var(--bad)">미가입 (가정)</b><span>VOC</span><span>0건 (03:25 기준)</span><span>연락</span><span>담당자(가상) · 24시간</span></div></div>
  <div><h5>이 IP의 최근 이력</h5><div class="kv" style="grid-template-columns:62px 1fr"><span class="mono">10/12</span><span>03:10 급증 6분 · 조치 없이 종료</span><span class="mono">10/05</span><span>새벽 급증 12분 · 문자 발송</span><span class="mono">그 전</span><span>이력 없음</span></div><div class="mu" style="font-size:12px;margin-top:6px">같은 대상에 반복되는지 판단할 때 봅니다</div></div>
  <div><h5>지금 일정</h5><div class="kv" style="grid-template-columns:62px 1fr"><span class="mono">03:25</span><span>이벤트 일정 없음</span><span class="mono">다음</span><span>10/29 20:00 월드컵 8강</span></div><h5 style="margin-top:8px">비슷한 과거 사례</h5><div class="mu" style="font-size:12px">시나리오 · 10/12 새벽 급증 (링크 열기)</div></div></div></div>`}
+
+let HBW=150;const hb=(label,pct,c,txt)=>`<div style="display:grid;grid-template-columns:${HBW}px 1fr ${HBW<150?42:70}px;gap:8px;align-items:center;margin:3px 0"><span class="mono" style="font-size:12px">${label}</span><div style="height:14px;background:#0a1118;border-radius:4px;overflow:hidden;border:1px solid var(--line)"><i style="display:block;height:100%;width:${pct}%;background:${c||'#59b4f5'}"></i></div><span class="mono mu" style="font-size:12px;text-align:right">${txt||pct+'%'}</span></div>`;
+if(V=="D"){
+ const days=[["09/29",0],["10/05",4.2],["10/12",6.1],["10/29",10.1]];
+ let bars="";const W=430,H=118,L=30,B=18;const dayN=31;
+ const marks=[[5,4.2,"10/05"],[12,6.1,"10/12"],[29,10.1,"오늘"]];
+ let svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">`;
+ for(const v of [0,5,10])svg+=`<line x1="${L}" x2="${W-4}" y1="${H-B-(H-B-6)*v/12}" y2="${H-B-(H-B-6)*v/12}" stroke="#22313f"/><text x="${L-4}" y="${H-B-(H-B-6)*v/12+3}" fill="#8aa0b2" font-size="10" text-anchor="end">${v}G</text>`;
+ for(let d=1;d<=dayN;d++){const x=L+(W-L-4)*(d-1)/dayN;const m=marks.find(q=>q[0]==d);const h=m?(H-B-6)*m[1]/12:1.5;svg+=`<rect x="${x}" y="${H-B-h}" width="${(W-L-4)/dayN-3}" height="${h}" rx="2" fill="${m?(d==29?'#ff8f84':'#e8a23b'):'#2b4358'}"/>`;if(m)svg+=`<text x="${x+6}" y="${H-B-h-4}" fill="#e6eef5" font-size="10" text-anchor="middle">${m[1]}G</text>`}
+ for(const d of [1,8,15,22,29])svg+=`<text x="${L+(W-L-4)*(d-1)/dayN+5}" y="${H-3}" fill="#8aa0b2" font-size="10" text-anchor="middle">10/${String(d).padStart(2,"0")}</text>`;
+ svg+="</svg>";
+ fill=`<div class="c g-fill"><h3>가상물산 · 이 IP로 온 공격 이력 <span class="mu">최근 30일</span><span class="tag">이번 포함 3회</span></h3><div style="display:grid;grid-template-columns:1fr 1.05fr;gap:14px"><div>${svg}</div>
+ <div><table style="width:100%;border-collapse:collapse;font-size:12px"><tr class="mu"><td>일자</td><td>최대</td><td>지속</td><td>출발지 수</td><td>이번과 겹침</td></tr>
+ <tr><td class="mono">10/05</td><td>4.2G</td><td>12분</td><td>1,980</td><td><b>2%</b> (IP 41개)</td></tr>
+ <tr><td class="mono">10/12</td><td>6.1G</td><td>6분</td><td>3,310</td><td><b>4%</b> (IP 176개)</td></tr>
+ <tr style="color:#ff8f84"><td class="mono">10/29</td><td>10.1G</td><td>진행 중</td><td>4,402</td><td>—</td></tr></table>
+ <div class="mu" style="font-size:12px;margin-top:5px">겹침 = 이전 공격의 출발지 IP가 이번에도 나온 비율. 같은 출발지인지 다른지는 이 숫자로 직접 판단합니다.</div></div></div></div>`}
+if(V=="E"){
+ HBW=108;fill=`<div class="c g-fill"><h3>공격 트래픽 구성 <span class="mu">03:25 기준 · 최근 1분 · 막대가 길수록 비중이 큼</span></h3><div style="display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:14px">
+ <div><div class="mu" style="font-size:12px;margin-bottom:2px">출발지 대역 (상위)</div>${hb("203.0.113.0/24",22,"#e8a23b")}${hb("192.0.2.0/24",14,"#e8a23b")}${hb("203.0.114.0/24",9,"#e8a23b")}${hb("그 밖 4,3xx개",55,"#2b4358")}</div>
+ <div><div class="mu" style="font-size:12px;margin-bottom:2px">프로토콜 · 플래그</div>${hb("TCP SYN",95,"#ff8f84")}${hb("TCP ACK",3)}${hb("UDP",1)}${hb("기타",1)}</div>
+ <div><div class="mu" style="font-size:12px;margin-bottom:2px">목적지 포트 · 패킷 크기</div>${hb("443",91,"#59b4f5")}${hb("80",6)}${hb("패킷 60~80B",93,"#59b4f5","93%")}${hb("패킷 1000B+",2,"#59b4f5","2%")}</div></div></div>`}
+if(V=="F"){
+ fill=`<div class="c g-fill"><h3>같은 장비를 쓰는 고객 회선 여유 <span class="mu">IDC_B_FS3 · 회선 사용률 · 03:25</span><span class="tag">영향 받는 곳 확인</span></h3>
+ ${hb("가상물산 10G",67,"#ff8f84","6.7/10G")}${hb("모의커머스 10G",12,"#47c28b","1.2/10G")}${hb("가상은행 10G",8,"#47c28b","0.8/10G")}${hb("예시금융 1G",31,"#47c28b","0.3/1G")}${hb("IDC_B_FS3 업링크 100G",9,"#47c28b","9/100G")}
+ <div class="mu" style="font-size:12px;margin-top:6px">막대 = 사용률. 대상 고객 회선이 얼마나 찼는지, 같이 쓰는 다른 고객 회선에 영향이 있는지 봅니다.</div></div>`}
 document.getElementById("g").innerHTML=base.replace('<div class="c g-todo">',fill+'<div class="c g-todo">');
 document.body.insertAdjacentHTML("beforeend",`<div class="lab">버전 ${V}</div>`);
 </script></body></html>
