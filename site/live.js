@@ -51,6 +51,8 @@
 </div>
 <div class="scnpop" id="lvResult" hidden><div class="scnpop-box" role="dialog" aria-modal="true" style="width:min(560px,100%)"><h3>대응 결과</h3><div id="lvResBody"></div><div class="scnpop-foot"><span class="sp"></span><button class="btn primary" id="lvResClose" type="button">닫기</button></div></div></div>`;
   const E = id => document.getElementById(id);
+  const wrap = document.querySelector(".scn-wrap");   // 시나리오 목록은 이 화면으로 옮겼다 (관제 화면에서는 뺐다)
+  if (wrap) { const bar = root.querySelector(".lv-bar"); bar.insertBefore(wrap, bar.querySelector(".seg")); }
 
   /* ----- 기록 ----- */
   const addLog = (text, act) => { S.log.push({ m: S.t, text, act: !!act }); renderLog(); };

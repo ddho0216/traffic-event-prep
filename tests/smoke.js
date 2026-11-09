@@ -34,7 +34,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const text = require('fs').readFileSync(csvPath, 'utf8').replace(/^﻿/, '');
   check('전체 CSV 헤더와 180행(15회선 x 12점)', text.startsWith('time,link,in_gbps,out_gbps,out_util_pct') && text.trim().split('\n').length === 181);
 
-  check('관제 탭에서 고객사·창·Y축 선택은 없앴고, 시나리오·전체 CSV 버튼은 오른쪽에 그대로 있음', (await page.locator('#cust, #win, #ymode').count()) === 0 && (await page.locator('#scnBtn').isVisible()) && (await page.locator('#csvAll').isVisible()) && (await page.evaluate(() => { const t = document.querySelector('#tab-monitor .toolbar'), b = document.getElementById('scnBtn').getBoundingClientRect(), c = document.getElementById('csvAll').getBoundingClientRect(), e = document.getElementById('endTime').getBoundingClientRect(); return b.left > e.left + 400 && c.left > b.left; })));
+  check('관제 탭에서 고객사·창·Y축 선택은 없앴고, 시나리오 버튼은 실시간 대응 화면으로 옮겼고 전체 CSV 버튼은 그대로 있음', (await page.locator('#cust, #win, #ymode').count()) === 0 && (await page.locator('#tab-live #scnBtn').count()) === 1 && (await page.locator('#tab-monitor #scnBtn').count()) === 0 && (await page.locator('#csvAll').isVisible()));
   check('관제 첫 화면에는 경고 이력·내 업무 칸이 없고 모니터만 있음', (await page.locator('#tab-monitor #alertTbl').count()) === 0 && (await page.locator('#tab-monitor #taskTbl').count()) === 0 && !(await page.locator('#alertTbl').isVisible()));
   check('종 아이콘이 있고 확인 필요 건수가 4로 뜸 (경고 3 + 온도 1)', (await page.locator('#bell').isVisible()) && (await page.locator('#bellN').innerText()) === '4');
   await page.click('#bell');
@@ -184,6 +184,12 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('발생 문자를 8분 뒤에 보내면 "기한 초과"로 표시됨', (await lv()).timer.includes('기한 초과'));
   await page.keyboard.press('Escape');
   await page.evaluate(() => LIVE.reset(false));
+  // 시나리오 목록은 실시간 대응 화면에 있다: 직접 대응(실시간) + 기존 7개
+  await goTab('live'); await page.click('#scnBtn');
+  const menuIds = await page.evaluate(() => [...document.querySelectorAll('#scnMenu [data-scn]')].map(b => b.dataset.scn));
+  check('실시간 대응 화면의 시나리오 목록: 직접 대응(live)이 맨 위, 기존 7개(평일 오후·급감·회선 다운·폭주·DDoS 슬라이드·이중화·서버실 온도)가 그대로 있음', JSON.stringify(menuIds) === JSON.stringify(['live', 'calm', 'drop', 'linkDown', 'surge', 'ddos', 'redundancy', 'temp']), menuIds.join(','));
+  await goTab('monitor'); await goTab('live'); await page.click('#scnBtn'); await page.click('#scnMenu [data-scn=live]');
+  check('목록에서 "직접 대응"을 고르면 실시간 대응이 처음 상태(03:15)로 시작함', (await page.locator('#tab-live').isVisible()) && (await page.evaluate(() => LIVE.state.t)) === 15);
   const vis = {};
   for (const tab of ['monitor', 'room', 'room3d', 'term', 'event', 'monthly', 'visit', 'sms', 'gear', 'live']) { await goTab(tab); vis[tab] = await page.locator('#centerBar').isVisible(); }
   check('센터 선택은 관제·서버실에서만 보이고 나머지 탭에서는 숨겨짐', vis.monitor && vis.room && vis.room3d && !vis.term && !vis.event && !vis.monthly && !vis.visit && !vis.sms && !vis.gear && !vis.live, JSON.stringify(vis));
@@ -358,7 +364,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   // 시나리오 4가지: 시간이 흘러가고, 단계(감지·확인·조치·결과)가 나오고, 닫으면 현재로 돌아온다
   // 시나리오 이전/다음: 팝업과 위쪽 막대 모두
   await goTab('monitor');
-  await page.click('#scnBtn'); await page.click('#scnMenu [data-scn=calm]');
+  await goTab('live'); await page.click('#scnBtn'); await page.click('#scnMenu [data-scn=calm]');
   await page.waitForSelector('#scnPop:not([hidden])');
   check('시나리오 팝업: 1단계에서는 "이전"이 막혀 있음', await page.locator('#scnPopPrev').isDisabled());
   await page.click('#scnPopNext');
@@ -377,7 +383,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('위쪽 막대의 "다음 단계"는 다음 단계 시각으로 바로 건너뛰어 그 단계 팝업을 띄움', (await page.locator('#scnPop').isVisible()) && (await page.locator('#scnPopNo').innerText()).startsWith('단계 3 /'));
   await page.click('#scnPopSkip'); await page.click('#scnClose');
   // 급감 시나리오 내용: 광값 기준표, [TEP IDC] 메일 제목, 복구 메일
-  await page.click('#scnBtn'); await page.click('#scnMenu [data-scn=drop]');
+  await goTab('live'); await page.click('#scnBtn'); await page.click('#scnMenu [data-scn=drop]');
   await page.waitForSelector('#scnPop:not([hidden])'); await page.click('#scnPopSkip');
   const dropPop = async k => { await page.click(`#scnSteps li >> nth=${k} >> [data-scnpop]`); const t = await page.locator('#scnPop').innerText(); await page.click('#scnPopX'); return t; };
   const pop3 = await dropPop(2);
@@ -405,7 +411,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('서버실 온도 시나리오: 발생·완료 문자, 이중화로 영향 없음이 서비스영향에 적힘', smsCheck(sms.t1, '발생', '분당') && smsCheck(sms.t2, '완료', '분당') && /짝 장비 IDC_B_FS5/.test(sms.t2) && /영향 없음/.test(sms.t2));
   check('이중화 시나리오: 발생(영향 없음) → 경과(장비는 돌아왔지만 교체가 남음) → 완료(전체 정상 확인) 순서로 문자가 나옴', smsCheck(sms.r1.split('\n').slice(1).join('\n'), '발생', '분당') && sms.r2.includes('[주의_분당_경과]') && sms.r2.includes('아직 \'완료\'가 아니라 \'경과\'') && sms.r3.includes('[주의_분당_완료]') && sms.r3.includes('전체 상태 정상 확인') && !sms.r2.split('[경과 문자 예시]')[1].includes('■ 전파'));
   // 업링크 회선 다운: 복구 원인을 고른다 (상대 구간 작업 / 일시 오류 / 광 케이블·SFP 교체)
-  await page.click('#scnBtn'); await page.click('#scnMenu [data-scn=linkDown]');
+  await goTab('live'); await page.click('#scnBtn'); await page.click('#scnMenu [data-scn=linkDown]');
   check('업링크 회선 다운을 고르면 먼저 복구 원인(3가지)을 고르는 창이 뜨고 취소할 수 있음', (await page.locator('#scnCausePop').isVisible()) && (await page.locator('[data-ldcause]').count()) === 3 && !(await page.locator('#scnBar').isVisible()));
   await page.click('#ldCauseCancel');
   check('원인 선택을 취소하면 시나리오가 시작되지 않음', !(await page.locator('#scnCausePop').isVisible()) && !(await page.locator('#scnBar').isVisible()));
@@ -434,7 +440,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
     ['redundancy', '이중화로 무사히 넘기기', 8, ['이중화', '전원 꺼짐', '트래픽은 거의 그대로', '고객 영향 없음']], ['linkDown', '업링크 회선 다운', 9, ['Admin', '트래픽(전/후)', '광값', 'ping', '연동망', '원인 확인', '회복']], ['ddos', 'DDoS 공격 수신', 10, ['DDoS', '공격량', '클린존', '블랙홀', '정상화', '해제']], ['surge', '트래픽 폭주', 7, ['사전 연락', '분산', '하이드레이션', '경고선 80%', '사후 정리', '[TEP IDC]']], ['temp', '서버실 온도 변화', 7, ['온도 경고', '빨강 깜박임', '터미널', '냉각 복구', '-40.00 dBm']]];
   for (const [id, name, n, words] of scenarios) {
     await goTab('monitor');
-    await page.click('#scnBtn'); await page.click(`#scnMenu [data-scn=${id}]`);
+    await goTab('live'); await page.click('#scnBtn'); await page.click(`#scnMenu [data-scn=${id}]`);
     if (id === 'linkDown') await page.click('[data-ldcause=work]');   // 복구 원인을 먼저 고른다
     await page.waitForSelector('#scnPop:not([hidden])', { timeout: 30000 });   // 첫 단계가 되면 팝업이 뜬다
     const pop1 = await page.locator('#scnPop').innerText();
