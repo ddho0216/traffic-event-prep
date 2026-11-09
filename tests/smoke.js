@@ -281,7 +281,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const smsCheck = (t, stage, center) => { const L = t.split('\n').map(x => x.trimEnd()), i = L.indexOf('[TEP IDC]'); if (i < 0) return false; const m = L.slice(i);
     const idx = FIELDS.map(f => m.findIndex(x => x.startsWith(f)));
     return m[1] === '[Web발신]' && m[2].startsWith(`[주의_${center}_${stage}] `) && m[3] === '' && idx.every(x => x > 0) && idx.every((x, k) => k === 0 || x > idx[k - 1]); };
-  const sms = await page.evaluate(() => { const S = buildScenarios(), g = (id, k) => S[id].steps[k].detail; return { fa: g('linkDown', 3), pr: g('linkDown', 6), dn: g('linkDown', 7), t1: g('temp', 2), t2: g('temp', 6), r1: g('redundancy', 4), r2: g('redundancy', 6), r3: g('redundancy', 7),
+  const sms = await page.evaluate(() => { const S = buildScenarios(), g = (id, k) => S[id].steps[k].detail; return { fa: g('linkDown', 3), pr: g('linkDown', 6), dn: g('linkDown', 8), t1: g('temp', 2), t2: g('temp', 6), r1: g('redundancy', 4), r2: g('redundancy', 6), r3: g('redundancy', 7),
     sample: smsNotice({ stage: '발생', center: '안산', title: '예시미디어, 샘플방송, 가상모빌리티 고객사 중앙 백본 업링크 단선', target: 'IDC_A_FS1(10.0.0.1)', from: '10/21 14:20', cause: '업링크가 끊겨 확인 중', impact: '파악중', voc: '파악중' }),
     ddos: smsNotice({ stage: '발생', center: '분당', title: 'DDoS 공격 수신', target: 'IDC_B_FS1(10.0.0.1)', from: '03/18 15:30', cause: '국제망 DDoS 공격', attack: 'TCP (6.5 Gbps / 5.9 Mpps)', impact: '파악중', voc: '파악중' }),
     bad: (() => { try { smsNotice({ stage: '끝', center: 'x', title: 'x', target: 'x', from: 'x', cause: 'x', impact: 'x', voc: 'x' }); return false; } catch (e) { return true; } })() }; });
@@ -289,17 +289,41 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('문자 양식: DDoS일 때는 ■ 공격량 줄이 원인 다음에 들어감', /■ 원인 : .+\n■ 공격량 : TCP \(6\.5 Gbps \/ 5\.9 Mpps\)\n■ 서비스영향/.test(sms.ddos));
   check('문자 단계는 발생·경과·완료만 허용됨', sms.bad);
   check('업링크 회선 다운: 발생 문자(서비스영향·VOC 파악중, 일시는 끝 없이 "~")', smsCheck(sms.fa, '발생', '안산') && sms.fa.includes('■ 서비스영향 : 파악중') && /■ 일시 : \d\d\/\d\d \d\d:\d\d ~\n/.test(sms.fa) && !sms.fa.includes('■ 조치'));
-  check('업링크 회선 다운: 경과 문자는 조치 시간표(시각 + 세부)가 있고 끝 시각과 "전파"는 없음', smsCheck(sms.pr.split('[경과 문자 예시]')[1], '경과', '안산') && /■ 조치 :\n\d\d:\d\d .+\n - /.test(sms.pr) && !/■ 일시 : .* ~ \d/.test(sms.pr.split('[경과 문자 예시]')[1]) && !sms.pr.split('[경과 문자 예시]')[1].includes('■ 전파'));
-  check('업링크 회선 다운: 완료 문자는 시작~끝 일시, 마지막 조치 "회선 복구 확인", 전파 항목이 있음', smsCheck(sms.dn, '완료', '안산') && /■ 일시 : \d\d\/\d\d \d\d:\d\d ~ \d\d\/\d\d \d\d:\d\d\n/.test(sms.dn) && /\d\d:\d\d 회선 복구 확인/.test(sms.dn) && sms.dn.includes('■ 전파 : '));
+  check('업링크 회선 다운: 경과 문자는 조치 시간표(시각 + 세부)가 있고 끝 시각은 없음', smsCheck(sms.pr.split('[경과 문자 예시]')[1], '경과', '안산') && /■ 조치 :\n\d\d:\d\d .+\n - /.test(sms.pr) && !/■ 일시 : .* ~ \d/.test(sms.pr.split('[경과 문자 예시]')[1]) && !sms.pr.split('[경과 문자 예시]')[1].includes('■ 전파'));
+  check('업링크 회선 다운: 완료 문자는 시작~끝 일시, 마지막 조치 "회선 복구 확인"이 있고 "전파" 항목은 없음(뜻을 몰라서 뺌)', smsCheck(sms.dn, '완료', '안산') && /■ 일시 : \d\d\/\d\d \d\d:\d\d ~ \d\d\/\d\d \d\d:\d\d\n/.test(sms.dn) && /\d\d:\d\d 회선 복구 확인/.test(sms.dn) && !sms.dn.includes('■ 전파'));
   check('서버실 온도 시나리오: 발생·완료 문자, 이중화로 영향 없음이 서비스영향에 적힘', smsCheck(sms.t1, '발생', '분당') && smsCheck(sms.t2, '완료', '분당') && /짝 장비 IDC_B_FS5/.test(sms.t2) && /영향 없음/.test(sms.t2));
   check('이중화 시나리오: 발생(영향 없음) → 경과(장비는 돌아왔지만 교체가 남음) → 완료(전체 정상 확인) 순서로 문자가 나옴', smsCheck(sms.r1.split('\n').slice(1).join('\n'), '발생', '분당') && sms.r2.includes('[주의_분당_경과]') && sms.r2.includes('아직 \'완료\'가 아니라 \'경과\'') && sms.r3.includes('[주의_분당_완료]') && sms.r3.includes('전체 상태 정상 확인') && !sms.r2.split('[경과 문자 예시]')[1].includes('■ 전파'));
+  // 업링크 회선 다운: 복구 원인을 고른다 (상대 구간 작업 / 일시 오류 / 광 케이블·SFP 교체)
+  await page.click('#scnBtn'); await page.click('#scnMenu [data-scn=linkDown]');
+  check('업링크 회선 다운을 고르면 먼저 복구 원인(3가지)을 고르는 창이 뜨고 취소할 수 있음', (await page.locator('#scnCausePop').isVisible()) && (await page.locator('[data-ldcause]').count()) === 3 && !(await page.locator('#scnBar').isVisible()));
+  await page.click('#ldCauseCancel');
+  check('원인 선택을 취소하면 시나리오가 시작되지 않음', !(await page.locator('#scnCausePop').isVisible()) && !(await page.locator('#scnBar').isVisible()));
+  const ld = await page.evaluate(() => Object.fromEntries(['work', 'transient', 'fiber'].map(c => { const S = buildScenarios({ cause: c }).linkDown, st = S.steps; return [c, { n: st.length, title: st[7].title, detail: st[7].detail, expl: st[7].explain, done: st[8].detail, doneTitle: st[8].title, allExpl: st.every(x => x.explain) }]; })));
+  check('복구 원인에 따라 "원인 확인" 단계(8번째)가 다르게 나옴: 상대 구간 작업 / 일시 오류 / 광 모듈(SFP) 교체', ld.work.n === 9 && /상대/.test(ld.work.title) && /작업/.test(ld.work.title) && /일시/.test(ld.transient.title) && /SFP/.test(ld.fiber.title) && new Set([ld.work.title, ld.transient.title, ld.fiber.title]).size === 3 && Object.values(ld).every(x => x.allExpl && x.expl.length > 60), JSON.stringify([ld.work.title, ld.transient.title, ld.fiber.title]));
+  check('원인별 마무리: 상대 작업은 사전 공지 재발 방지 요청, 일시 오류는 재발 감시, SFP 불량은 교체 전·후 광값을 보여 줌', /사전 공지/.test(ld.work.detail) && /재발/.test(ld.transient.detail) && /교체 전/.test(ld.fiber.detail) && /교체 후/.test(ld.fiber.detail) && /-40\.00 dBm/.test(ld.fiber.detail) && /-3\.\d\d dBm/.test(ld.fiber.detail));
+  check('완료 문자의 원인과 조치가 복구 원인을 따름 (완료 문자 형식도 유지)', ['work', 'transient', 'fiber'].every(c => smsCheck(ld[c].done.split('[완료 문자 예시]\n')[1], '완료', '안산')) && /상대 구간/.test(ld.work.done) && /일시적/.test(ld.transient.done) && /SFP/.test(ld.fiber.done) && /회복/.test(ld.work.doneTitle) && ld.work.doneTitle.includes('자동 복구'));
+  // DDoS 시나리오: 데이터의 일정 없는 급증, 공격량, 클린존·블랙홀, 문자(발생·경과·완료)
+  const dd = await page.evaluate(() => { const S = buildScenarios().ddos, st = S.steps, a = ALERTS.find(x => x.link === 'IDC_B_FS1_UP2' && x.kind.includes('급증') && !x.evName), L = LINK.IDC_B_FS1_UP2;
+    const base = L.in[a.s - 1], peak = Math.max(...L.in.slice(a.s, a.e + 1)); return { n: st.length, sms: st[3].detail, prog: st[7].detail, done: st[9].detail, t5: st[5].detail, t6: st[6].detail, t4: st[4].detail, expl: st.every(x => x.explain && x.explain.length > 40), lesson: S.def ? '' : S.lesson, atk: peak - base, kinds: st.map(x => x.kind) }; });
+  const atkTxt = (dd.sms.match(/공격량 : TCP \(([\d.]+) Gbps \/ ([\d.]+) Mpps\)/) || []);
+  check('DDoS 시나리오: 10단계, 모든 단계에 설명, 데이터의 일정 없는 급증(IDC_B_FS1_UP2 새벽)을 사용', dd.n === 10 && dd.expl && dd.kinds[0] === '감지' && dd.kinds[9] === '결과');
+  check('DDoS 발생 문자: 양식 + ■ 공격량이 원인 다음에 나오고, 공격량이 그래프의 급증분과 같고 Mpps는 138바이트 가정에 맞음', smsCheck(dd.sms, '발생', '분당') && /■ 원인 : .+\n■ 공격량 : TCP/.test(dd.sms) && Math.abs(+atkTxt[1] - dd.atk) < 0.06 && Math.abs(+atkTxt[2] - dd.atk * 1000 / (138 * 8)) < 0.06 && /서비스영향 : 파악중/.test(dd.sms), atkTxt.slice(1).join('/') + ' vs ' + dd.atk.toFixed(1));
+  check('DDoS 경과 문자: 블랙홀 중이라 대상 IP 접속 불가를 서비스영향에 쓰고, 조치 시간표에 블랙홀 차단·상위 연동망 요청이 있음', smsCheck(dd.prog.slice(dd.prog.indexOf('[TEP IDC]')), '경과', '분당') && /서비스영향 : 대상 IP.+접속 불가\(블랙홀 중\)/.test(dd.prog) && /블랙홀 차단/.test(dd.prog) && /상위 연동망에 블랙홀 요청/.test(dd.prog) && !/■ 일시 : .* ~ \d/.test(dd.prog.slice(dd.prog.indexOf('[TEP IDC]'))));
+  check('DDoS 완료 문자: 블랙홀 해제까지 끝난 뒤에만 완료, 해제 조치와 블랙홀 구간이 있음', smsCheck(dd.done.slice(dd.done.indexOf('[TEP IDC]')), '완료', '분당') && /블랙홀 해제/.test(dd.done) && /블랙홀 구간\(\d\d:\d\d~\d\d:\d\d\)/.test(dd.done) && /\[주의_분당_완료\]/.test(dd.done));
+  check('DDoS 시나리오: 클린존(공격만 거름)과 블랙홀(전부 버림, 대상도 접속 불가)의 차이, 블랙홀 명령 예시(discard), 상위 연동망 요청(65535:666)이 설명됨', /클린존/.test(dd.t4) && /전부 버립니다/.test(dd.t4) && /공격만 버리고 정상 트래픽은 되돌려/.test(dd.t4) && /static route .*\/32 discard/.test(dd.t5) && /65535:666/.test(dd.t6) && /연동망에 문의할 때 확인할 3가지/.test(dd.t6));
+  check('모든 시나리오의 모든 단계에 설명이 있음 (팝업이 비지 않음)', await page.evaluate(() => Object.values(buildScenarios()).every(S => S.steps.every(x => x.explain && x.explain.length > 30))));
+  // 탭 아이콘(로고)
+  const icons = await page.evaluate(() => [...document.querySelectorAll('link[rel~=icon], link[rel=apple-touch-icon]')].map(l => l.getAttribute('href')));
+  const fsx = require('fs'), siteDir = require('path').resolve(__dirname, '../site'), png = f => fsx.readFileSync(siteDir + '/' + f).subarray(0, 8).toString('hex') === '89504e470d0a1a0a';
+  check('탭 아이콘(로고): svg·32px png·아이패드용 아이콘이 연결되어 있고 파일이 올바름', icons.includes('favicon.svg') && icons.includes('favicon-32.png') && icons.includes('apple-touch-icon.png') && fsx.readFileSync(siteDir + '/favicon.svg', 'utf8').includes('<svg') && png('favicon-32.png') && png('apple-touch-icon.png'), icons.join(','));
   const mails = await page.evaluate(() => [(ev => evNoticeText(ev, evCalc(ev)))(DATA.events.find(e => e.name.includes('8강'))), replyText(parseMail(SAMPLE_MAIL))].map(x => x.split('\n')[0]));
   check('다른 메일 제목에도 [TEP IDC]가 붙음 (경기 사전 안내, 방문 회신)', mails.every(x => x.includes('[TEP IDC]')), mails.join(' | '));
   const scenarios = [['calm', '평일 오후 7시', 4, ['그래프 15개 확인', '서버실 확인', '이상 없음']], ['drop', '트래픽 급감', 6, ['급감', 'IDC_B_FS2_INTL1', '광값', '예시미디어', '회복']],
-    ['redundancy', '이중화로 무사히 넘기기', 8, ['이중화', '전원 꺼짐', '트래픽은 거의 그대로', '고객 영향 없음']], ['linkDown', '업링크 회선 다운', 8, ['Admin', '트래픽(전/후)', '광값', 'ping', '연동망', '회복']], ['surge', '트래픽 폭주', 7, ['사전 연락', '분산', '하이드레이션', '경고선 80%', '사후 정리', '[TEP IDC]']], ['temp', '서버실 온도 변화', 7, ['온도 경고', '빨강 깜박임', '터미널', '냉각 복구', '-40.00 dBm']]];
+    ['redundancy', '이중화로 무사히 넘기기', 8, ['이중화', '전원 꺼짐', '트래픽은 거의 그대로', '고객 영향 없음']], ['linkDown', '업링크 회선 다운', 9, ['Admin', '트래픽(전/후)', '광값', 'ping', '연동망', '원인 확인', '회복']], ['ddos', 'DDoS 공격 수신', 10, ['DDoS', '공격량', '클린존', '블랙홀', '정상화', '해제']], ['surge', '트래픽 폭주', 7, ['사전 연락', '분산', '하이드레이션', '경고선 80%', '사후 정리', '[TEP IDC]']], ['temp', '서버실 온도 변화', 7, ['온도 경고', '빨강 깜박임', '터미널', '냉각 복구', '-40.00 dBm']]];
   for (const [id, name, n, words] of scenarios) {
     await page.click('[data-tab=monitor]');
     await page.click('#scnBtn'); await page.click(`#scnMenu [data-scn=${id}]`);
+    if (id === 'linkDown') await page.click('[data-ldcause=work]');   // 복구 원인을 먼저 고른다
     await page.waitForSelector('#scnPop:not([hidden])', { timeout: 30000 });   // 첫 단계가 되면 팝업이 뜬다
     const pop1 = await page.locator('#scnPop').innerText();
     check(`시나리오 "${name}": 첫 단계에 팝업이 뜨고 설명과 단계 번호가 나옴`, /단계 1 \/ \d+/.test(pop1) && pop1.length > 120, pop1.slice(0, 60).replace(/\n/g, ' '));

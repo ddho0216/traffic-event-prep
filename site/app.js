@@ -1003,7 +1003,7 @@ const runOn = (devId, cmd, down, atIso) => {   // down: 이 시나리오에서 D
 const addExplain = (def, texts, devs, lesson) => { def.steps.forEach((st, k) => { if (texts[k]) st.explain = texts[k]; if (devs && devs[k]) st.devs = devs[k]; }); if (lesson) def.lesson = lesson; };
 // 수신 광값 읽는 법: 10G LR(SFP+) 모듈 데이터시트의 수신 범위(약 -14.4 ~ +0.5 dBm)는 판매처 자료 기준이고 모듈마다 조금씩 다릅니다. -9 dBm 경고선과 평소값 -3 dBm 안팎은 이 사이트에서 제가 정한 값입니다.
 const OPTIC_GUIDE = "[수신 광값 읽는 법 - 10G LR(SFP+) 기준, 모듈마다 조금씩 다름]\n  +0.5 ~ -9 dBm   : 정상 (이 사이트의 평소값은 -3 dBm 안팎)\n  -9 ~ -14.4 dBm  : 약함 - 아직 동작하지만 케이블·SFP 점검 대상 (-9 dBm 경고선은 이 사이트가 정한 값)\n  -14.4 dBm 아래  : 수신 한계 아래 - 끊기거나 오류가 남\n  -40 dBm         : 빛이 전혀 안 들어옴 (끊김, 상대 장비 꺼짐)\n  +0.5 dBm 위     : 너무 강함 (과입력)\n  * 평소값보다 3 dBm 이상 떨어졌다면 범위 안이라도 변화가 있다는 신호입니다.";
-function buildScenarios() {
+function buildScenarios(opts) {   // opts.cause: 업링크 회선 다운의 복구 원인 (work·transient·fiber)
   const TD = Lib.TEMP_DEFAULTS;
   const OA = "IDC_B_FS1_UP1", OB = "IDC_B_FS1_UP2", IX = "IDC_B_FS2_IX1", INTL = "IDC_B_FS2_INTL1", EDGE = "IDC_B_FS2";   // 아래에서 새 이름으로 바뀐다
 
@@ -1069,7 +1069,37 @@ function buildScenarios() {
   ];
   const dnSms = smsNotice({ ...dnBase, stage: "발생", cause: `안산 ↔ 중앙 백본 업링크(${DN})가 끊겨 확인 중`, impact: "파악중", voc: "파악중" });
   const dnProgress = smsNotice({ ...dnBase, stage: "경과", cause: "상대 구간 원인 파악 후 통보 예정", actions: dnActs, impact: "우회 경로로 서비스 유지 중, 영향 범위 확인 중", voc: "파악중" });
-  const dnRecover = smsNotice({ ...dnBase, stage: "완료", to: md(msOf(dnA.e + 1)), cause: "회선 복구 확인 (상세 원인은 연동망 확인 후 별도 통보, 가상)", actions: [...dnActs, { t: hhAt(dnWin), txt: "회선 복구 확인", sub: [`${DN} out ${g1(outAt(DN, dn(dnWin)))}G로 회복`] }], impact: "우회 경로로 서비스 유지, 고객 영향 없음 (가상)", voc: "없음", spread: "AM" });
+  const peerDev = dlk.b, dnEndTxt = hm(msOf(dnA.e)), dnStartTxt = hm(msOf(dnA.s));
+  const optBefore = runOn(dDev, `show interfaces diagnostics optics ${dPort}`, [dPort]), optAfter = runOn(dDev, `show interfaces diagnostics optics ${dPort}`);
+  // 복구된 이유는 여러 가지다: 상대 구간 작업이 끝났거나, 일시적인 오류였거나, 광 케이블·SFP가 고장 나서 교체했거나. (원인 내용은 제가 만든 가상 사례)
+  const LDC = {
+    work: {
+      short: "상대 구간 작업이 끝나 자동 복구",
+      title: `원인 확인: 연동망 회신 - 상대(${peerDev}) 쪽 작업이었고 끝나면서 복구됨 (사전 공지 누락)`,
+      detail: `[연동망(상대 센터 NOC) 회신 - 통화한 분 성함 기록]\n- ${peerDev} 쪽 포트 점검 작업을 ${dnStartTxt}부터 진행했습니다.\n- 작업 대상에 우리 회선이 들어 있는 것을 몰랐고, 사전 공지가 빠졌습니다.\n- 작업은 ${dnEndTxt}에 끝났고, 끝나면 연결이 자동으로 복구됩니다.\n\n[우리 쪽 조치]\n- 없음 (복구 대기). 복구되면 광값·ping을 다시 확인한다.\n- 사전 공지가 빠진 점은 재발 방지로 연동망에 요청한다.`,
+      explain: "연동망에서 회신이 왔습니다. 이번 원인은 우리 쪽이 아니라 상대 구간의 작업이었고, 작업이 끝나면서 회선이 저절로 돌아옵니다. 우리가 한 일은 없지만, 복구 뒤에 광값과 ping을 다시 확인하고 사전 공지가 없었던 점을 재발 방지로 요청합니다. 이런 경우가 실제로 꽤 있습니다.",
+      acts: [{ t: hhAt(22), txt: "연동망 회신: 상대 구간 작업이었음", sub: ["작업이 끝나면 자동 복구 예정", "사전 공지 누락 재발 방지 요청"] }],
+      cause: `상대 구간(${peerDev}) 작업으로 회선 단절, 작업 완료 후 자동 복구 (사전 공지 누락은 재발 방지 요청)`
+    },
+    transient: {
+      short: "일시적인 오류 (자동 복구, 원인 특정 불가)",
+      title: "원인 확인: 뚜렷한 원인 없이 일시 오류로 보임 (자동 복구, 재발 감시)",
+      detail: `[확인 결과]\n- 로그: ${dnStartTxt}에 링크 Down, ${hhAt(dnWin)}에 Up. 그 사이 반복해서 내려갔다 올라간 기록은 없음\n- 연동망(상대 센터) 회신: 작업·알람 특이사항 없음, 보안 이슈 없음\n- 복구 뒤 광값·CRC: 수신 -3 dBm대로 정상, CRC 증가 없음\n→ 뚜렷한 원인을 찾지 못해 '일시 오류'로 정리합니다.\n\n[우리 쪽 조치]\n- 재발 감시: 같은 포트를 일정 기간 집중해서 감시한다 (광값·CRC·로그).\n- 같은 포트가 또 끊기면 광 케이블·SFP 점검과 교체를 요청한다.`,
+      explain: "상대 구간에도 작업이나 알람이 없고, 우리 쪽 광값·CRC도 정상으로 돌아왔습니다. 이럴 때는 원인을 특정하지 못한 채 '일시 오류'로 닫는 경우가 실제로 많습니다. 대신 재발을 지켜보다가 같은 포트가 다시 끊기면 그때 광 케이블이나 SFP를 교체하러 갑니다.",
+      acts: [{ t: hhAt(22), txt: "연동망 회신: 작업·알람 특이사항 없음", sub: ["우리 쪽 광값·CRC 확인", "재발 시 광 케이블·SFP 점검 예정"] }],
+      cause: "일시적인 회선 오류로 추정(원인 특정 불가), 자동 복구. 재발 시 광 케이블·SFP 점검 예정"
+    },
+    fiber: {
+      short: "광 모듈(SFP) 불량을 교체해서 복구",
+      title: `원인 확인: 현장 점검 결과 ${dDev} ${dPort}의 광 모듈(SFP) 불량 - 교체 진행`,
+      detail: `[현장(센터) 점검 결과 - 담당자 성함 기록]\n- ${dDev} ${dPort}의 SFP를 뽑아서 확인: 광 모듈 불량 (수신 광값 -40 dBm, 광 케이블을 청소해도 같음)\n- ${hhAt(26)} 예비 SFP로 교체하고 광 케이블을 청소한 뒤 다시 연결\n\n[교체 전]\n${optBefore}\n\n[교체 후]\n${optAfter}\n\n* 오래된 광 케이블이나 SFP는 이렇게 고장이 나서 교체해야 하는 경우가 많습니다.\n* 이미 끊겨 있는 회선이라 교체 작업의 추가 영향은 없지만, 정상 회선이라면 작업 전에 고객 안내와 우회가 필요합니다.`,
+      explain: "현장에서 SFP(광 모듈)를 확인해 보니 불량이었습니다. 이 경우는 상대 구간이 아니라 우리 쪽 부품 문제라서 예비 SFP로 교체합니다. 교체한 뒤에는 수신 광값이 평소(-3 dBm대)로 돌아오는지 꼭 확인합니다. 광 케이블이 오래되었거나 접촉이 나쁜 경우도 같은 방식으로 교체합니다.",
+      acts: [{ t: hhAt(22), txt: `현장 점검: ${dPort} 광 모듈(SFP) 불량 확인` }, { t: hhAt(26), txt: "예비 SFP로 교체, 광 케이블 청소", sub: ["교체 후 수신 광값 -3 dBm대 확인"] }],
+      cause: "광 모듈(SFP) 불량으로 회선 단절 → 예비 모듈로 교체 후 복구"
+    }
+  };
+  const cause = LDC[(opts && opts.cause) || "work"];
+  const dnRecover = smsNotice({ ...dnBase, stage: "완료", to: md(msOf(dnA.e + 1)), cause: cause.cause, actions: [...dnActs, ...cause.acts, { t: hhAt(dnWin), txt: "회선 복구 확인", sub: [`${DN} out ${g1(outAt(DN, dn(dnWin)))}G로 회복`] }], impact: "우회 경로로 서비스 유지, 고객 영향 없음 (가상)", voc: "없음" });
   const linkDown = { name: "업링크 회선 다운", tab: "monitor", win: 12, from: dn(-20), to: dn(dnWin + 15), steps: [
     { at: dn(0), kind: "감지", title: `${DN} in·out이 거의 0으로 떨어짐 (전날 같은 시각 out ${g1(outAt(DN, prevDay(dn(0))))}G → ${g1(outAt(DN, dn(0)))}G). 종 알림에 '확인 필요'로 등록`, focus: [DN] },
     { at: dn(3), kind: "확인", title: `정확한 장비·회선명 확인: ${dDev} ${dPort}. descriptions로 보면 Admin up / Link down`, detail: runOn(dDev, "show interfaces descriptions", [dPort]) + "\n\n→ Admin = 관리자가 켜 둔 상태, Link = 실제 연결 상태.\n   Admin up + Link down: 누가 일부러 내린 게 아니라 선이나 상대 쪽 문제로 끊긴 것.\n   (Admin down이면 누군가 포트를 일부러 내려 둔 것)\n고객 회선은 줄마다 '장비 고객사 속도'가 같이 보인다.", sum: "Admin up, Link down → 실제 연결이 끊긴 것. 고객사도 확인", detailLabel: "터미널 출력 보기", focus: [DN] },
@@ -1078,7 +1108,8 @@ function buildScenarios() {
     { at: dn(10), kind: "조치", title: "광값·CRC 확인: 빛이 안 들어옴 (광 케이블 접촉 불량이나 SFP 불량이 많음)", detail: runOn(dDev, `show interfaces diagnostics optics ${dPort}`, [dPort]) + "\n\n" + runOn(dDev, `show interfaces extensive ${dPort} | match CRC`, [dPort]) + "\n\n→ 수신 광값이 -40 dBm이면 빛이 안 들어오는 것. 케이블·SFP·상대 장비 쪽을 의심한다.\n\n" + OPTIC_GUIDE, sum: `광 수신 -40 dBm → 빛이 안 들어옴 (케이블·SFP 의심)`, detailLabel: "터미널 출력 보기", focus: [DN] },
     { at: dn(13), kind: "조치", title: "IP 확인과 ping: ARP가 없고 ping 100% 손실", detail: runOn(dDev, `show arp | match ${dPort}`, [dPort]) + "(출력 없음: 링크가 Down이면 ARP 항목이 없다)\n\n" + runOn(dDev, `ping ${dPeerIp} rapid count 100`, [dPort]) + "\n\n* L2 장비는 IP가 안 나오므로 MAC 주소로 찾는다.", sum: "ARP 없음, ping 100% 손실 → 상대 쪽까지 안 닿음", detailLabel: "터미널 출력 보기", focus: [DN] },
     { at: dn(16), kind: "조치", title: "연동망(상대 센터)에 문의 후 조장에게 전달", detail: "[연동망에 문의할 때 확인할 3가지]\n가. NOC 작업 유/무\n나. 연동 구간(타 부서·타 ISP) 작업 및 이슈 유/무\n다. 보안 관련 이슈 유/무\n\n* 통화한 분의 성함을 확인해서 기록하고, 경과나 원인을 알게 되면 바로바로 전달한다.\n* 확인한 내용(트래픽 전/후, 광값, CRC, ping 결과)은 조장에게 함께 전달한다.\n\n[경과 문자 예시] 복구 전까지는 계속 '경과'로 보냅니다\n" + dnProgress, detailLabel: "문의 항목·경과 문자 보기", focus: [DN] },
-    { at: dn(dnWin), kind: "결과", title: `${DN} 회복: out ${g1(outAt(DN, dn(dnWin)))}G (다운 구간 ${hhmm(dnA.s)}~${hhmm(dnA.e)}, ${dnWin}분). 경과 문자 발송, 조장에게 결과 전달`, detail: dnRecover, detailLabel: "완료 문자 보기", focus: [DN] }
+    { at: dn(22), kind: "확인", title: cause.title, detail: cause.detail, detailLabel: "원인 확인 내용 보기", focus: [DN] },
+    { at: dn(dnWin), kind: "결과", title: `${DN} 회복 (${cause.short}): out ${g1(outAt(DN, dn(dnWin)))}G (다운 구간 ${hhmm(dnA.s)}~${hhmm(dnA.e)}, ${dnWin}분). 조장에게 결과 전달, 완료 문자 발송`, detail: optAfter + "\n\n→ 수신 광값이 평소(-3 dBm대)로 돌아왔고 회선이 다시 Up입니다. 모든 조치가 끝났으므로 '완료' 문자를 보냅니다.\n\n[완료 문자 예시]\n" + dnRecover, detailLabel: "복구 확인·완료 문자 보기", focus: [DN] }
   ] };
 
   addExplain(linkDown, [
@@ -1089,8 +1120,9 @@ function buildScenarios() {
     "광값과 CRC를 봅니다. 수신 광값이 -40dBm이면 빛이 전혀 들어오지 않는 것입니다. 광 케이블 접촉 불량이나 SFP 불량이 흔한 원인이라 이 둘을 먼저 의심합니다.",
     "상대 장비까지 닿는지 ping으로 봅니다. 링크가 Down이면 ARP도 비어 있고 ping도 100% 실패합니다. 우리 장비까지는 정상이고 선 건너편이 안 보이는 것으로 정리합니다.",
     "연동망(상대 센터)에 문의합니다. NOC 작업 유/무, 연동 구간 작업·이슈 유/무, 보안 이슈 유/무 세 가지를 묻고, 통화한 분의 성함을 기록합니다. 확인한 내용은 조장에게 전달합니다.",
+    cause.explain,
     "회선이 복구되었습니다. 복구 시각과 트래픽 회복 값을 확인하고, 모든 조치가 끝났으므로 '완료' 문자를 보냅니다. 완료는 정말 다 끝났을 때만 쓰고, 그 전에는 '경과'로 보냅니다. 완료 문자에는 시작과 끝 일시, 조치 시간표가 들어갑니다."
-  ], [null, [dDev], null, null, [dDev], [dDev], null, null], "끊긴 회선은 descriptions의 Admin/Link로 먼저 찾고, 광값·CRC → ping → 상대 구간 문의 순서로 좁혀 갑니다. 확인한 값은 문자와 보고에 그대로 씁니다. 문자는 발생 → 경과 → 완료 순서로, 완료는 정말 끝났을 때만 보냅니다.");
+  ], [null, [dDev], null, null, [dDev], [dDev], null, [dDev, peerDev], [dDev]], "끊긴 회선은 descriptions의 Admin/Link로 먼저 찾고, 광값·CRC → ping → 상대 구간 문의 순서로 좁혀 갑니다. 복구되는 이유는 크게 셋입니다: 상대 구간 작업이 끝났거나, 일시 오류였거나, 광 케이블·SFP가 고장 나서 교체했거나. 원인에 따라 마무리가 다릅니다(재발 방지 요청, 재발 감시, 교체). 문자는 발생 → 경과 → 완료 순서로, 완료는 정말 끝났을 때만 보냅니다.");
 
   // 3) 트래픽 폭주: 월드컵 8강
   const ev = DATA.events.find(e => e.name.includes("8강")), cc = evCalc(ev);
@@ -1130,7 +1162,7 @@ function buildScenarios() {
     { t: tmAt(msOf(fc) + 15 * 60000), txt: "냉각기 점검(티켓)·육안점검 요청" },
     { t: tmAt(dMs), txt: `${dv.id} 과열로 꺼짐 확인`, sub: ["옆 장비 포트 Down, 광 수신 -40 dBm", "터미널 응답 없음"] },
     { t: tmAt(parseT("2026-10-26T17:15")), txt: "냉각 복구, 온도 정상 확인" }
-  ], impact: `${dv.id} 꺼짐(${hm(dMs)}~${hm(parseT(dv.downEnd))}), 짝 장비 ${tmPartner}(${DEV[tmPartner].rack})가 받아 고객 영향 없음`, voc: "없음", spread: "AM" });
+  ], impact: `${dv.id} 꺼짐(${hm(dMs)}~${hm(parseT(dv.downEnd))}), 짝 장비 ${tmPartner}(${DEV[tmPartner].rack})가 받아 고객 영향 없음`, voc: "없음" });
   const temp = { name: "서버실 온도 변화", tab: "room", center: "B", from: "2026-10-26T14:30", to: "2026-10-26T17:20", steps: [
     { at: isoLocal(msOf(al.s)), kind: "감지", title: `${COOL} 입구 온도 ${TD.hot}°C 이상 (${tAt(al.s)}°C): 온도 경고 등록`, focus: [COOL] },
     { at: isoLocal(msOf(fc)), kind: "감지", title: `${TD.crit}°C 이상 (${tAt(fc)}°C): 장비 LED 상태가 빨강 깜박임`, focus: [COOL] },
@@ -1147,7 +1179,7 @@ function buildScenarios() {
     "냉각기 점검을 요청(티켓)하고 현장 육안점검을 요청합니다. 온도가 더 오르기 전에 먼저 알리는 것이 중요합니다.",
     `과열을 견디지 못한 ${dv.id}이 보호 종료로 꺼졌습니다. 전원 LED가 꺼진 상태입니다. 짝 장비 ${DEV[dv.id].partner}는 다른 랙(${DEV[DEV[dv.id].partner].rack})에 있어서 켜져 있고, 고객 회선은 그쪽으로 이어집니다.`,
     `꺼진 장비는 터미널로 들어가도 응답이 없습니다. 대신 옆 장비(허브)에서 이 장비와 이어진 포트를 보면 Down이고 광 수신이 -40dBm입니다. 이것으로 '장비가 꺼졌다'를 확인합니다. 아래 출력의 두 번째 부분이 ${dv.id}에 직접 들어가 본 결과입니다.`,
-    "냉각이 복구되어 온도가 경고 기준 아래로 내려왔습니다.",
+    "냉각이 복구되어 온도가 경고 기준 아래로 내려왔습니다. 꺼진 장비는 스스로 켜지지 않으므로, 온도가 안정된 것을 확인한 뒤에 사람이 전원을 다시 올립니다.",
     "복구가 끝났습니다. 육안점검 기록을 남기고, 꺼졌던 장비가 정상으로 돌아왔는지 확인합니다."
   ], [null, null, null, [dv.id, DEV[dv.id].partner], [dv.id, peer.id], null, [dv.id]], "온도가 오르면 장비가 스스로 꺼질 수 있습니다. 꺼진 장비는 터미널로 확인할 수 없으니 옆 장비의 포트 상태로 확인하고, 다른 랙에 있는 짝 장비가 살아 있는지 같이 봅니다.");
 
@@ -1166,7 +1198,7 @@ function buildScenarios() {
   ];
   const rdSms = smsNotice({ ...rdBase, stage: "발생", cause: `${o2.why}으로 보임`, impact: `없음 (짝 장비 ${D2}에서 같은 고객 회선을 받고 있음)`, voc: "없음" });
   const rdProgress = smsNotice({ ...rdBase, stage: "경과", cause: `${o2.why}으로 보임`, actions: [...rdActs, { t: hm(o2.e), txt: `${D1} 전원 복구, 이중화 복귀 확인` }], impact: `없음 (짝 장비 ${D2}에서 같은 고객 회선을 받음). 전원 모듈 교체 일정 협의 중`, voc: "없음" });
-  const rdDone = smsNotice({ ...rdBase, stage: "완료", to: md(o2.e + 5 * 60000), cause: `${o2.why}, 이중화로 고객 영향 없이 복구`, actions: [...rdActs, { t: hm(o2.e), txt: `${D1} 전원 복구, 이중화 복귀 확인` }, { t: hm(o2.e + 5 * 60000), txt: "전체 상태 정상 확인" }], impact: "없음 (이중화로 고객 회선 유지)", voc: "없음", spread: "AM" });
+  const rdDone = smsNotice({ ...rdBase, stage: "완료", to: md(o2.e + 5 * 60000), cause: `${o2.why}, 이중화로 고객 영향 없이 복구`, actions: [...rdActs, { t: hm(o2.e), txt: `${D1} 전원 복구, 이중화 복귀 확인` }, { t: hm(o2.e + 5 * 60000), txt: "전체 상태 정상 확인" }], impact: "없음 (이중화로 고객 회선 유지)", voc: "없음" });
   const redundancy = { name: "이중화로 무사히 넘기기", tab: "monitor", center: codeOf(D1), win: 12, from: rt(-30), to: rt(downMin + 20), steps: [
     { at: rt(-10), kind: "확인", title: `평소: 짝 장비 ${D1}·${D2} 모두 정상, 같은 고객 회선이 두 장비에 똑같이 꽂혀 있음`, detail: runOn(D1, "show interfaces descriptions", null, rt(-10)), detailLabel: `${D1} 회선 목록 보기`, sum: `고객 회선 ${lu.length}개 사용 중 (10G ${g10}개, 1G ${lu.length - g10}개)`, focus: rFocus },
     { at: rt(0), kind: "감지", title: `${D1} 전원 꺼짐 (${o2.why}). 서버실 경고가 뜨고 터미널로 접속이 안 됨`, detail: runOn(D1, "show interfaces descriptions", null, rt(1)), detailLabel: `${D1} 터미널 시도 결과 보기`, focus: rFocus },
@@ -1188,9 +1220,52 @@ function buildScenarios() {
     `정리합니다. 이번 장애로 고객 영향은 없었습니다. 만약 이 회선들이 한 장비에만 꽂혀 있었다면 고객사 ${custOn.length}곳의 회선 ${lu.length}개, 합계 ${sumG}G가 ${downMin}분 동안 끊겼을 것입니다(가정).`
   ], [[D1, D2], [D1], [D2], null, [D1, D2], [D2], [D1], [D1, D2]], "중요한 회선은 서로 다른 장비 두 대에 나눠 꽂아 둡니다(이중화). 한 대가 꺼져도 고객 회선은 짝 장비로 이어져서, 장애가 아니라 '조치가 필요한 알림'으로 끝납니다. 다만 한 대로 버티는 동안은 위험한 시간이므로 빨리 복구해야 합니다.");
 
-  return { calm, drop, linkDown, surge, temp, redundancy };
+  // 6) DDoS 공격 수신과 차단: 데이터의 '경기와 겹치지 않는 급증'(IDC_B_FS1_UP2, 새벽)을 DDoS로 본다. 차단 절차는 일반적인 방식이고 현장 프로세스와 다를 수 있다.
+  const UP2 = "IDC_B_FS1_UP2", ddA = ALERTS.find(a => a.link === UP2 && a.kind.includes("급증") && !a.evName), dd = m => isoLocal(msOf(ddA.s) + m * 60000), hhd = m => hm(parseT(dd(m)));
+  const ddBase = inAt(UP2, dd(-5)), ddPeak = Math.max(...Array.from({ length: ddA.e - ddA.s + 1 }, (_, k) => LINK[UP2].in[ddA.s + k])), ddAtk = ddPeak - ddBase, ddMpps = ddAtk * 1e9 / (138 * 8) / 1e6;
+  const ddVictim = "가상물산", ddIp = "198.51.100.77", ddDev = "IDC_B_FS1", ddPort = "xe-0/0/1", ddDevIp = DEV[ddDev].ifs.find(x => x[0] === ddPort)[7];
+  const ddAtkTxt = `TCP (${g1(ddAtk)} Gbps / ${ddMpps.toFixed(1)} Mpps)`;
+  const ddBlock = { from: hhd(14), to: hhd(40) };
+  const ddBase2 = { center: TOPOLOGY.centers[ddDev.split("_")[1]].replace(" 센터", ""), title: `${ddVictim} 고객사 DDoS 공격 수신`, target: `${ddDev}(${ddDevIp})`, from: md(msOf(ddA.s)), attack: ddAtkTxt };
+  const ddActs = [
+    { t: hhd(0), txt: `${UP2} in 트래픽 급증 알람`, sub: ["[관제사이트] 확인"] },
+    { t: hhd(3), txt: "이벤트 일정 확인", sub: ["경기·행사와 겹치지 않음 → DDoS 의심"] },
+    { t: hhd(6), txt: "공격 대상·유형 확인", sub: [`대상 ${ddIp}(${ddVictim}), TCP SYN`, `공격량 ${ddAtkTxt}`] },
+    { t: hhd(11), txt: "클린존 가입 여부 확인", sub: [`${ddVictim} IP는 클린존 미가입 → 선차단 대상`] },
+    { t: hhd(14), txt: `${ddIp}/32 블랙홀 차단 (우리 장비)` },
+    { t: hhd(17), txt: "상위 연동망에 블랙홀 요청" }
+  ];
+  const ddSms = smsNotice({ ...ddBase2, stage: "발생", cause: "DDoS 공격(TCP) 의심", impact: "파악중", voc: "파악중" });
+  const ddProgress = smsNotice({ ...ddBase2, stage: "경과", cause: "DDoS 공격(TCP SYN)으로 확인, 선차단(블랙홀) 진행 중", actions: ddActs, impact: `대상 IP(${ddIp}, ${ddVictim}) 접속 불가(블랙홀 중), 그 외 고객 정상`, voc: "파악중" });
+  const ddDone = smsNotice({ ...ddBase2, stage: "완료", to: md(parseT(dd(45))), cause: "DDoS 공격(TCP SYN) 종료 확인, 블랙홀 해제", actions: [...ddActs, { t: hhd(30), txt: "회선 in 트래픽 정상화 확인", sub: [`in ${g1(inAt(UP2, dd(30)))}G (평소 ${g1(ddBase)}G 수준)`] }, { t: hhd(40), txt: `${ddIp}/32 블랙홀 해제`, sub: ["공격 종료 확인 후 해제", "서비스 접속 확인"] }], impact: `블랙홀 구간(${ddBlock.from}~${ddBlock.to}) 대상 IP 접속 불가, 해제 후 정상. 그 외 고객 영향 없음`, voc: "없음 (가정)" });
+  const ddos = { name: "DDoS 공격 수신", tab: "monitor", center: "B", win: 12, from: dd(-20), to: dd(60), steps: [
+    { at: dd(0), kind: "감지", title: `${UP2} in이 평소 ${g1(ddBase)}G에서 ${g1(ddPeak)}G로 급증 (약 ${(ddPeak / ddBase).toFixed(1)}배). 경기 일정과 겹치지 않음 → DDoS 의심`, focus: [UP2] },
+    { at: dd(3), kind: "확인", title: `in만 급증하고 out은 그대로: 공격은 들어오기만 한다 (out ${g1(outAt(UP2, dd(-5)))}G → ${g1(outAt(UP2, dd(3)))}G)`, detail: `■ 트래픽 (공격 직전 → 3분 뒤)\\nin  : ${g1(inAt(UP2, dd(-5)))}G → ${g1(inAt(UP2, dd(3)))}G\\nout : ${g1(outAt(UP2, dd(-5)))}G → ${g1(outAt(UP2, dd(3)))}G\\n\\n■ 이벤트 일정 확인: 이 시각에 겹치는 경기·행사 없음\\n→ 경기 때문에 오른 트래픽이면 in·out이 같이 오르고 일정과 겹칩니다. 이번에는 in만 오르고 일정도 없으므로 공격을 의심합니다.`, detailLabel: "트래픽 비교·이벤트 확인 보기", focus: [UP2] },
+    { at: dd(6), kind: "확인", title: `공격 대상·유형·공격량 파악: ${ddIp}(${ddVictim}), TCP SYN, 공격량 ${ddAtkTxt}`, detail: `[가상 flow(트래픽 흐름) 통계 - 상위 목적지]\\n목적지 IP          비율   프로토콜     비고\\n${ddIp}      94%    TCP SYN     ${ddVictim} 소유 IP\\n그 밖의 목적지      6%    -           평소 트래픽\\n\\n공격량 ${ddAtkTxt}\\n* 공격량 = 급증한 양(평소 ${g1(ddBase)}G를 뺀 값). Mpps는 평균 패킷 크기를 138바이트로 가정해서 계산한 값입니다 (작은 패킷이 많은 SYN 공격의 모습).`, detailLabel: "flow 통계 보기", focus: [UP2] },
+    { at: dd(8), kind: "조치", title: "발생 문자 전송: 대상 IP·공격량을 넣고, 서비스영향·VOC는 파악중", detail: ddSms, detailLabel: "발생 문자 보기", focus: [UP2] },
+    { at: dd(11), kind: "확인", title: `클린존 가입 여부 확인: ${ddVictim}은 미가입 → 프로세스대로 선차단(블랙홀) 대상`, detail: `[클린존 가입 여부 - 가정: 제가 정한 값]\\n고객사        클린존   처리\\n${ddVictim}      미가입   선차단(블랙홀)  ← 공격 대상\\n모의커머스      미가입   (공격 대상 아님)\\n가상은행        가입     공격이 오면 클린존으로 우회 (공격만 거르고 정상 트래픽은 전달)\\n\\n[두 방식의 차이]\\n블랙홀 : 그 IP로 가는 트래픽을 전부 버립니다. 빠르고 확실하지만 그 IP도 접속이 안 됩니다(공격자 목적 달성). 가입이 필요 없고 마지막 수단입니다.\\n클린존 : 그 IP로 가는 트래픽을 걸러 주는 센터로 돌려서 공격만 버리고 정상 트래픽은 되돌려 줍니다. 가입이 필요합니다.\\n\\n* 메모: 클린존 가입 IP가 아닌 다른 IP로 공격이 들어오면 프로세스대로 먼저 차단합니다.`, detailLabel: "가입 여부·차단 방식 비교 보기", focus: [UP2] },
+    { at: dd(14), kind: "조치", title: `우리 장비에서 ${ddIp}/32 블랙홀 차단 (공격 트래픽을 장비 안에서 버림)`, detail: `[Juniper 예시 형식 - 장비·정책마다 다름, 가상]\\nadmin@${ddDev}# set routing-options static route ${ddIp}/32 discard\\nadmin@${ddDev}# commit\\n\\nadmin@${ddDev}> show route ${ddIp}\\n${ddIp}/32   *[Static/5] 00:00:12\\n                      Discard\\n\\n* 대상 IP를 두 번 확인합니다 (/32 한 개만). 잘못 쓰면 정상 고객이 끊깁니다.\\n* 이 경로를 넣으면 그 IP로 가는 트래픽은 전부 버려지므로 고객사에 먼저 알립니다.\\n* 장비 안에서 버리기 때문에 서버는 보호되지만, 회선으로 들어오는 양은 그대로입니다.`, detailLabel: "차단 명령 예시 보기", focus: [UP2] },
+    { at: dd(17), kind: "조치", title: "회선 in은 아직 높음 → 상위 연동망에 블랙홀 요청 (연동망 문의 3가지 함께 확인)", detail: `[상위(연동망) 블랙홀 요청]\\n- 우리 장비에서 버려도 회선(${UP2})으로 들어오는 공격 양은 줄지 않습니다. 공격이 회선에 들어오기 전에 상위에서 버려야 회선이 안전해집니다.\\n- 요청 내용: ${ddIp}/32 블랙홀 (BGP로 요청할 때는 표준 블랙홀 값 65535:666을 붙이는 방식이 일반적. 상대가 받아 주는 조건(보통 /32만)이 있어서 먼저 확인)\\n\\n[연동망에 문의할 때 확인할 3가지]\\n가. NOC 작업 유/무\\n나. 연동 구간(타 부서·타 ISP) 작업 및 이슈 유/무\\n다. 보안 관련 이슈 유/무\\n* 통화한 분의 성함을 확인해서 기록합니다.`, detailLabel: "요청 내용 보기", focus: [UP2] },
+    { at: dd(20), kind: "조치", title: "경과 문자 전송: 공격 차단(블랙홀) 중, 대상 IP 접속 불가 안내", detail: ddProgress, detailLabel: "경과 문자 보기", focus: [UP2] },
+    { at: dd(30), kind: "확인", title: `in 트래픽 정상화: ${g1(inAt(UP2, dd(30)))}G (평소 ${g1(ddBase)}G 수준). 공격이 끝났는지 계속 지켜봄`, focus: [UP2] },
+    { at: dd(45), kind: "결과", title: "공격 종료 확인 후 블랙홀 해제, 서비스 접속 확인. 완료 문자 발송 (해제 전에는 '경과')", detail: `[블랙홀 해제]\\nadmin@${ddDev}# delete routing-options static route ${ddIp}/32\\nadmin@${ddDev}# commit\\n\\n* 해제는 공격이 끝난 것을 충분히 확인한 뒤에 합니다. 너무 일찍 풀면 공격이 다시 들어옵니다.\\n* 해제 뒤 ${ddVictim} 서비스가 정상 접속되는지 확인하고 고객사에도 알립니다.\\n\\n[완료 문자 예시] 해제와 서비스 확인까지 끝난 뒤에만 '완료'로 보냅니다.\\n` + ddDone, detailLabel: "해제 절차·완료 문자 보기", focus: [UP2] }
+  ] };
+  addExplain(ddos, [
+    `새벽에 ${UP2}의 in 트래픽이 평소의 약 ${(ddPeak / ddBase).toFixed(1)}배로 갑자기 올랐습니다. 먼저 '경기나 행사 때문인가'를 확인해야 하는데, 이 시각에는 일정이 없습니다. 종 알림에 '확인 필요'로 뜨고, DDoS를 의심합니다.`,
+    "DDoS의 특징은 들어오는 트래픽(in)만 크게 오르는 것입니다. 정상적인 서비스 이용이 늘면 나가는 트래픽(out)도 같이 오릅니다. in만 오르고 일정도 없으니 공격 가능성이 높아졌습니다.",
+    "누구를 향한 공격인지, 어떤 종류인지, 얼마나 큰지 알아야 문자에 쓰고 차단할 수 있습니다. flow 통계에서 목적지가 한 IP에 몰려 있고 TCP SYN이 대부분이면 그 IP를 노린 SYN 공격입니다. 공격량은 Gbps(용량)와 Mpps(초당 패킷 수) 두 가지로 적습니다.",
+    "먼저 상황을 전파합니다. 아직 서비스영향과 VOC(고객 문의)는 모르니 '파악중'으로 쓰고, 공격량은 문자에 넣습니다. 문자는 발생 → 경과 → 완료 순서입니다.",
+    "차단 방법은 고객이 클린존에 가입했는지에 따라 달라집니다. 클린존 가입 고객이면 공격만 걸러 주는 센터로 우회시킬 수 있지만, 가입하지 않은 IP로 공격이 오면 프로세스대로 먼저 차단(블랙홀)합니다. 이번 대상은 미가입이라 블랙홀입니다. (가입 여부는 제가 정한 가정입니다.)",
+    "블랙홀은 대상 IP로 가는 트래픽을 장비 안에서 전부 버리는 방법입니다. 서버는 바로 보호되지만 그 IP도 접속이 안 됩니다. 그래서 대상 IP를 정확히 확인하고(/32 한 개), 고객사에 먼저 알린 뒤 실행합니다.",
+    "그래프를 보면 회선으로 들어오는 양(in)은 아직 그대로입니다. 우리 장비 안에서 버려도 회선까지 들어오는 공격은 막지 못하기 때문입니다. 회선이 가득 차면 다른 고객도 영향을 받으므로, 상위 연동망에 같은 블랙홀을 요청해 공격이 회선에 들어오기 전에 버리게 합니다.",
+    "복구 전까지는 계속 '경과'로 보냅니다. 이 문자에는 지금까지의 조치 시간표와, 블랙홀 때문에 대상 IP가 접속 불가라는 서비스영향을 씁니다.",
+    "상위에서 버려지기 시작하자 회선의 in 트래픽이 평소 수준으로 돌아왔습니다. 하지만 공격이 정말 끝났는지는 더 지켜봐야 합니다. 아직 블랙홀을 풀면 안 됩니다.",
+    "공격이 충분히 오래 멈춘 것을 확인한 뒤 블랙홀을 해제하고, 서비스가 정상 접속되는지 확인합니다. 이 모든 것이 끝났을 때 비로소 '완료' 문자를 보냅니다. 완료 문자에는 블랙홀 구간 동안 대상 IP가 접속 불가였다는 점을 적습니다."
+  ], [null, null, null, [ddDev], null, [ddDev], [ddDev], null, null, [ddDev]], "DDoS는 ① 이벤트 때문인지 먼저 가르고 ② 대상 IP·종류·공격량을 파악해 문자로 전파한 뒤 ③ 클린존 가입 여부에 따라 차단 방식을 정합니다. 블랙홀은 빠르고 확실하지만 대상 IP도 접속 불가(공격자 목적 달성)라서 마지막 수단이고, 클린존은 공격만 걸러 정상 트래픽은 전달합니다. 우리 쪽 블랙홀만으로는 회선 트래픽이 줄지 않아서 상위 연동망에 요청해야 할 때가 있고, 해제는 공격 종료를 충분히 확인한 뒤에 합니다.");
+
+  return { calm, drop, linkDown, surge, ddos, temp, redundancy };
 }
-const SCN_LIST = [["calm", "평일 오후 7시", "저녁 피크 전 평소 점검 (이상 없음)"], ["drop", "트래픽 급감", "국내 연동(IX)이 갑자기 빠짐: 원인 확인과 조치"], ["linkDown", "업링크 회선 다운", "안산 업링크 Down: 회선·트래픽·광값·ping·연동망 문의 순서"], ["surge", "트래픽 폭주", "월드컵 8강: 사전 연락·분산·모니터링"], ["redundancy", "이중화로 무사히 넘기기", "장비 한 대가 꺼져도 짝 장비가 고객 회선을 받아 큰 장애 없이 넘김"], ["temp", "서버실 온도 변화", "분당 IDC_B_R08 냉각 이상: 육안점검·터미널 확인·복구"]];
+const SCN_LIST = [["calm", "평일 오후 7시", "저녁 피크 전 평소 점검 (이상 없음)"], ["drop", "트래픽 급감", "국내 연동(IX)이 갑자기 빠짐: 원인 확인과 조치"], ["linkDown", "업링크 회선 다운", "안산 업링크 Down: 회선·트래픽·광값·ping·연동망 문의, 복구 원인은 시작할 때 고름"], ["surge", "트래픽 폭주", "월드컵 8강: 사전 연락·분산·모니터링"], ["ddos", "DDoS 공격 수신", "일정에 없는 급증 → 공격 확인·전파 → 블랙홀 차단 → 해제"], ["redundancy", "이중화로 무사히 넘기기", "장비 한 대가 꺼져도 짝 장비가 고객 회선을 받아 큰 장애 없이 넘김"], ["temp", "서버실 온도 변화", "분당 IDC_B_R08 냉각 이상: 육안점검·터미널 확인·복구"]];
 let scn = null;
 function stopScn() { if (scn && scn.timer) clearInterval(scn.timer); scn = null; HL.clear(); const p = $("#scnPop"); if (p) p.hidden = true; }
 function scnSetView(at) {   // at: 보여 줄 시각(기본은 지금 진행 시각). 이전 단계를 볼 때는 그 단계의 시각으로 보여 준다
@@ -1274,9 +1349,9 @@ function scnTick() {
   if (scn.idx >= scn.i1) { scnFinish(); return; }
   scn.idx++; scnShowDue(); scnSetView(); scnProgress();
 }
-function startScn(id) {
+function startScn(id, opts) {
   stopScn();
-  const def = buildScenarios()[id];
+  const def = buildScenarios(opts)[id];
   const steps = def.steps.map(st => Object.assign({ i: isoIdx(st.at), shown: false }, st)).sort((a, b) => a.i - b.i);
   scn = { def, steps, i0: isoIdx(def.from), i1: isoIdx(def.to), idx: isoIdx(def.from), done: [], seen: -1, popK: -1, modal: false, skip: false, lessonShown: false, paused: false, finished: false, timer: null };
   state.cust = "all"; state.ymode = "cap";
@@ -1292,7 +1367,9 @@ function startScn(id) {
   menu.innerHTML = SCN_LIST.map(([id, name, desc]) => `<button data-scn="${id}">${name}<small>${desc}</small></button>`).join("");
   const closeMenu = () => { menu.hidden = true; btn.setAttribute("aria-expanded", "false"); };
   btn.addEventListener("click", e => { e.stopPropagation(); if (menu.hidden) { menu.hidden = false; btn.setAttribute("aria-expanded", "true"); } else closeMenu(); });
-  menu.addEventListener("click", e => { const b = e.target.closest("[data-scn]"); if (b) { closeMenu(); startScn(b.dataset.scn); } });
+  menu.addEventListener("click", e => { const b = e.target.closest("[data-scn]"); if (b) { closeMenu(); if (b.dataset.scn === "linkDown") $("#scnCausePop").hidden = false; else startScn(b.dataset.scn); } });
+  $$("[data-ldcause]").forEach(b => { b.onclick = () => { $("#scnCausePop").hidden = true; startScn("linkDown", { cause: b.dataset.ldcause }); }; });   // 업링크 회선 다운은 복구 원인을 먼저 고른다
+  $("#ldCauseCancel").onclick = () => { $("#scnCausePop").hidden = true; };
   document.addEventListener("click", e => { if (!menu.hidden && !menu.contains(e.target) && e.target !== btn) closeMenu(); });
   document.addEventListener("keydown", e => { if (e.key === "Escape") closeMenu(); });
   $("#scnPause").onclick = () => { if (scn && !scn.finished) { scn.paused = !scn.paused; scnProgress(); } };
@@ -1303,7 +1380,7 @@ function startScn(id) {
   $("#scnNextStep").onclick = () => { if (!scn || scn.modal || scn.finished) return; const nx = scn.steps.find(s => !s.shown); if (!nx) { scn.idx = scn.i1; scnShowDue(); scnSetView(); scnFinish(); return; } scn.idx = Math.max(scn.idx, nx.i); scnShowDue(); scnSetView(); scnProgress(); };   // 다음 단계 시각으로 바로 건너뜀
   $("#scnLesson").onclick = scnLessonPop;
   $("#scnSteps").addEventListener("click", e => { const b = e.target.closest("[data-scnpop]"); if (b && scn) scnOpenPop(+b.dataset.scnpop); });
-  document.addEventListener("keydown", e => { if (e.key === "Escape" && scn && scn.modal) scnPopClose(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#scnCausePop").hidden) $("#scnCausePop").hidden = true; else if (e.key === "Escape" && scn && scn.modal) scnPopClose(); });
   $("#scnClose").onclick = () => { stopScn(); $("#scnBar").hidden = true; showTab("monitor"); goNow(); window.scrollTo({ top: 0, behavior: "smooth" }); };
   syncHdr(); window.addEventListener("resize", syncHdr);
 })();

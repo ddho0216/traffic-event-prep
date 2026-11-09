@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>백본 트래픽 관제 · 이벤트 대비</title>
 <link rel="stylesheet" href="style.css">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 </head>
 <body>
 <header class="top">
@@ -55,6 +58,16 @@
     <button class="btn sm" id="scnClose">닫고 현재로</button>
   </div>
   <ol class="scn-steps" id="scnSteps"></ol>
+</div>
+<div class="scnpop" id="scnCausePop" hidden>
+  <div class="scnpop-box" style="width:min(640px,100%)" role="dialog" aria-modal="true" aria-labelledby="ldCauseTitle">
+    <h3 id="ldCauseTitle">이번에는 어떻게 복구될까요?</h3>
+    <p class="note" style="margin:0 0 10px">같은 "업링크 회선 다운"이어도 복구되는 이유는 여러 가지입니다. 고른 원인에 맞춰 원인 확인·조치·문자가 달라집니다. (원인 내용은 제가 만든 가상 사례입니다.)</p>
+    <button class="btn cause" data-ldcause="work"><b>상대 구간 작업이 끝났다</b><span>상대(중앙 백본) 쪽에서 작업을 했고, 끝나면서 저절로 복구됩니다. 사전 공지가 빠졌던 경우입니다.</span></button>
+    <button class="btn cause" data-ldcause="transient"><b>일시적인 오류였다</b><span>뚜렷한 원인 없이 자동으로 복구됩니다. 재발을 지켜보고, 또 끊기면 광 케이블·SFP를 점검합니다.</span></button>
+    <button class="btn cause" data-ldcause="fiber"><b>광 케이블·SFP가 고장 나서 교체했다</b><span>현장에서 광 모듈(SFP) 불량을 확인하고 예비품으로 교체한 뒤 복구됩니다.</span></button>
+    <div class="scnpop-foot"><span class="sp"></span><button class="btn" id="ldCauseCancel">취소</button></div>
+  </div>
 </div>
 <div class="scnpop" id="scnPop" hidden>
   <div class="scnpop-box" role="dialog" aria-modal="true" aria-labelledby="scnPopTitle">
