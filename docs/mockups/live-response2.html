@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>목업 2: 관제 월</title>
+<style>
+:root{--bg:#0a0f14;--card:#111a23;--line:#22313f;--tx:#e6eef5;--mu:#8aa0b2;--ac:#59b4f5;--ok:#47c28b;--warn:#e8a23b;--bad:#e85a4f}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:13.5px/1.5 "Noto Sans CJK KR","Noto Sans KR","WenQuanYi Zen Hei",sans-serif;width:1400px;height:880px;overflow:hidden;position:relative}
+.top{display:flex;align-items:center;gap:14px;padding:10px 24px;border-bottom:1px solid var(--line)}.top b{font-size:16px}
+.tabs{margin-left:auto;display:flex;gap:22px;color:var(--mu)}.tabs .on{color:var(--tx);border-bottom:2px solid var(--ac);padding-bottom:4px}
+.tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;border:1px solid var(--line);color:var(--mu)}
+.tag.warn{color:var(--warn);border-color:#54421d}.tag.bad{color:var(--bad);border-color:#5a2a27}.tag.ok{color:var(--ok);border-color:#1f4a3a}
+.sub{display:flex;align-items:center;gap:14px;padding:8px 24px;color:var(--mu);border-bottom:1px solid var(--line);background:#0d151d}
+.sub .clock{margin-left:auto;color:var(--tx)}.mono{font-family:"DejaVu Sans Mono",monospace}
+.alertbar{display:flex;align-items:center;gap:14px;padding:9px 24px;background:#4a1511;border-bottom:2px solid var(--bad);color:#ffd9d4;font-weight:600}
+.alertbar .blink{width:12px;height:12px;border-radius:50%;background:var(--bad);box-shadow:0 0 0 5px #e85a4f55}
+.alertbar .mu{color:#e9a9a2;font-weight:400}.alertbar .btn{margin-left:auto;background:#7a2018;border-color:#c0463c}
+.noalert{padding:9px 24px;background:#0f1a14;border-bottom:1px solid #1f4a3a;color:var(--ok)}
+.btn{display:inline-block;padding:6px 13px;border:1px solid #2b4358;border-radius:8px;background:#14222d;color:var(--tx);font-weight:400}.btn.pri{background:#1b4a6b;border-color:#2f7aa8}.btn.dim{color:var(--mu)}
+.wall{display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr;gap:12px;padding:14px 24px;height:calc(100% - 140px)}
+.p{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;overflow:hidden}
+.p h4{margin:0 0 4px;font-size:13px;display:flex;gap:8px;align-items:center}.p h4 .mu{color:var(--mu);font-weight:400;font-size:12px}
+.p.hot{border-color:var(--bad);box-shadow:0 0 0 2px #e85a4f33}
+.cur{display:flex;gap:16px;font-size:12px;color:var(--mu);margin-bottom:2px}.cur b{color:var(--tx);font-size:15px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}th{color:var(--mu);font-weight:400;text-align:left;padding:3px 8px;border-bottom:1px solid var(--line)}td{padding:3px 8px;border-bottom:1px solid #182430}
+td.num,th.num{text-align:right;font-family:"DejaVu Sans Mono",monospace}.hl td{background:#2a1513}
+.alist div{display:grid;grid-template-columns:48px 1fr auto;gap:8px;padding:5px 0;border-bottom:1px solid #182430;font-size:12.5px}.alist .tm{color:var(--mu);font-family:"DejaVu Sans Mono",monospace}
+.detail{display:grid;grid-template-columns:1.25fr 1fr;gap:14px;padding:14px 24px;height:calc(100% - 140px)}
+.col{display:flex;flex-direction:column;gap:12px;min-height:0}
+.bar{height:14px;background:#0a1118;border-radius:4px;overflow:hidden;border:1px solid var(--line)}.bar i{display:block;height:100%;background:var(--ac)}
+.opt{border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:#0e1822;margin-bottom:8px}.opt.sel{border-color:var(--ac);background:#10283a}.opt small{color:var(--mu);display:block}
+.note{padding:8px 12px;border-left:3px solid var(--warn);background:#1a1710;color:#d9c9a0;font-size:12.5px}
+pre{margin:6px 0 0;padding:9px 11px;background:#0a1118;border:1px solid var(--line);border-radius:8px;color:#b9d3e6;font:12px/1.55 "DejaVu Sans Mono",monospace;white-space:pre-wrap}
+.empty{border:1px dashed #355066;border-radius:8px;padding:10px 12px;color:var(--mu)}
+.tl div{display:grid;grid-template-columns:50px 1fr;gap:8px;padding:2px 0;font-size:12.5px}.tl .tm{color:var(--mu);font-family:"DejaVu Sans Mono",monospace}
+</style></head><body>
+<div class="top"><img src="../../site/favicon.svg" width="26" height="26" style="border-radius:6px"><b>백본 트래픽 관제</b><span class="tag warn">가상 데이터 · 목업 2 (아직 구현 아님)</span>
+<div class="tabs"><span class="on">관제</span><span>서버실</span><span>서버실-3D</span><span>장비 터미널</span><span>이벤트 대비</span><span>월간 자료</span><span>고객 지원</span></div></div>
+<div id="app"></div>
+<script>
+const S=+new URLSearchParams(location.search).get("s")||1;
+// 결정적 의사난수
+function rnd(seed){let s=seed;return()=>{s=(s*16807)%2147483647;return s/2147483647}}
+function line(base,amp,n,seed,surgeAt,surgeTo,noiseAmp){const r=rnd(seed),a=[];for(let m=0;m<=n;m++){let v=base+Math.sin(m/6+seed)*amp+(r()-.5)*(noiseAmp||.25);
+ if(surgeAt!=null&&m>=surgeAt)v=base+(surgeTo-base)*Math.min(1,(m-surgeAt)/2)+(r()-.5)*.5;a.push(Math.max(.2,v))}return a}
+function spark(vals,cap,w,h,upto,opts){opts=opts||{};const L=34,B=16,T=6,R=6,pw=w-L-R,ph=h-T-B,n=60;
+ const x=m=>L+pw*m/n,y=v=>T+ph*(1-v/cap);let g=`<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block">`;
+ for(const v of [0,cap/2,cap])g+=`<line x1="${L}" x2="${w-R}" y1="${y(v)}" y2="${y(v)}" stroke="#22313f"/><text x="${L-5}" y="${y(v)+3}" fill="#8aa0b2" font-size="10" text-anchor="end">${Math.round(v)}G</text>`;
+ for(const m of [0,20,40,60]){const hh=3+Math.floor(m/60*0),mm=m;g+=`<text x="${x(m)}" y="${h-3}" fill="#8aa0b2" font-size="10" text-anchor="middle">${mm==60?"04:00":"03:"+String(mm).padStart(2,"0")}</text>`}
+ if(opts.ref)g+=`<polyline fill="none" stroke="#3b4f61" stroke-width="1.3" stroke-dasharray="3 3" points="${opts.ref.map((v,m)=>x(m)+","+y(v)).join(" ")}"/>`;
+ const pts=vals.slice(0,upto+1).map((v,m)=>x(m)+","+y(v)).join(" ");g+=`<polyline fill="none" stroke="${opts.c||'#59b4f5'}" stroke-width="2" points="${pts}"/>`;
+ const lv=vals[upto];g+=`<circle cx="${x(upto)}" cy="${y(lv)}" r="4" fill="${opts.c||'#59b4f5'}"/>`;
+ if(opts.mark!=null)g+=`<line x1="${x(opts.mark)}" x2="${x(opts.mark)}" y1="${T}" y2="${h-B}" stroke="#e8a23b" stroke-dasharray="3 3"/><text x="${x(opts.mark)+3}" y="${T+10}" fill="#e8a23b" font-size="10">${opts.markT}</text>`;
+ return g+`</svg>`}
+const N=60;
+const links=[["IDC_B_FS1_UP1","분당→서초 A · 100G",100,line(3.2,.4,N,3),null],["IDC_S_FS2_TOB1","서초→분당 · 200G",200,line(11,1.2,N,5),null],["IDC_B_FS1_BIG1","샘플비디오 전용 · 200G",200,line(14,1.5,N,7),null]];
+const surge=line(3.3,.15,N,11,48,10.1);
+const ref=line(3.3,.15,N,12,null,null,.1);
+const hdr=(clk,extra)=>`<div class="sub"><span>센터 <b style="color:var(--tx)">분당</b></span><span class="tag">갱신 1분 간격</span>${extra||""}<span class="clock mono">2026-10-29 ${clk}:00</span></div>`;
+function wall(t,upto,alertOn,activeAlert){
+ const sv=(upto>=48);
+ const wallPanels=links.map(l=>`<div class="p"><h4>${l[0]}<span class="mu">${l[1]}</span></h4><div class="cur"><span>in <b>${l[3][upto].toFixed(1)}G</b></span></div>${spark(l[3],l[2]/2.2,430,170,upto)}</div>`).join("");
+ const hot=`<div class="p ${alertOn?'hot':''}"><h4>IDC_B_FS1_UP2<span class="mu">분당→서초 B · 100G</span>${alertOn?'<span class="tag bad">알림</span>':''}</h4><div class="cur"><span>in <b style="${sv?'color:#ffb3aa':''}">${surge[upto].toFixed(1)}G</b></span><span>out <b>3.3G</b></span></div>${spark(surge,12,430,170,upto,{ref:ref,c:sv?'#ff8f84':'#59b4f5'})}</div>`;
+ const al=`<div class="p"><h4>알림 목록</h4><div class="alist">${alertOn?`<div><span class="tm">${alertOn}</span><span><b style="color:#ff8f84">IDC_B_FS1_UP2 in 급증</b><br><span class="mu">평소 대비 +204% · 3분 지속</span></span><span class="tag bad">새 알림</span></div>`:`<div><span class="tm">02:41</span><span class="mu">IDC_A_FS1_UP1 광 수신 -9.8dBm 경고 해제</span><span class="tag ok">해제</span></div>`}<div><span class="tm">01:12</span><span class="mu">IDC_G_FS1_DN1 CRC 12 증가</span><span class="tag">확인됨</span></div><div><span class="tm">00:30</span><span class="mu">IDC_B_R08 온도 29.1°C 주의 해제</span><span class="tag ok">해제</span></div></div></div>`;
+ const cnt=`<div class="p"><h4>센터 합계</h4><div class="cur"><span>in 합 <b>${(32+(sv?6.8:0)).toFixed(0)}G</b></span><span>out 합 <b>71G</b></span></div><div class="mu" style="font-size:12px">회선 8개 · 경고 ${alertOn?1:0}건 · 장비 22대 정상</div><div style="margin-top:10px" class="bar"><i style="width:${sv?42:34}%"></i></div></div>`;
+ return `<div class="wall">${wallPanels}${hot}${al}${cnt}</div>`}
+let h="";
+if(S==1){h=hdr("03:41").replace("03:41:00","03:41:00")+`<div class="noalert">● 알림 없음 · 정상 감시 중</div>`+wall(0,41,null)}
+if(S==2){h=hdr("03:49")+`<div class="noalert">● 알림 없음 · 정상 감시 중 <span class="mu" style="color:var(--mu)">(탐지 지연: 급증이 기준을 넘고 1~3분이 지나야 알림이 뜹니다)</span></div>`+wall(0,49,null)+`<div style="position:absolute;left:24px;bottom:12px;right:24px" class="note">03:48에 UP2가 이미 오르기 시작했지만 아직 알림은 없습니다. 이 구간에서 눈으로 먼저 알아채는 것도 관제의 일입니다.</div>`}
+if(S==3){h=hdr("03:51")+`<div class="alertbar"><span class="blink"></span>IDC_B_FS1_UP2 in 급증 감지 <span class="mu">03:51 · 급증 시작 03:48 · 지연 3분 · 평소 같은 시각 3.3G → 10.1G</span><span class="btn">확인하기</span></div>`+wall(0,51,"03:51")}
+if(S==4){
+const rows=[["03:48","3.3","2.9 k","—","—","—"],["03:49","6.8","6.2 k","—","—","—"],["03:50","10.0","6.1 M","—","—","—"],["03:51","10.1","6.1 M","—","—","—"]];
+h=hdr("03:53")+`<div class="alertbar"><span class="blink" style="opacity:.5"></span>확인 중 · IDC_B_FS1_UP2 in 급증 <span class="mu">내가 확인 시작 03:52 · 판단 전</span></div>
+<div class="detail"><div class="col">
+<div class="p"><h4>IDC_B_FS1_UP2 · in <span class="mu">점선 = 어제 같은 시각</span></h4>${spark(surge,12,760,190,53,{ref:ref,c:'#ff8f84',mark:48,markT:'급증 시작'})}</div>
+<div class="p" style="flex:1"><h4>원시 데이터 <span class="mu">1분마다 쌓입니다 · 정리된 결론은 없습니다</span></h4>
+<table><tr><th>시각</th><th class="num">in (Gbps)</th><th class="num">pps</th><th>주 대상 IP</th><th>프로토콜/포트</th><th>상위 출발지</th></tr>
+<tr><td class="mono">03:50</td><td class="num">10.0</td><td class="num">6.1 M</td><td class="mono">198.51.100.77 (88%)</td><td>TCP / 443</td><td class="mono">203.0.113.0/24 외 4,210개</td></tr>
+<tr><td class="mono">03:51</td><td class="num">10.1</td><td class="num">6.1 M</td><td class="mono">198.51.100.77 (87%)</td><td>TCP / 443 · SYN 94%</td><td class="mono">203.0.113.0/24 외 4,388개</td></tr>
+<tr><td class="mono">03:52</td><td class="num">10.0</td><td class="num">6.1 M</td><td class="mono">198.51.100.77 (88%)</td><td>TCP / 443 · SYN 95%</td><td class="mono">203.0.113.0/24 외 4,402개</td></tr>
+<tr class="hl"><td class="mono">03:53</td><td class="num">10.1</td><td class="num">6.1 M</td><td class="mono">198.51.100.77 (88%)</td><td>TCP / 443 · SYN 95%</td><td class="mono">…계속 쌓이는 중</td></tr></table>
+<div class="note" style="margin-top:10px">대상 IP가 누구 것인지, 평소와 어떻게 다른지는 직접 찾아야 합니다. (고객 목록 · 평소 패턴 · 이벤트 일정)</div></div>
+</div><div class="col">
+<div class="p"><h4>조회 도구</h4><div style="display:flex;gap:8px;flex-wrap:wrap"><span class="btn">198.51.100.77 누구 IP?</span><span class="btn">이벤트 일정</span><span class="btn">평소 패턴 비교</span><span class="btn">터미널 열기</span></div>
+<pre>조회 결과 (누르면 여기에 쌓입니다)
+03:52  이벤트 일정 → 해당 시간 일정 없음
+03:53  198.51.100.77 → 가상물산 (클린존 미가입)</pre></div>
+<div class="p"><h4>내 판단 <span class="tag warn">직접 선택</span></h4>
+<div class="opt"><b>정상 이벤트 트래픽</b><small>선택하면 고객·이벤트 담당에게 확인하는 단계로 넘어갑니다</small></div>
+<div class="opt"><b>DDoS 공격으로 판단</b><small>선택하면 대응 단계(차단 방법 결정)로 넘어갑니다</small></div>
+<div class="opt"><b>더 지켜보기</b><small>시간이 계속 흐르고 데이터도 계속 쌓입니다</small></div>
+<div style="display:flex;gap:8px"><span class="btn dim">위에서 하나를 직접 고르세요 (맞고 틀림은 끝난 뒤 알려 줍니다)</span></div></div>
+<div class="p" style="flex:1"><h4>내 기록</h4><div class="tl"><div><span class="tm">03:51</span>알림 확인 (지연 3분)</div><div><span class="tm">03:52</span>이벤트 일정 조회</div><div><span class="tm">03:53</span>대상 IP 조회</div></div></div>
+</div></div>`}
+document.getElementById("app").innerHTML=h;
+</script></body></html>
