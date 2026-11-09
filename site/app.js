@@ -1278,7 +1278,7 @@ function buildScenarios(opts) {   // opts.cause: 업링크 회선 다운의 복�
 
   return { calm, drop, linkDown, surge, ddos, temp, redundancy };
 }
-const SCN_LIST = [["live", "DDoS 공격 수신 · 직접 대응 (시험판)", "알림이 늦게 뜨고, 값을 직접 확인·판단·조치하는 실시간 방식"], ["liveLinkDown", "업링크 회선 다운 · 직접 대응 (시험판)", "안산 업링크 Down: 알림 확인 → 회선·광값·ping → 연동망 문의 → 원인 판단 → 복구 확인 → 완료 문자"], ["liveDrop", "트래픽 급감 · 직접 대응 (시험판)", "국내 연동(IX) 급감: 알림 확인 → 경기 일정·우회·광값 → 상대 사업자 문의 → 고객사 안내 → 회복 확인 → 완료 문자"], ["liveRedundancy", "이중화로 무사히 넘기기 · 직접 대응 (시험판)", "장비 한 대가 꺼짐: 꺼진 장비·짝 장비 확인 → 트래픽 비교 → 보고 → 복구 확인 → 경과·완료 문자"], ["surge", "트래픽 폭주", "월드컵 8강: 사전 연락·분산·모니터링"], ["temp", "서버실 온도 변화", "분당 IDC_B_R08 냉각 이상: 육안점검·터미널 확인·복구"]];
+const SCN_LIST = [["live", "DDoS 공격 수신 · 직접 대응 (시험판)", "알림이 늦게 뜨고, 값을 직접 확인·판단·조치하는 실시간 방식"], ["liveLinkDown", "업링크 회선 다운 · 직접 대응 (시험판)", "안산 업링크 Down: 알림 확인 → 회선·광값·ping → 연동망 문의 → 원인 판단 → 복구 확인 → 완료 문자"], ["liveDrop", "트래픽 급감 · 직접 대응 (시험판)", "국내 연동(IX) 급감: 알림 확인 → 경기 일정·우회·광값 → 상대 사업자 문의 → 고객사 안내 → 회복 확인 → 완료 문자"], ["liveRedundancy", "이중화로 무사히 넘기기 · 직접 대응 (시험판)", "장비 한 대가 꺼짐: 꺼진 장비·짝 장비 확인 → 트래픽 비교 → 보고 → 복구 확인 → 경과·완료 문자"]];
 let scn = null;
 function stopScn() { if (scn && scn.timer) clearInterval(scn.timer); scn = null; HL.clear(); const p = $("#scnPop"); if (p) p.hidden = true; }
 function scnSetView(at) {   // at: 보여 줄 시각(기본은 지금 진행 시각). 이전 단계를 볼 때는 그 단계의 시각으로 보여 준다

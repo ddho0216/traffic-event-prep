@@ -300,12 +300,16 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('#lvStage [data-st=완료]'); await page.click('#lvSend'); await page.keyboard.press('Escape');
   check('경과 문자를 건너뛰고 완료로 보내면 결과에 "복구 직후에는 경과로 먼저 알립니다"로 나옴', (await page.locator('#lvResBody').innerText()).includes("복구 직후에는 '경과'로 먼저 알립니다"));
   await page.evaluate(() => LIVE.load('ddos'));
-  // 시나리오 목록은 실시간 대응 화면에 있다: 직접 대응(실시간) + 남은 슬라이드
+  // 시나리오 목록은 실시간 대응 화면에 있다: 직접 대응(실시간) 4개
   await goTab('live'); await page.click('#scnBtn');
   const menuIds = await page.evaluate(() => [...document.querySelectorAll('#scnMenu [data-scn]')].map(b => b.dataset.scn));
-  check('실시간 대응 화면의 시나리오 목록: 직접 대응 4개(DDoS·회선 다운·급감·이중화)가 맨 위, 아직 바꾸지 않은 2개(폭주·서버실 온도)가 이어짐 (평일 오후 7시와 슬라이드로 보기는 뺌)', JSON.stringify(menuIds) === JSON.stringify(['live', 'liveLinkDown', 'liveDrop', 'liveRedundancy', 'surge', 'temp']), menuIds.join(','));
+  check('실시간 대응 화면의 시나리오 목록: 직접 대응 4개(DDoS·회선 다운·급감·이중화)만 있음 (슬라이드 방식과 평일 오후 7시·폭주·서버실 온도는 뺌, 기록은 docs/removed-scenarios.md)', JSON.stringify(menuIds) === JSON.stringify(['live', 'liveLinkDown', 'liveDrop', 'liveRedundancy']), menuIds.join(','));
   await goTab('monitor'); await goTab('live'); await page.click('#scnBtn'); await page.click('#scnMenu [data-scn=live]');
   check('목록에서 "직접 대응"을 고르면 실시간 대응이 처음 상태(03:15)로 시작함', (await page.locator('#tab-live').isVisible()) && (await page.evaluate(() => LIVE.state.t)) === 15);
+  await page.evaluate(() => document.querySelector('#tabs button[data-tab=room3d]').click());
+  check('서버실-3D 범례: 짧게 정상/주의/경고/위험과 기준 온도(27·30·33°C)가 보이고, 설명은 접혀 있음', await page.evaluate(() => { const t = document.querySelector('.r3legend').innerText; return ['정상', '주의', '경고', '위험', '27°C', '30°C', '33°C'].every(w => t.includes(w)) && document.getElementById('glLegTip').hidden; }));
+  await page.click('#glLegQ');
+  check('"? 색 설명"을 누르면 풀어쓴 설명(가장 나쁜 것 기준, 팬 경고·장비 꺼짐, 온도 보기 색)이 펼쳐지고 다시 누르면 접힘', (await page.evaluate(() => { const tip = document.getElementById('glLegTip'); return !tip.hidden && ['가장 나쁜 것', '팬 경고', '장비 꺼짐', '온도" 보기', '파랑(20°C 이하)'].every(w => tip.innerText.includes(w)); })) && (await page.evaluate(() => { document.getElementById('glLegQ').click(); return document.getElementById('glLegTip').hidden; })));
   const vis = {};
   for (const tab of ['monitor', 'room', 'room3d', 'term', 'event', 'monthly', 'visit', 'sms', 'gear', 'live']) { await goTab(tab); vis[tab] = await page.locator('#centerBar').isVisible(); }
   check('센터 선택은 관제·서버실에서만 보이고 나머지 탭에서는 숨겨짐', vis.monitor && vis.room && vis.room3d && !vis.term && !vis.event && !vis.monthly && !vis.visit && !vis.sms && !vis.gear && !vis.live, JSON.stringify(vis));

@@ -371,3 +371,8 @@ nav.tabs .beta{font-size:10px;color:var(--warn);border:1px solid #54421d;border-
 
 .pt.dim{opacity:.28}
 .slotbox{margin:10px 0 0;padding:8px 10px;border:1px solid #2f5a7d;background:#10283a;border-radius:4px}.slotbox .btnrow{margin-top:6px}
+
+.r3legend{white-space:nowrap;flex-wrap:nowrap}
+.legq{border:1px solid var(--line);background:#151c23;color:var(--text);border-radius:99px;padding:0 9px;font-size:12px;cursor:pointer}.legq:hover{border-color:var(--accent)}
+.legtip{position:absolute;left:0;bottom:30px;width:min(470px,88vw);white-space:normal;background:#10161c;border:1px solid var(--line);border-radius:4px;padding:9px 12px;color:var(--text);box-shadow:0 8px 22px #000a;line-height:1.55;z-index:5}
+.legtip[hidden]{display:none}.legtip ul{margin:6px 0 8px;padding-left:18px}.legtip .sw{display:inline-block;vertical-align:middle}

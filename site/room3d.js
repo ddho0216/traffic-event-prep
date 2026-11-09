@@ -444,6 +444,12 @@ function renderPanels(vr, rows, i) {
   ev.sort((a, b) => b.t - a.t);
   $("#glAlerts").innerHTML = `<h4>최근 장애·경고 <span class="muted">(${viewLabel()})</span></h4><table><tr><th>시각</th><th>랙</th><th>내용</th></tr>` + (ev.length ? ev.map(e => `<tr class="click" data-t="${e.t}" data-rack="${e.rack}"><td>${e.t ? md(msOf(e.t)) : "상시"}</td><td>${e.rack}</td><td class="${e.lv === "crit" ? "crit-t" : "warn-t"}">${e.txt}</td></tr>`).join("") : `<tr><td colspan="3" class="muted">기록 없음</td></tr>`) + "</table>";
 }
+function renderLegend() {   // 왼쪽 아래 색 범례: 짧게 보이고, "? 색 설명"을 누르면 풀어서 설명한다
+  const lg = $(".r3legend"); if (!lg) return;
+  lg.innerHTML = `<span class="sw ok"></span>정상 ${TEMP_WARN}°C 미만 <span class="sw warn"></span>주의 ${TEMP_WARN}°C~ <span class="sw hot"></span>경고 ${TEMP_HOT}°C~ <span class="sw crit"></span>위험 ${TEMP_CRIT}°C~ <button class="legq" id="glLegQ" type="button" aria-expanded="${!!G.legOpen}">? 색 설명</button>` +
+    `<div class="legtip" id="glLegTip" ${G.legOpen ? "" : "hidden"}><b>랙 색 (상태 보기)</b>: 랙 옆면과 바닥 띠의 색입니다. 그 랙의 입구 온도와 장비 LED 중 <b>가장 나쁜 것</b>으로 정해집니다.<ul><li><span class="sw ok"></span> 정상: 입구 온도 ${TEMP_WARN}°C 미만, 장비 모두 정상</li><li><span class="sw warn"></span> 주의: ${TEMP_WARN}°C 이상 또는 장비 팬 경고</li><li><span class="sw hot"></span> 경고: ${TEMP_HOT}°C 이상 또는 장비 상태 LED 경고</li><li><span class="sw crit"></span> 위험: ${TEMP_CRIT}°C 이상 또는 장비 꺼짐</li></ul><b>"온도" 보기</b>로 바꾸면 같은 자리가 실제 온도에 따라 파랑(20°C 이하)→초록→노랑→주황→빨강(34°C 이상)으로 이어서 바뀝니다. 기준 온도는 서버실 탭의 설정 값입니다.</div>`;
+  $("#glLegQ").onclick = () => { G.legOpen = !G.legOpen; renderLegend(); };
+}
 function render3d() {
   if (!$("#tab-room3d").classList.contains("on")) return;
   const i = clamp(sr.end, 0, N - 1), vr = visibleRacks(), rows = r3Rows(vr);
@@ -461,6 +467,7 @@ function render3d() {
   $$("[data-glmode]").forEach(b => b.classList.toggle("on", b.dataset.glmode === G.mode));
   $$("[data-glf]").forEach(b => b.classList.toggle("on", b.dataset.glf === G.filt));
   renderPanels(vr, rows, i);
+  renderLegend();
   if (R3.dev) r3Detail();
   loadThree(() => { if (!G.ready) { initGL(); requestAnimationFrame(loop); } buildScene(); if (prevRow !== G.rowRacks[0].id || !G.fitted) { fitCam(); G.fitted = true; }
     if (G.focus) { const f = G.focus; G.focus = null; flyTo(f.fit ? fitTarget() : focusTarget(f)); } });
