@@ -76,7 +76,18 @@ function monthMondays() {   // 가상 현재가 속한 달의 월요일들 [날�
 }
 const sendKeys = g => g.names.flatMap(n => g.id === "weekly" ? monthMondays().filter(d => d <= ymdhm(msOf(NOW_IDX)).slice(0, 10)).map(d => `${n}:w:${d}`) : [`${n}:${g.id}`]);   // 지금까지 보냈어야 하는 칸
 const sendProgress = () => { const keys = SEND_PLAN.flatMap(sendKeys); return { done: keys.filter(k => store.get("sent:" + k, false)).length, total: keys.length }; };
-const COMPANY = "TEP IDC";   // 우리 회사 이름(가상). 메일·문자 제목에 [TEP IDC]를 붙여서 받는 쪽이 어디서 온 것인지 바로 알게 한다
+const COMPANY = "TEP IDC";
+/* 장애 전파 문자 양식 (사용자가 알려 준 양식). 단계는 발생 → 경과 → 완료 순서이고, 완료 전에는 항상 '경과'로 보낸다. 완료는 정말 다 끝났을 때만 쓴다.
+   stage: 발생·경과·완료, actions: [{ t: "16:17", txt: "...", sub: ["..."] }], attack: DDoS일 때 공격량. 일시의 끝(to)은 완료일 때만 채운다. */
+function smsNotice(o) {
+  if (!["발생", "경과", "완료"].includes(o.stage)) throw new Error("문자 단계는 발생·경과·완료 중 하나여야 합니다");
+  const L = [`[${COMPANY}]`, "[Web발신]", `[주의_${o.center}_${o.stage}] ${o.title}`, "", `■ 대상 : ${o.target}`, `■ 일시 : ${o.from} ~${o.stage === "완료" && o.to ? " " + o.to : ""}`, `■ 원인 : ${o.cause}`];
+  if (o.attack) L.push(`■ 공격량 : ${o.attack}`);
+  if (o.actions && o.actions.length) { L.push("■ 조치 :"); o.actions.forEach(x => { L.push(`${x.t} ${x.txt}`); (x.sub || []).forEach(s => L.push(` - ${s}`)); }); }
+  L.push(`■ 서비스영향 : ${o.impact}`, `■ VOC : ${o.voc}`);
+  if (o.spread) L.push(`■ 전파 : ${o.spread}`);
+  return L.join("\n");
+}   // 우리 회사 이름(가상). 메일·문자 제목에 [TEP IDC]를 붙여서 받는 쪽이 어디서 온 것인지 바로 알게 한다
 const CUSTOMERS = TOPOLOGY.customers;   // 전부 가상 고객사. 설계도(topology.js)에서 읽는다 (회선 배정은 제가 임의로 정한 것)
 const CENTER_NAME = TOPOLOGY.centers;   // 이름의 센터 코드: IDC_<코드>_... (센터 목록은 설계도에서)
 const CENTER = id => /_(IX|INTL)\d/.test(id) ? "연동" : (CENTER_NAME[id.split("_")[1]] || "연동");
@@ -1047,8 +1058,18 @@ function buildScenarios() {
   const dlk = TOPOLOGY.links.find(l => l.link === DN), dDev = dlk.a, dPort = dlk.ap, dPeerIp = DEV[dDev].ifs.find(x => x[0] === dPort)[8];
   const dnBefore = outAt(DN, dn(-5)), dnAfter = outAt(DN, dn(5)), dnCust = custOf(DN);
   const dnWin = (dnA.e - dnA.s + 1) * 5;
-  const dnSms = `[${COMPANY}] 장애 안내 - ${dnCust.join(", ")} 담당자님, ${hhmm(dnA.s)}부터 안산 ↔ 중앙 백본 업링크(${DN})가 끊겨 확인 중입니다. 우회 경로로 서비스는 유지되고 있으며 경과는 다시 안내드리겠습니다. (가상 문자)`;
-  const dnRecover = `[${COMPANY}] 복구 완료 - ${dnCust.join(", ")} 담당자님, ${hhmm(dnA.s)}부터 발생한 안산 ↔ 중앙 백본 업링크(${DN}) 장애가 ${hhmm(dnA.e + 1)}에 복구되었습니다(약 ${dnWin}분). 현재 트래픽은 평소 수준(${g1(outAt(DN, dn(dnWin)))}Gbps)입니다. 불편을 드려 죄송합니다. 원인은 확인되는 대로 다시 안내드리겠습니다. (가상 문자)`;
+  const hhAt = m => hm(parseT(dn(m))), dnIp = DEV[dDev].ifs.find(x => x[0] === dPort)[7], dnCenter = TOPOLOGY.centers[dDev.split("_")[1]].replace(" 센터", "");
+  const dnBase = { center: dnCenter, title: `${dnCust.join(", ")} 고객사 중앙 백본 업링크 단선`, target: `${dDev}(${dnIp})`, from: md(msOf(dnA.s)) };
+  const dnActs = [
+    { t: hhAt(0), txt: `${DN} Down 알람 발생`, sub: ["[관제사이트] 확인"] },
+    { t: hhAt(3), txt: "장비 접속 및 회선 확인", sub: ["Admin up / Link down 확인"] },
+    { t: hhAt(10), txt: "광값·CRC 확인", sub: ["수신 광값 -40 dBm (빛이 안 들어옴)"] },
+    { t: hhAt(13), txt: "ARP·ping 확인", sub: ["ARP 없음, ping 100% 손실"] },
+    { t: hhAt(16), txt: "연동망(상대 센터) 통화 문의", sub: ["NOC 작업, 연동 구간 이슈, 보안 이슈 유무 문의", "확인 후 전달 예정"] }
+  ];
+  const dnSms = smsNotice({ ...dnBase, stage: "발생", cause: `안산 ↔ 중앙 백본 업링크(${DN})가 끊겨 확인 중`, impact: "파악중", voc: "파악중" });
+  const dnProgress = smsNotice({ ...dnBase, stage: "경과", cause: "상대 구간 원인 파악 후 통보 예정", actions: dnActs, impact: "우회 경로로 서비스 유지 중, 영향 범위 확인 중", voc: "파악중" });
+  const dnRecover = smsNotice({ ...dnBase, stage: "완료", to: md(msOf(dnA.e + 1)), cause: "회선 복구 확인 (상세 원인은 연동망 확인 후 별도 통보, 가상)", actions: [...dnActs, { t: hhAt(dnWin), txt: "회선 복구 확인", sub: [`${DN} out ${g1(outAt(DN, dn(dnWin)))}G로 회복`] }], impact: "우회 경로로 서비스 유지, 고객 영향 없음 (가상)", voc: "없음", spread: "AM" });
   const linkDown = { name: "업링크 회선 다운", tab: "monitor", win: 12, from: dn(-20), to: dn(dnWin + 15), steps: [
     { at: dn(0), kind: "감지", title: `${DN} in·out이 거의 0으로 떨어짐 (전날 같은 시각 out ${g1(outAt(DN, prevDay(dn(0))))}G → ${g1(outAt(DN, dn(0)))}G). 종 알림에 '확인 필요'로 등록`, focus: [DN] },
     { at: dn(3), kind: "확인", title: `정확한 장비·회선명 확인: ${dDev} ${dPort}. descriptions로 보면 Admin up / Link down`, detail: runOn(dDev, "show interfaces descriptions", [dPort]) + "\n\n→ Admin = 관리자가 켜 둔 상태, Link = 실제 연결 상태.\n   Admin up + Link down: 누가 일부러 내린 게 아니라 선이나 상대 쪽 문제로 끊긴 것.\n   (Admin down이면 누군가 포트를 일부러 내려 둔 것)\n고객 회선은 줄마다 '장비 고객사 속도'가 같이 보인다.", sum: "Admin up, Link down → 실제 연결이 끊긴 것. 고객사도 확인", detailLabel: "터미널 출력 보기", focus: [DN] },
@@ -1056,20 +1077,20 @@ function buildScenarios() {
     { at: dn(7), kind: "조치", title: `발생 문자 전송, 영향 고객사(${dnCust.join(", ")})에 안내`, detail: dnSms, detailLabel: "발생 문자 보기", focus: [DN] },
     { at: dn(10), kind: "조치", title: "광값·CRC 확인: 빛이 안 들어옴 (광 케이블 접촉 불량이나 SFP 불량이 많음)", detail: runOn(dDev, `show interfaces diagnostics optics ${dPort}`, [dPort]) + "\n\n" + runOn(dDev, `show interfaces extensive ${dPort} | match CRC`, [dPort]) + "\n\n→ 수신 광값이 -40 dBm이면 빛이 안 들어오는 것. 케이블·SFP·상대 장비 쪽을 의심한다.\n\n" + OPTIC_GUIDE, sum: `광 수신 -40 dBm → 빛이 안 들어옴 (케이블·SFP 의심)`, detailLabel: "터미널 출력 보기", focus: [DN] },
     { at: dn(13), kind: "조치", title: "IP 확인과 ping: ARP가 없고 ping 100% 손실", detail: runOn(dDev, `show arp | match ${dPort}`, [dPort]) + "(출력 없음: 링크가 Down이면 ARP 항목이 없다)\n\n" + runOn(dDev, `ping ${dPeerIp} rapid count 100`, [dPort]) + "\n\n* L2 장비는 IP가 안 나오므로 MAC 주소로 찾는다.", sum: "ARP 없음, ping 100% 손실 → 상대 쪽까지 안 닿음", detailLabel: "터미널 출력 보기", focus: [DN] },
-    { at: dn(16), kind: "조치", title: "연동망(상대 센터)에 문의 후 조장에게 전달", detail: "[연동망에 문의할 때 확인할 3가지]\n가. NOC 작업 유/무\n나. 연동 구간(타 부서·타 ISP) 작업 및 이슈 유/무\n다. 보안 관련 이슈 유/무\n\n* 통화한 분의 성함을 확인해서 기록하고, 경과나 원인을 알게 되면 바로바로 전달한다.\n* 확인한 내용(트래픽 전/후, 광값, CRC, ping 결과)은 조장에게 함께 전달한다.", detailLabel: "문의 항목 보기", focus: [DN] },
-    { at: dn(dnWin), kind: "결과", title: `${DN} 회복: out ${g1(outAt(DN, dn(dnWin)))}G (다운 구간 ${hhmm(dnA.s)}~${hhmm(dnA.e)}, ${dnWin}분). 경과 문자 발송, 조장에게 결과 전달`, detail: dnRecover, detailLabel: "복구 안내 문자 보기", focus: [DN] }
+    { at: dn(16), kind: "조치", title: "연동망(상대 센터)에 문의 후 조장에게 전달", detail: "[연동망에 문의할 때 확인할 3가지]\n가. NOC 작업 유/무\n나. 연동 구간(타 부서·타 ISP) 작업 및 이슈 유/무\n다. 보안 관련 이슈 유/무\n\n* 통화한 분의 성함을 확인해서 기록하고, 경과나 원인을 알게 되면 바로바로 전달한다.\n* 확인한 내용(트래픽 전/후, 광값, CRC, ping 결과)은 조장에게 함께 전달한다.\n\n[경과 문자 예시] 복구 전까지는 계속 '경과'로 보냅니다\n" + dnProgress, detailLabel: "문의 항목·경과 문자 보기", focus: [DN] },
+    { at: dn(dnWin), kind: "결과", title: `${DN} 회복: out ${g1(outAt(DN, dn(dnWin)))}G (다운 구간 ${hhmm(dnA.s)}~${hhmm(dnA.e)}, ${dnWin}분). 경과 문자 발송, 조장에게 결과 전달`, detail: dnRecover, detailLabel: "완료 문자 보기", focus: [DN] }
   ] };
 
   addExplain(linkDown, [
     `안산 센터에서 중앙 백본으로 가는 업링크(${DN})의 in·out이 거의 0으로 떨어졌습니다. 속도가 줄어든 게 아니라 0에 가까우므로, 회선이 끊긴 것으로 의심합니다.`,
     `정확한 장비·회선명을 확인합니다. ${dDev}의 ${dPort} 포트가 이 회선입니다. descriptions 출력에서 Admin은 관리자가 켜 둔 상태, Link는 실제 연결 상태입니다. Admin up인데 Link down이므로 누가 일부러 내린 게 아니라 연결이 끊긴 것입니다.`,
     "트래픽 전/후를 확인해서 경과 문자에 넣을 값을 정합니다. Down이면 5분 전 값만 보고 이후는 0으로 적습니다(OUT 기준). 경과 문자가 나가기 전에 트래픽을 먼저 전달해야 합니다.",
-    "영향을 받는 고객사에 발생 문자를 보냅니다. 이 회선을 쓰는 고객사는 관련 회선 표의 고객사 열에서 확인합니다.",
+    "영향을 받는 고객사에 발생 문자를 보냅니다. 문자는 발생 → 경과 → 완료 순서이고, 이 문자는 첫 번째인 '발생'입니다. 아직 원인을 모르니 서비스영향과 VOC는 '파악중'으로 씁니다. 이 회선을 쓰는 고객사는 관련 회선 표의 고객사 열에서 확인합니다.",
     "광값과 CRC를 봅니다. 수신 광값이 -40dBm이면 빛이 전혀 들어오지 않는 것입니다. 광 케이블 접촉 불량이나 SFP 불량이 흔한 원인이라 이 둘을 먼저 의심합니다.",
     "상대 장비까지 닿는지 ping으로 봅니다. 링크가 Down이면 ARP도 비어 있고 ping도 100% 실패합니다. 우리 장비까지는 정상이고 선 건너편이 안 보이는 것으로 정리합니다.",
     "연동망(상대 센터)에 문의합니다. NOC 작업 유/무, 연동 구간 작업·이슈 유/무, 보안 이슈 유/무 세 가지를 묻고, 통화한 분의 성함을 기록합니다. 확인한 내용은 조장에게 전달합니다.",
-    "회선이 복구되었습니다. 복구 시각과 트래픽 회복 값을 확인하고 경과 문자를 보냅니다."
-  ], [null, [dDev], null, null, [dDev], [dDev], null, null], "끊긴 회선은 descriptions의 Admin/Link로 먼저 찾고, 광값·CRC → ping → 상대 구간 문의 순서로 좁혀 갑니다. 확인한 값은 문자와 보고에 그대로 씁니다.");
+    "회선이 복구되었습니다. 복구 시각과 트래픽 회복 값을 확인하고, 모든 조치가 끝났으므로 '완료' 문자를 보냅니다. 완료는 정말 다 끝났을 때만 쓰고, 그 전에는 '경과'로 보냅니다. 완료 문자에는 시작과 끝 일시, 조치 시간표가 들어갑니다."
+  ], [null, [dDev], null, null, [dDev], [dDev], null, null], "끊긴 회선은 descriptions의 Admin/Link로 먼저 찾고, 광값·CRC → ping → 상대 구간 문의 순서로 좁혀 갑니다. 확인한 값은 문자와 보고에 그대로 씁니다. 문자는 발생 → 경과 → 완료 순서로, 완료는 정말 끝났을 때만 보냅니다.");
 
   // 3) 트래픽 폭주: 월드컵 8강
   const ev = DATA.events.find(e => e.name.includes("8강")), cc = evCalc(ev);
@@ -1101,14 +1122,23 @@ function buildScenarios() {
   const fc = R3.temp.findIndex((t, i) => i >= al.s && t >= TD.crit), dv = R3.devices.find(x => x.downStart);
   const dMs = parseT(dv.downStart), tAt = i => g1(R3.temp[i]);
   const lk = TOPOLOGY.links.find(l => l.b === dv.id && DEV[l.a]), peer = DEV[lk.a], pif = peer.ifs.find(x => x[0] === lk.ap);   // 꺼진 장비와 이어진 상대 쪽 포트
+  const tmDev = R3.devices.map(x => x.id).join("·"), tmPartner = DEV[dv.id].partner, tmAt = ms => hm(ms);
+  const tmBase = { center: TOPOLOGY.centers[COOL.split("_")[1]].replace(" 센터", ""), title: `${COOL} 랙 입구 온도 경고`, target: `${COOL}(${tmDev})`, from: md(msOf(al.s)) };
+  const tmSms = smsNotice({ ...tmBase, stage: "발생", cause: `랙 입구 온도 상승(${TD.hot}°C 이상), 냉각 이상 의심`, impact: "파악중", voc: "파악중" });
+  const tmDone = smsNotice({ ...tmBase, stage: "완료", to: md(parseT("2026-10-26T17:15")), cause: "냉각 이상으로 랙 입구 온도 상승 → 냉각 복구 후 정상", actions: [
+    { t: tmAt(msOf(al.s)), txt: `${COOL} 입구 온도 경고 알람`, sub: ["[관제사이트] 확인"] },
+    { t: tmAt(msOf(fc) + 15 * 60000), txt: "냉각기 점검(티켓)·육안점검 요청" },
+    { t: tmAt(dMs), txt: `${dv.id} 과열로 꺼짐 확인`, sub: ["옆 장비 포트 Down, 광 수신 -40 dBm", "터미널 응답 없음"] },
+    { t: tmAt(parseT("2026-10-26T17:15")), txt: "냉각 복구, 온도 정상 확인" }
+  ], impact: `${dv.id} 꺼짐(${hm(dMs)}~${hm(parseT(dv.downEnd))}), 짝 장비 ${tmPartner}(${DEV[tmPartner].rack})가 받아 고객 영향 없음`, voc: "없음", spread: "AM" });
   const temp = { name: "서버실 온도 변화", tab: "room", center: "B", from: "2026-10-26T14:30", to: "2026-10-26T17:20", steps: [
     { at: isoLocal(msOf(al.s)), kind: "감지", title: `${COOL} 입구 온도 ${TD.hot}°C 이상 (${tAt(al.s)}°C): 온도 경고 등록`, focus: [COOL] },
     { at: isoLocal(msOf(fc)), kind: "감지", title: `${TD.crit}°C 이상 (${tAt(fc)}°C): 장비 LED 상태가 빨강 깜박임`, focus: [COOL] },
-    { at: isoLocal(msOf(fc) + 15 * 60000), kind: "조치", title: "냉각기 점검 요청(티켓)과 육안점검 요청", focus: [COOL] },
+    { at: isoLocal(msOf(fc) + 15 * 60000), kind: "조치", title: "냉각기 점검 요청(티켓)과 육안점검 요청", detail: tmSms, detailLabel: "발생 문자 보기", focus: [COOL] },
     { at: isoLocal(dMs), kind: "감지", title: `${dv.id} 과열로 꺼짐 (전원 LED 꺼짐)`, focus: [COOL] },
-    { at: isoLocal(dMs + 10 * 60000), kind: "조치", title: `터미널로 ${dv.id}와 이어진 ${peer.id} 포트(${lk.ap}) 확인: 빛이 안 들어와서 ${dv.id}이 꺼진 것으로 확인`, detail: runOn(peer.id, `show interfaces diagnostics optics ${lk.ap}`, null, isoLocal(dMs + 10 * 60000)) + `\n\n터미널로 ${dv.id}에 직접 들어가 보면:\n` + runOn(dv.id, "show interfaces descriptions", null, isoLocal(dMs + 10 * 60000)), sum: `광 수신 ${withTime(dMs + 10 * 60000, () => pif[3]).toFixed(2)} dBm, 수신 낮음 알람 켜짐 → 빛이 안 들어옴. ${dv.id} 터미널은 응답 없음`, detailLabel: "터미널 출력 보기", focus: [COOL] },
+    { at: isoLocal(dMs + 10 * 60000), kind: "조치", title: `터미널로 ${dv.id} 쪽과 이어진 ${peer.id} 포트(${lk.ap}) 확인: 빛이 안 들어와서 ${dv.id}이 꺼진 것으로 확인`, detail: runOn(peer.id, `show interfaces diagnostics optics ${lk.ap}`, null, isoLocal(dMs + 10 * 60000)) + `\n\n터미널로 ${dv.id}에 직접 들어가 보면:\n` + runOn(dv.id, "show interfaces descriptions", null, isoLocal(dMs + 10 * 60000)), sum: `광 수신 ${withTime(dMs + 10 * 60000, () => pif[3]).toFixed(2)} dBm, 수신 낮음 알람 켜짐 → 빛이 안 들어옴. ${dv.id} 터미널은 응답 없음`, detailLabel: "터미널 출력 보기", focus: [COOL] },
     { at: isoLocal(msOf(al.e) + 5 * 60000), kind: "확인", title: `냉각 복구: ${TD.hot}°C 아래로 내려옴 (${tAt(al.e + 1)}°C)`, focus: [COOL] },
-    { at: "2026-10-26T17:15", kind: "결과", title: `복구 완료 (${tAt(isoIdx("2026-10-26T17:15"))}°C). 육안점검 기록 남김: ${COOL} 이상 있음 → 정상 복귀`, focus: [COOL] }
+    { at: "2026-10-26T17:15", kind: "결과", title: `복구 완료 (${tAt(isoIdx("2026-10-26T17:15"))}°C). 육안점검 기록 남김: ${COOL} 이상 있음 → 정상 복귀`, detail: tmDone, detailLabel: "완료 문자 보기", focus: [COOL] }
   ] };
 
   addExplain(temp, [
@@ -1128,15 +1158,24 @@ function buildScenarios() {
   const rFocus = [...new Set(rLinks)].slice(0, 3);
   const trafficTxt = (m0, m1) => rFocus.map(id => `${id}: ${g1(outAt(id, rt(m0)))}G → ${g1(outAt(id, rt(m1)))}G (${((outAt(id, rt(m1)) / outAt(id, rt(m0)) - 1) * 100).toFixed(1)}%)`).join("\n");
   const hubIp = withTime(o2.s + 20 * 60000, () => (DEV[D2].ifs.find(f => f[8] && f[5] === "up") || [])[8]);
+  const rdBase = { center: TOPOLOGY.centers[D1.split("_")[1]].replace(" 센터", ""), title: `${D1} 장비 전원 꺼짐 (고객 영향 없음)`, target: `${D1}(${DEV[D1].rack})`, from: md(o2.s) };
+  const rdActs = [
+    { t: hm(o2.s), txt: `${D1} 꺼짐 알람 발생`, sub: ["[관제사이트] 확인", "터미널 접속 안 됨"] },
+    { t: hm(o2.s + 3 * 60000), txt: `짝 장비 ${D2} 확인`, sub: ["고객 회선 그대로 Up, 이중화로 전환 없이 유지"] },
+    { t: hm(o2.s + 8 * 60000), txt: `${D1} 전원 모듈 교체 요청(티켓)` }
+  ];
+  const rdSms = smsNotice({ ...rdBase, stage: "발생", cause: `${o2.why}으로 보임`, impact: `없음 (짝 장비 ${D2}에서 같은 고객 회선을 받고 있음)`, voc: "없음" });
+  const rdProgress = smsNotice({ ...rdBase, stage: "경과", cause: `${o2.why}으로 보임`, actions: [...rdActs, { t: hm(o2.e), txt: `${D1} 전원 복구, 이중화 복귀 확인` }], impact: `없음 (짝 장비 ${D2}에서 같은 고객 회선을 받음). 전원 모듈 교체 일정 협의 중`, voc: "없음" });
+  const rdDone = smsNotice({ ...rdBase, stage: "완료", to: md(o2.e + 5 * 60000), cause: `${o2.why}, 이중화로 고객 영향 없이 복구`, actions: [...rdActs, { t: hm(o2.e), txt: `${D1} 전원 복구, 이중화 복귀 확인` }, { t: hm(o2.e + 5 * 60000), txt: "전체 상태 정상 확인" }], impact: "없음 (이중화로 고객 회선 유지)", voc: "없음", spread: "AM" });
   const redundancy = { name: "이중화로 무사히 넘기기", tab: "monitor", center: codeOf(D1), win: 12, from: rt(-30), to: rt(downMin + 20), steps: [
     { at: rt(-10), kind: "확인", title: `평소: 짝 장비 ${D1}·${D2} 모두 정상, 같은 고객 회선이 두 장비에 똑같이 꽂혀 있음`, detail: runOn(D1, "show interfaces descriptions", null, rt(-10)), detailLabel: `${D1} 회선 목록 보기`, sum: `고객 회선 ${lu.length}개 사용 중 (10G ${g10}개, 1G ${lu.length - g10}개)`, focus: rFocus },
     { at: rt(0), kind: "감지", title: `${D1} 전원 꺼짐 (${o2.why}). 서버실 경고가 뜨고 터미널로 접속이 안 됨`, detail: runOn(D1, "show interfaces descriptions", null, rt(1)), detailLabel: `${D1} 터미널 시도 결과 보기`, focus: rFocus },
     { at: rt(3), kind: "확인", title: `짝 장비 ${D2}에서 보면 고객 회선은 그대로 Up, ${D1}과 이어진 짝 연결(PAIR1)만 Down`, detail: runOn(D2, "show interfaces descriptions", null, rt(3)), detailLabel: `${D2} 회선 목록 보기`, sum: "고객 회선은 짝 장비로 계속 이어짐", focus: rFocus },
     { at: rt(5), kind: "확인", title: "트래픽은 거의 그대로: 고객 회선이 짝 장비로 이어져 그래프 변화가 거의 없음", detail: `■ 트래픽 (장비 다운 직전 → 5분 뒤, OUT)\n${trafficTxt(-5, 5)}\n\n* 그래프가 거의 변하지 않았으므로 고객 장애는 없는 것으로 판단한다.`, detailLabel: "트래픽 비교 보기", focus: rFocus },
-    { at: rt(8), kind: "조치", title: `고객 영향이 없어 고객 안내는 하지 않고, 조장에게 보고하고 ${D1} 전원 모듈 교체를 요청`, detail: `[내부 보고 (가상)]\n${hm(o2.s)}에 ${D1}(${DEV[D1].rack})이 꺼졌습니다. 원인은 ${o2.why}으로 보입니다.\n짝 장비 ${D2}가 같은 고객 회선을 받고 있어 고객 영향은 없습니다. 그래프 변화도 거의 없습니다.\n${D1} 전원 모듈 교체를 요청했습니다(티켓). ${D2}가 한 대로 운영 중이므로 교체 전까지 ${D2}를 주의해서 보겠습니다.`, detailLabel: "보고 내용 보기", focus: rFocus },
+    { at: rt(8), kind: "조치", title: `고객 영향이 없어 고객 안내는 하지 않고, 조장에게 보고하고 ${D1} 전원 모듈 교체를 요청`, detail: `[발생 문자 예시] 고객 영향이 없어도 장비가 꺼진 것은 전파합니다.\n` + rdSms + `\n\n* 조장에게 보고하고 ${D1} 전원 모듈 교체를 요청했습니다(티켓). 짝 장비 ${D2} 한 대로 운영 중이므로 교체 전까지 ${D2} 상태를 주의해서 봅니다.`, detailLabel: "발생 문자 보기", focus: rFocus },
     { at: rt(20), kind: "확인", title: `지금은 ${D2} 한 대로 버티는 중: 이 장비를 더 주의해서 확인 (ping 정상)`, detail: runOn(D2, `ping ${hubIp} rapid count 100`, null, rt(20)) + "\n\n* 한 대가 더 죽으면 진짜 장애가 된다. 교체가 끝날 때까지 이 장비의 로그·CRC·온도를 계속 확인한다.", detailLabel: "터미널 출력 보기", focus: rFocus },
-    { at: isoLocal(o2.e), kind: "확인", title: `${D1} 전원 복구: 이중화 복귀 확인 (회선 목록이 다시 Up)`, detail: runOn(D1, "show interfaces descriptions", null, isoLocal(o2.e + 60000)), detailLabel: `${D1} 회선 목록 보기`, focus: rFocus },
-    { at: rt(downMin + 5), kind: "결과", title: `고객 영향 없음. 이중화가 없었다면 고객사 ${custOn.length}곳의 회선 ${lu.length}개(합계 ${sumG}G)가 ${downMin}분 끊겼을 것 (가정)`, focus: rFocus }
+    { at: isoLocal(o2.e), kind: "확인", title: `${D1} 전원 복구: 이중화 복귀 확인 (회선 목록이 다시 Up)`, detail: runOn(D1, "show interfaces descriptions", null, isoLocal(o2.e + 60000)) + "\n\n[경과 문자 예시] 장비는 돌아왔지만 전원 모듈 교체가 남아 있으므로 아직 '완료'가 아니라 '경과'입니다.\n" + rdProgress, detailLabel: `${D1} 회선 목록·경과 문자 보기`, focus: rFocus },
+    { at: rt(downMin + 5), kind: "결과", title: `고객 영향 없음. 이중화가 없었다면 고객사 ${custOn.length}곳의 회선 ${lu.length}개(합계 ${sumG}G)가 ${downMin}분 끊겼을 것 (가정)`, detail: "[완료 문자 예시] 이중화 복귀와 전체 정상까지 확인한 뒤에만 '완료'로 보냅니다.\n" + rdDone, detailLabel: "완료 문자 보기", focus: rFocus }
   ] };
   addExplain(redundancy, [
     `새벽 시간입니다. 이중화는 같은 고객 회선을 서로 다른 장비 두 대(${D1}, ${D2})에 똑같이 꽂아 두는 것입니다. 두 장비는 서로 다른 랙(${DEV[D1].rack}, ${DEV[D2].rack})에 있어서, 한쪽 전기가 나가도 반대쪽이 살려 줍니다. 두 장비의 회선 목록이 같은 포트로 보입니다. 평소에는 두 장비가 함께 트래픽을 나눠 받는다고 가정합니다.`,

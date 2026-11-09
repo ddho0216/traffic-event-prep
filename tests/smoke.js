@@ -276,6 +276,23 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const p6 = await dropPop(5);
   check('급감 시나리오 마지막 단계에 복구 안내 메일 예시: "[TEP IDC] ... 복구 완료 안내", 발생·복구 시각과 원인', /제목: \[TEP IDC\].*복구 완료 안내/.test(p6) && /발생:/.test(p6) && /복구:/.test(p6) && /원인:/.test(p6));
   await page.click('#scnClose');
+  // 장애 전파 문자 양식: [TEP IDC] / [Web발신] / [주의_센터_발생|경과|완료] 제목, ■ 대상·일시·원인·(조치)·서비스영향·VOC, 완료에만 끝 시각
+  const FIELDS = ['■ 대상 : ', '■ 일시 : ', '■ 원인 : ', '■ 서비스영향 : ', '■ VOC : '];
+  const smsCheck = (t, stage, center) => { const L = t.split('\n').map(x => x.trimEnd()), i = L.indexOf('[TEP IDC]'); if (i < 0) return false; const m = L.slice(i);
+    const idx = FIELDS.map(f => m.findIndex(x => x.startsWith(f)));
+    return m[1] === '[Web발신]' && m[2].startsWith(`[주의_${center}_${stage}] `) && m[3] === '' && idx.every(x => x > 0) && idx.every((x, k) => k === 0 || x > idx[k - 1]); };
+  const sms = await page.evaluate(() => { const S = buildScenarios(), g = (id, k) => S[id].steps[k].detail; return { fa: g('linkDown', 3), pr: g('linkDown', 6), dn: g('linkDown', 7), t1: g('temp', 2), t2: g('temp', 6), r1: g('redundancy', 4), r2: g('redundancy', 6), r3: g('redundancy', 7),
+    sample: smsNotice({ stage: '발생', center: '안산', title: '예시미디어, 샘플방송, 가상모빌리티 고객사 중앙 백본 업링크 단선', target: 'IDC_A_FS1(10.0.0.1)', from: '10/21 14:20', cause: '업링크가 끊겨 확인 중', impact: '파악중', voc: '파악중' }),
+    ddos: smsNotice({ stage: '발생', center: '분당', title: 'DDoS 공격 수신', target: 'IDC_B_FS1(10.0.0.1)', from: '03/18 15:30', cause: '국제망 DDoS 공격', attack: 'TCP (6.5 Gbps / 5.9 Mpps)', impact: '파악중', voc: '파악중' }),
+    bad: (() => { try { smsNotice({ stage: '끝', center: 'x', title: 'x', target: 'x', from: 'x', cause: 'x', impact: 'x', voc: 'x' }); return false; } catch (e) { return true; } })() }; });
+  check('문자 양식(발생): 알려 준 양식과 같은 순서 [TEP IDC]·[Web발신]·[주의_안산_발생] 제목, 빈 줄, ■ 대상·일시·원인·서비스영향·VOC', smsCheck(sms.sample, '발생', '안산') && sms.sample.includes('■ 일시 : 10/21 14:20 ~\n'), sms.sample.split('\n').slice(0, 4).join(' | '));
+  check('문자 양식: DDoS일 때는 ■ 공격량 줄이 원인 다음에 들어감', /■ 원인 : .+\n■ 공격량 : TCP \(6\.5 Gbps \/ 5\.9 Mpps\)\n■ 서비스영향/.test(sms.ddos));
+  check('문자 단계는 발생·경과·완료만 허용됨', sms.bad);
+  check('업링크 회선 다운: 발생 문자(서비스영향·VOC 파악중, 일시는 끝 없이 "~")', smsCheck(sms.fa, '발생', '안산') && sms.fa.includes('■ 서비스영향 : 파악중') && /■ 일시 : \d\d\/\d\d \d\d:\d\d ~\n/.test(sms.fa) && !sms.fa.includes('■ 조치'));
+  check('업링크 회선 다운: 경과 문자는 조치 시간표(시각 + 세부)가 있고 끝 시각과 "전파"는 없음', smsCheck(sms.pr.split('[경과 문자 예시]')[1], '경과', '안산') && /■ 조치 :\n\d\d:\d\d .+\n - /.test(sms.pr) && !/■ 일시 : .* ~ \d/.test(sms.pr.split('[경과 문자 예시]')[1]) && !sms.pr.split('[경과 문자 예시]')[1].includes('■ 전파'));
+  check('업링크 회선 다운: 완료 문자는 시작~끝 일시, 마지막 조치 "회선 복구 확인", 전파 항목이 있음', smsCheck(sms.dn, '완료', '안산') && /■ 일시 : \d\d\/\d\d \d\d:\d\d ~ \d\d\/\d\d \d\d:\d\d\n/.test(sms.dn) && /\d\d:\d\d 회선 복구 확인/.test(sms.dn) && sms.dn.includes('■ 전파 : '));
+  check('서버실 온도 시나리오: 발생·완료 문자, 이중화로 영향 없음이 서비스영향에 적힘', smsCheck(sms.t1, '발생', '분당') && smsCheck(sms.t2, '완료', '분당') && /짝 장비 IDC_B_FS5/.test(sms.t2) && /영향 없음/.test(sms.t2));
+  check('이중화 시나리오: 발생(영향 없음) → 경과(장비는 돌아왔지만 교체가 남음) → 완료(전체 정상 확인) 순서로 문자가 나옴', smsCheck(sms.r1.split('\n').slice(1).join('\n'), '발생', '분당') && sms.r2.includes('[주의_분당_경과]') && sms.r2.includes('아직 \'완료\'가 아니라 \'경과\'') && sms.r3.includes('[주의_분당_완료]') && sms.r3.includes('전체 상태 정상 확인') && !sms.r2.split('[경과 문자 예시]')[1].includes('■ 전파'));
   const mails = await page.evaluate(() => [(ev => evNoticeText(ev, evCalc(ev)))(DATA.events.find(e => e.name.includes('8강'))), replyText(parseMail(SAMPLE_MAIL))].map(x => x.split('\n')[0]));
   check('다른 메일 제목에도 [TEP IDC]가 붙음 (경기 사전 안내, 방문 회신)', mails.every(x => x.includes('[TEP IDC]')), mails.join(' | '));
   const scenarios = [['calm', '평일 오후 7시', 4, ['그래프 15개 확인', '서버실 확인', '이상 없음']], ['drop', '트래픽 급감', 6, ['급감', 'IDC_B_FS2_INTL1', '광값', '예시미디어', '회복']],
