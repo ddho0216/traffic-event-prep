@@ -1416,12 +1416,12 @@ function r3DetailNow() {
   const colX = c => PAD + c * PX + (CARD ? Math.floor(c / CARD) * GAPW : 0);
   const W = colX(pl.cols - 1) + PX + PAD, plateH = HEAD + 2 * 30 + PAD, H = ZONE * 2 + plateH;
   const pos = k => ({ x: colX(Math.floor(k / 2)) + 10, row: k % 2, y: ZONE + HEAD + (k % 2) * 30 });
-  const used = [...pl.map.keys()].sort((a, b) => a - b), cabled = used.filter(k => !pl.map.get(k)[11]), outNow = outageAt(d.id, msOf(clamp(sr.end, 0, N - 1)));   // 아직 안 쓰는 회선에는 케이블을 그리지 않는다
+  const slot = R3.slot, inSlot = k => !slot || (k >= slot.a && k < slot.b), used = [...pl.map.keys()].sort((a, b) => a - b), cabled = used.filter(k => !pl.map.get(k)[11] && inSlot(k)), outNow = outageAt(d.id, msOf(clamp(sr.end, 0, N - 1)));   // 아직 안 쓰는 회선에는 케이블을 그리지 않는다
   const sel = R3.port != null && pl.map.has(R3.port) ? R3.port : null;
   const peerOf = f => { if (f[10]) return { dev: f[1], port: "", kind: `고객 회선 (홈 ${f[10].home})`, gbps: f[9] }; const lk = f[4]; return { dev: f[1], port: lk ? (lk.a === d.id ? lk.bp : lk.ap) : "", kind: lk ? lk.kind : "", gbps: lk ? lk.gbps : "" }; };
   let svg = "", tags = "", plate = "";
   for (let k = 0; k < pl.total; k++) { const p = pos(k), f = pl.map.get(k);
-    plate += `<button class="pt${f ? (portBad(f) ? " x" : f[5] === "down" ? " d" : " u") : ""}${k === sel ? " sel" : ""}" data-i="${k}" style="left:${p.x - 10}px;top:${p.y}px" title="포트 ${k}${f ? " → " + f[1] : " (비어 있음)"}">${k}</button>`; }
+    plate += `<button class="pt${f ? (portBad(f) ? " x" : f[5] === "down" ? " d" : " u") : ""}${k === sel ? " sel" : ""}${inSlot(k) ? "" : " dim"}" data-i="${k}" style="left:${p.x - 10}px;top:${p.y}px" title="포트 ${k}${f ? " → " + f[1] : " (비어 있음)"}">${k}</button>`; }
   [0, 1].forEach(rw => {   // rw 0 = 위줄(케이블 위로), 1 = 아래줄(케이블 아래로)
     const mine = cabled.filter(k => k % 2 === rw);
     const want = mine.filter(k => k === sel || portBad(pl.map.get(k)));
@@ -1436,22 +1436,24 @@ function r3DetailNow() {
       tags += `<div class="ctag${bad ? " x" : ""}${k === sel ? " sel" : ""}" style="left:${tx - 72}px;top:${up ? ty - 46 : ty + 2}px"><b>${esc(pe.dev)}</b> ${esc(pe.port === "-" ? "" : pe.port)}<br><span>${esc(pe.kind || "외부 연결")}${pe.gbps ? " · " + pe.gbps + "G" : ""} · 수신 ${f[3].toFixed(1)} dBm${f[2] ? " · CRC " + f[2] : ""}</span></div>`;
     });
   });
-  const rows = used.map(k => { const f = pl.map.get(k), pe = peerOf(f);
+  const rows = used.filter(inSlot).map(k => { const f = pl.map.get(k), pe = peerOf(f);
     return `<tr class="click${k === sel ? " on" : ""}" data-i="${k}"><td>${f[0]}</td><td>${esc(pe.dev)}${pe.port && pe.port !== "-" ? " " + esc(pe.port) : ""}</td><td>${esc(pe.kind || "외부 연결")}</td><td class="n">${pe.gbps}</td><td class="n ${f[3] < -9 ? "crit-t" : ""}">${f[3].toFixed(2)}</td><td class="n ${f[2] > 50 ? "crit-t" : ""}">${f[2]}</td><td class="${f[5] === "down" && !f[11] ? "crit-t" : "muted"}">${f[11] === "unused" ? "미사용 (Link down)" : f[11] === "off" ? "미사용 (Admin down)" : f[6] === "down" ? "Admin down" : f[5] === "down" ? "Link down" : "Up"}</td></tr>`; }).join("");
   const label = { ok: "정상", warn: "주의", crit: "장애", off: "꺼짐" };
   $("#r3Detail").hidden = false;
-  $("#r3DBody").innerHTML = `<div class="dhd"><b>${d.id}</b><span class="tag">${{ juniper: "Juniper", cisco: "Cisco", huawei: "Huawei" }[d.vendor]}</span><span class="muted">${esc(d.role)} · ${d.rack} · 입구 ${rack.temp[i].toFixed(1)}°C</span>${ledHtml(st)}<span class="muted">전원 ${st.power ? "켜짐" : "꺼짐"} · 상태 ${label[st.status]} · 팬 ${label[st.fan]}</span>${outNow ? `<span class="tag crit">전원 꺼짐${outNow.why ? ": " + esc(outNow.why) : ""}</span>` : ""}<span class="sp"></span><button class="btn" id="r3DTerm">이 장비 터미널 열기</button><button class="btn" id="r3DClose">닫기</button></div>` +
+  $("#r3DBody").innerHTML = `<div class="dhd"><b>${d.id}</b>${slot ? `<span class="tag ok">칸: ${esc(slot.label)}</span><button class="btn sm" id="r3SlotAll" type="button">장비 전체 보기</button>` : ""}<span class="tag">${{ juniper: "Juniper", cisco: "Cisco", huawei: "Huawei" }[d.vendor]}</span><span class="muted">${esc(d.role)} · ${d.rack} · 입구 ${rack.temp[i].toFixed(1)}°C</span>${ledHtml(st)}<span class="muted">전원 ${st.power ? "켜짐" : "꺼짐"} · 상태 ${label[st.status]} · 팬 ${label[st.fan]}</span>${outNow ? `<span class="tag crit">전원 꺼짐${outNow.why ? ": " + esc(outNow.why) : ""}</span>` : ""}<span class="sp"></span><button class="btn" id="r3DTerm">이 장비 터미널 열기</button><button class="btn" id="r3DClose">닫기</button></div>` +
     `<p class="note">노란 선이 꽂혀 있는 광케이블(가상, 단일모드로 가정)이고 빨간 선은 광 수신이 약하거나 CRC 오류가 많은 포트입니다. 회색 포트는 아직 쓰지 않는 회선(Down)이라 케이블을 그리지 않았습니다. 위줄 포트의 케이블은 위로, 아래줄은 아래로 나갑니다. 포트를 누르면 표시됩니다.</p>` +
     `<div class="dscroll"><div class="dwrap" style="width:${W}px;height:${H}px"><svg width="${W}" height="${H}">${svg}</svg>` +
     `<div class="plate ${d.vendor}" style="left:0;top:${ZONE}px;width:${W}px;height:${plateH}px"><span class="pl">${d.id} · ${d.vendor === "cisco" ? "Cisco Nexus 7710 (추정)" : d.vendor === "juniper" ? "Juniper" : "Huawei"}</span></div>${plate}${tags}</div></div>` +
     `<div class="card" style="padding:0;margin-top:10px;max-height:240px;overflow:auto"><table><tr><th>포트</th><th>연결 상대</th><th>종류</th><th class="n">Gbps</th><th class="n">수신 dBm</th><th class="n">CRC</th><th>상태</th></tr>${rows || `<tr><td colspan="6" class="muted">연결된 포트가 없습니다.</td></tr>`}</table></div>`;
+  if (slot) { const sc = document.querySelector("#r3DBody .dscroll"); if (sc) sc.scrollLeft = Math.max(0, pos(slot.a).x - 60); }   // 고른 칸이 보이도록 옆으로 옮긴다
 }
-function r3Open(id) { R3.dev = id; R3.port = null; r3Detail(); }
+function r3Open(id, slot) { R3.dev = id; R3.port = null; R3.slot = slot && slot.ports ? { a: slot.ports[0], b: slot.ports[1], label: slot.label } : null; r3Detail(); }
 function r3Close() { R3.dev = null; $("#r3Detail").hidden = true; }
 (function initDetailModal() {   // 장비 상세(포트·광케이블) 창의 버튼
   $("#r3Detail").addEventListener("click", ev => {
     if (ev.target.id === "r3Detail" || ev.target.id === "r3DClose") { r3Close(); return; }
     if (ev.target.id === "r3DTerm") { openDeviceTerminal(R3.dev); return; }
+    if (ev.target.id === "r3SlotAll") { R3.slot = null; R3.port = null; r3Detail(); return; }
     const pt = ev.target.closest("[data-i]"); if (pt) { R3.port = +pt.dataset.i; r3Detail(); }
   });
   window.addEventListener("keydown", e => { if (e.key === "Escape" && R3.dev) r3Close(); });

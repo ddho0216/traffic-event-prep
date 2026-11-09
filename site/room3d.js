@@ -253,9 +253,40 @@ function bindControls(cv) {
   cv.addEventListener("pointerleave", e => { if (e.pointerType === "mouse") hideTip(); });
   cv.addEventListener("wheel", e => { e.preventDefault(); G.fly = null; G.cs.dist = clamp(G.cs.dist * (e.deltaY < 0 ? 0.9 : 1.1), ZMIN, ZMAX); placeCam(); }, { passive: false });
 }
+/* ---------- 장비 앞면의 칸(모듈·포트 묶음): 확대한 장비에서 칸을 누르면 그 칸의 포트·광케이블을 볼 수 있다 ---------- */
+function slotsOf(kind, u, pl) {   // 좌표는 장비 앞면 그림(devTexture)과 같은 픽셀 기준 (가로 640, 세로 u*40)
+  const w = 640, h = u * 40, out = [];
+  if (kind === "cisco") {
+    const supH = 54, psuH = 60, ioH = (h - supH * 2 - psuH - 22) / 8, cards = Math.min(8, Math.ceil(pl.total / 12));
+    let y = 8, c = 0;
+    const io = () => { const ports = c < cards ? [c * 12, Math.min(pl.total, c * 12 + 12)] : null; out.push({ key: `io${c + 1}`, type: ports ? "io" : "empty", label: ports ? `I/O ${c + 1}` : `빈 슬롯 (I/O ${c + 1})`, x: 10, y, w: w - 20, h: ioH - 4, ports }); c++; y += ioH; };
+    for (let k = 0; k < 4; k++) io();
+    for (let s = 0; s < 2; s++) { out.push({ key: `sup${s + 1}`, type: "sup", label: `슈퍼바이저 SUP${s + 1}`, x: 10, y, w: w - 20, h: supH - 6, ports: null }); y += supH; }
+    for (let k = 0; k < 4; k++) io();
+    y += 6; out.push({ key: "psu", type: "psu", label: "전원부 (PSU)", x: 12, y, w: w - 24, h: psuH - 8, ports: null });
+  } else {
+    const A = kind === "juniper" ? { x: 220, y: 22, w: 330, h: h - 44 } : { x: 205, y: 6, w: 340, h: h - 12 }, cols = pl.cols, cw = A.w / cols, BLK = 6;
+    for (let g = 0; g * BLK < cols; g++) {
+      const c0 = g * BLK, c1 = Math.min(cols, c0 + BLK), a = c0 * 2, b = Math.min(pl.total, c1 * 2);
+      out.push({ key: `pg${g + 1}`, type: "ports", label: `포트 ${a}~${b - 1}`, x: A.x + c0 * cw, y: A.y, w: (c1 - c0) * cw, h: A.h, ports: [a, b] });
+    }
+  }
+  return out;
+}
+function slotAt(u, uv) {
+  if (!uv || !DEV[u.id]) return null;
+  const tx = uv.x * 640, ty = (1 - uv.y) * (u.u * 40), pl = portPlan(DEV[u.id]);
+  return slotsOf(u.kind, u.u, pl).find(s => tx >= s.x && tx <= s.x + s.w && ty >= s.y && ty <= s.y + s.h) || null;
+}
+function slotInfo(it, sl) {   // 오른쪽 상세에 보여 줄 칸 설명
+  const pl = portPlan(DEV[it.id]);
+  if (!sl.ports) return { sup: "슈퍼바이저: 장비를 관리하는 제어 모듈입니다. 포트가 없습니다 (가상 그림).", psu: "전원부: 전원을 공급하는 모듈입니다. 포트가 없습니다 (가상 그림).", empty: "빈 슬롯: 모듈이 꽂혀 있지 않습니다 (가상 그림)." }[sl.type];
+  let n = 0, bad = 0, off = 0; for (let k = sl.ports[0]; k < sl.ports[1]; k++) { const f = pl.map.get(k); if (f) { n++; if (portBad(f)) bad++; else if (f[5] === "down") off++; } }
+  return `${sl.type === "io" ? "I/O 모듈(라인 카드)" : "포트 묶음"}: 포트 ${sl.ports[0]}~${sl.ports[1] - 1}, 연결 ${n}개${off ? ` (미사용 Down ${off}개)` : ""}${bad ? `, 이상 ${bad}개` : ""}.`;
+}
 function rayAt(e) {
   const b = G.r.domElement.getBoundingClientRect(), v = new THREE.Vector2(((e.clientX - b.left) / b.width) * 2 - 1, -((e.clientY - b.top) / b.height) * 2 + 1);
-  G.rc.setFromCamera(v, G.cam); const hit = G.rc.intersectObjects(G.ray, false)[0]; return hit ? hit.object.userData : null;
+  G.rc.setFromCamera(v, G.cam); const hit = G.rc.intersectObjects(G.ray, false)[0]; G.lastHit = hit || null; return hit ? hit.object.userData : null;
 }
 function hover(e) {
   const u = rayAt(e); G.r.domElement.style.cursor = u ? "pointer" : "grab";
@@ -263,11 +294,17 @@ function hover(e) {
   if (!u) { hideTip(); return; }
   const rk = RACKS.find(r => r.id === u.rack);
   tip.textContent = u.kind === "rack" ? `${u.rack} (랙)` : `${u.name || u.id} · ${KIND_TXT[u.kind]} · ${u.rack} U${u.u0}${u.u > 1 ? "–" + (u.u0 + u.u - 1) : ""}`;
+  if (u.kind !== "rack" && G.sel && G.sel.id === u.id && G.lastHit && G.lastHit.face && G.lastHit.face.normal.z > 0.5) { const sl = slotAt(u, G.lastHit.uv); if (sl) tip.textContent += ` · ${sl.label} (누르면 이 칸 선택)`; }
   const b = $("#glWrap").getBoundingClientRect(); tip.style.left = Math.min(e.clientX - b.left + 14, b.width - 260) + "px"; tip.style.top = (e.clientY - b.top + 14) + "px"; tip.hidden = false;
 }
 function hideTip() { const t = $("#glTip"); if (t) t.hidden = true; }
 function pick(e) {
   const u = rayAt(e);
+  if (u && u.kind !== "rack" && G.sel && G.sel.id === u.id && G.sel.rack === u.rack && DEV[u.id]) {   // 확대한 장비를 다시 누르면 그 자리의 칸을 고른다
+    const h = G.lastHit, sl = h && h.face && h.face.normal.z > 0.5 ? slotAt(u, h.uv) : null;
+    G.slot = sl ? Object.assign({ id: u.id }, sl) : null; render3d(); return;
+  }
+  G.slot = null;
   G.sel = u ? (u.kind === "rack" ? { kind: "rack", rack: u.rack } : { kind: u.kind, id: u.id, rack: u.rack, u0: u.u0, u: u.u }) : null;
   G.focus = G.sel ? { rack: G.sel.rack, u0: G.sel.kind === "rack" ? 0 : G.sel.u0, u: G.sel.u } : { fit: true };
   render3d();
@@ -308,6 +345,11 @@ function buildRack(r, k, i, sel) {
     const side = dark(0x232a31), front = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.55, metalness: 0.35 });
     const m = new THREE.Mesh(new THREE.BoxGeometry(FW, h, dep), [side, side, side, side, front, side]);
     m.position.set(0, y, zf - dep / 2); m.userData = { kind: it.kind, id: it.id, name: it.id, rack: r.id, u0: it.u0, u: it.u }; G.ray.push(m); g.add(m);
+    if (G.slot && G.slot.id === it.id && sel && sel.id === it.id && sel.rack === r.id) {   // 고른 칸: 파란 덮개와 테두리
+      const sl = G.slot, sw = sl.w / 640 * FW, sh = sl.h / (it.u * 40) * h, cx = (sl.x + sl.w / 2) / 640 * FW - FW / 2, cy = y + h / 2 - (sl.y + sl.h / 2) / (it.u * 40) * h;
+      const so = new THREE.Mesh(new THREE.PlaneGeometry(sw, sh), new THREE.MeshBasicMaterial({ color: 0x59b4f5, transparent: true, opacity: 0.32 })); so.position.set(cx, cy, zf + 0.011); g.add(so);
+      const se = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(sw, sh)), new THREE.LineBasicMaterial({ color: 0x9bd3ff })); se.position.set(cx, cy, zf + 0.012); g.add(se);
+    }
     if (sel && sel.id === it.id && sel.rack === r.id) {   // 선택한 장비: 초록 테두리와 반투명 덮개
       const ov = new THREE.Mesh(new THREE.BoxGeometry(FW + 0.02, h + 0.012, 0.01), new THREE.MeshBasicMaterial({ color: 0x35d070, transparent: true, opacity: 0.28 })); ov.position.set(0, y, zf + 0.008); g.add(ov);
       const ed = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(FW + 0.02, h + 0.012, 0.012)), new THREE.LineBasicMaterial({ color: 0x35d070 })); ed.position.copy(ov.position); g.add(ed);
@@ -370,6 +412,7 @@ function detailHtml(vr, rows, i) {
   const ev = []; if (dv.fanWarn) ev.push("팬 경고가 계속 켜져 있음 (교체 대기 가정)"); if (dv.downStart) ev.push(`${md(parseT(dv.downStart))} ~ ${hm(parseT(dv.downEnd))} 꺼짐${dv.downWhy ? ` (${dv.downWhy})` : ""}`);
   const led = { ok: "정상", warn: "주의", crit: "장애", off: "꺼짐" };
   return `<h3>${d.id} <span class="tag ${stCls(!st.power ? "crit" : st.status === "crit" ? "crit" : st.status === "warn" ? "hot" : st.fan === "warn" ? "warn" : "ok")}">${!st.power ? "꺼짐" : st.status === "ok" && st.fan === "ok" ? "정상" : "주의"}</span></h3><p class="note">자산 ID: ${d.id}</p>` +
+    slotBox(it) +
     `<table class="kv"><tr><td>종류</td><td>${KIND_TXT[d.vendor]}</td></tr><tr><td>역할</td><td>${esc(d.role)}</td></tr><tr><td>랙 위치</td><td>${d.rack} · ${uTxt}</td></tr>` +
     `<tr><td>LED</td><td>${ledHtml(st)} <span class="muted">전원 ${led[st.power ? "ok" : "off"]} · 상태 ${led[st.status]} · 팬 ${led[st.fan]}</span></td></tr><tr><td>랙 입구 온도</td><td class="${tempCls(rk.temp[i])}">${rk.temp[i].toFixed(1)}°C</td></tr><tr><td>장비 온도</td><td class="${tempCls(devTemp(rk, { u0: it.u0 }, i))}">${devTemp(rk, { u0: it.u0 }, i).toFixed(1)}°C <span class="muted">(입구 온도 + 높이 보정, 가정)</span></td></tr>` +
     `<tr><td>포트</td><td>${pl.map.size}개 연결 / ${pl.total} (고객 회선 ${d.ifs.filter(f => f[10]).length}개: 사용 중 ${d.ifs.filter(f => f[10] && !f[11]).length}, 미사용 Down ${d.ifs.filter(f => f[10] && f[11]).length} · 10G ${d.ifs.filter(f => f[10] && f[9] === 10).length}, 1G ${d.ifs.filter(f => f[10] && f[9] === 1).length})${bad ? ` · <span class="crit-t">이상 ${bad}</span>` : ""}</td></tr>${off ? `<tr><td>접속</td><td class="crit-t">전원 꺼짐${off.why ? " (" + esc(off.why) + ")" : ""}: 터미널은 응답 없음, 포트 전부 Down</td></tr>` : ""}<tr><td>이중화 짝</td><td>${d.partner} <span class="muted">(같은 고객 회선 목록)</span></td></tr>${cust.length ? `<tr><td>고객사</td><td>${esc(cust.join(" · "))}</td></tr>` : ""}` +
@@ -377,6 +420,11 @@ function detailHtml(vr, rows, i) {
     (links ? `<h4>연결 회선 트래픽 (이 시각)</h4><table class="kv">${links}</table>` : "") +
     `<h4>장비 간 연결 (일부)</h4><ul class="alist">${peers}</ul><h4>최근 알림·점검</h4><ul class="alist">${ev.length ? ev.map(x => `<li>${x}</li>`).join("") : "<li class=\"muted\">알림 없음</li>"}</ul>` +
     `<div class="btnrow"><button class="btn" id="glPorts">포트·광케이블 자세히</button><button class="btn" id="glTerm">터미널 열기</button></div>`;
+}
+function slotBox(it) {   // 확대한 장비에서 칸을 고르면 나오는 상자
+  if (!G.slot || G.slot.id !== it.id) return `<p class="note" style="margin:8px 0 0">장비를 누른 뒤 한 번 더 앞면의 칸(모듈·포트 묶음)을 누르면 그 칸의 포트·광케이블을 볼 수 있습니다.</p>`;
+  const sl = G.slot;
+  return `<div class="slotbox"><b>선택한 칸: ${esc(sl.label)}</b><div class="muted">${esc(slotInfo(it, sl))}</div><div class="btnrow">${sl.ports ? `<button class="btn primary" id="glSlotPorts">이 칸의 포트·광케이블 자세히 보기</button>` : ""}<button class="btn" id="glSlotClear">칸 선택 해제</button></div></div>`;
 }
 function renderPanels(vr, rows, i) {
   const q = G.q.trim().toLowerCase();
@@ -401,6 +449,7 @@ function render3d() {
   const i = clamp(sr.end, 0, N - 1), vr = visibleRacks(), rows = r3Rows(vr);
   $("#r3Time").value = isoLocal(msOf(i));
   if (G.center !== view.center) { G.center = view.center; G.row = 0; G.sel = null; }
+  if (!G.sel || !G.slot || G.slot.id !== G.sel.id) G.slot = null;
   if (G.sel && !vr.some(r => r.id === G.sel.rack)) G.sel = null;
   if (G.jump && G.sel) G.row = Math.max(0, rows.findIndex(x => x.racks.some(r => r.id === G.sel.rack)));
   G.jump = false; G.row = clamp(G.row, 0, rows.length - 1);
@@ -440,7 +489,9 @@ function render3d() {
   $("#glList").addEventListener("click", ev => { const el = ev.target.closest(".gli"); if (el) { G.sel = { kind: "rack", rack: el.dataset.rack }; G.jump = true; G.focus = { rack: el.dataset.rack, u0: 0 }; render3d(); } });
   $("#glAlerts").addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { if (+tr.dataset.t) sr.end = +tr.dataset.t; G.sel = { kind: "rack", rack: tr.dataset.rack }; G.jump = true; G.focus = { rack: tr.dataset.rack, u0: 0 }; render3d(); } });
   $("#glDevs").addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { const d = tr.dataset; G.sel = { kind: d.kind, id: d.id, rack: d.rack, u0: +d.u0, u: +d.u }; G.focus = { rack: d.rack, u0: +d.u0, u: +d.u }; render3d(); } });
-  $("#glDetail").addEventListener("click", ev => { if (ev.target.id === "glPorts") r3Open(G.sel.id); if (ev.target.id === "glTerm") openDeviceTerminal(G.sel.id); });
+  $("#glDetail").addEventListener("click", ev => { if (ev.target.id === "glPorts") r3Open(G.sel.id);
+    if (ev.target.id === "glSlotPorts" && G.slot) r3Open(G.sel.id, G.slot);
+    if (ev.target.id === "glSlotClear") { G.slot = null; render3d(); } if (ev.target.id === "glTerm") openDeviceTerminal(G.sel.id); });
   $$("[data-r3]").forEach(b => b.onclick = () => {
     sr.end = idxOf(parseT(b.dataset.r3));
     if (b.dataset.center && view.center !== "ALL" && view.center !== b.dataset.center) setCenter(b.dataset.center);

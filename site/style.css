@@ -368,3 +368,6 @@ nav.tabs .beta{font-size:10px;color:var(--warn);border:1px solid #54421d;border-
 .lv-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media (max-width:1000px){.lv-2{grid-template-columns:1fr}}
 
 .lv-alert.warn{background:#1a1710;border-color:#54421d;color:var(--warn)}
+
+.pt.dim{opacity:.28}
+.slotbox{margin:10px 0 0;padding:8px 10px;border:1px solid #2f5a7d;background:#10283a;border-radius:4px}.slotbox .btnrow{margin-top:6px}

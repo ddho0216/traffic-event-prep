@@ -347,6 +347,32 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   });
   await page.mouse.click(spot.x, spot.y);
   check('서버실-3D: 3D 화면의 장비를 누르면 오른쪽에 그 장비 상세가 나옴 (Cisco 섀시)', /IDC_S_FR\d/.test(await page.locator('#glDetail h3').innerText()) && (await page.locator('#glDetail').innerText()).includes('자산 ID'), await page.locator('#glDetail h3').innerText());
+  // 확대한 장비의 칸(모듈·포트 묶음) 선택 → 그 칸의 포트·광케이블 자세히 보기
+  await flyDone();
+  const slotSpot = key => page.evaluate(k => {
+    const m = G.ray.find(o => o.userData.kind === 'cisco'), u = m.userData, sl = slotsOf('cisco', u.u, portPlan(DEV[u.id])).find(x => x.key === k), P = m.geometry.parameters;
+    const v = new THREE.Vector3((sl.x + sl.w / 2) / 640 * P.width - P.width / 2, m.position.y + P.height / 2 - (sl.y + sl.h / 2) / (u.u * 40) * P.height, m.position.z + P.depth / 2);
+    m.parent.localToWorld(v); v.project(G.cam); const r = G.r.domElement.getBoundingClientRect(); return { x: r.left + (v.x + 1) / 2 * r.width, y: r.top + (1 - v.y) / 2 * r.height };
+  }, key);
+  check('칸 계산: Cisco는 I/O 8 + SUP 2 + 전원부, Juniper·Huawei는 포트 묶음이 포트 전체를 빈틈없이 덮음', await page.evaluate(() => {
+    const cs = slotsOf('cisco', 14, portPlan(DEV[TOPOLOGY.devices.find(d => d.vendor === 'cisco').id])), ok = cs.filter(x => x.type === 'io' || x.type === 'empty').length === 8 && cs.filter(x => x.type === 'sup').length === 2 && cs.filter(x => x.type === 'psu').length === 1;
+    return ['juniper', 'huawei'].every(v => { const d = DEV[TOPOLOGY.devices.find(x => x.vendor === v).id], pl = portPlan(d), g = slotsOf(v, v === 'juniper' ? 6 : 2, pl); let at = 0; return g.every(x => { const o = x.ports[0] === at; at = x.ports[1]; return o; }) && at === pl.total; }) && ok;
+  }));
+  await page.mouse.click((await slotSpot('io2')).x, (await slotSpot('io2')).y);
+  const sb = await page.evaluate(() => ({ slot: G.slot && G.slot.label, box: document.getElementById('glDetail').innerText, btn: !!document.getElementById('glSlotPorts') }));
+  check('확대한 장비의 칸(I/O 2)을 누르면 오른쪽에 "선택한 칸: I/O 2"와 설명, "이 칸의 포트·광케이블 자세히 보기" 버튼이 나옴', sb.slot === 'I/O 2' && sb.box.includes('선택한 칸: I/O 2') && sb.box.includes('포트 12~23') && sb.btn, JSON.stringify([sb.slot, sb.btn]));
+  await page.click('#glSlotPorts');
+  const sd = await page.evaluate(() => ({ vis: !document.getElementById('r3Detail').hidden, head: document.querySelector('#r3DBody .dhd').innerText, rows: document.querySelectorAll('#r3DBody table tr[data-i]').length, dim: document.querySelectorAll('#r3DBody .pt.dim').length, all: document.querySelectorAll('#r3DBody .pt').length }));
+  check('버튼을 누르면 포트·광케이블 자세히 창이 열리고 "칸: I/O 2" 표시, 표에는 그 칸의 포트(최대 12개)만 나오고 나머지 포트는 흐리게 보임', sd.vis && sd.head.includes('칸: I/O 2') && sd.rows > 0 && sd.rows <= 12 && sd.dim === sd.all - 12, JSON.stringify(sd));
+  await page.click('#r3SlotAll');
+  const sa = await page.evaluate(() => ({ rows: document.querySelectorAll('#r3DBody table tr[data-i]').length, dim: document.querySelectorAll('#r3DBody .pt.dim').length, head: document.querySelector('#r3DBody .dhd').innerText }));
+  check('"장비 전체 보기"를 누르면 모든 포트가 다시 나옴', sa.rows > sd.rows && sa.dim === 0 && !sa.head.includes('칸:'));
+  await page.click('#r3DClose');
+  await page.mouse.click((await slotSpot('sup1')).x, (await slotSpot('sup1')).y);
+  const sp = await page.evaluate(() => ({ slot: G.slot && G.slot.label, btn: !!document.getElementById('glSlotPorts'), box: document.getElementById('glDetail').innerText }));
+  check('슈퍼바이저 칸을 누르면 포트가 없다는 설명만 나오고 포트 버튼은 없음', sp.slot === '슈퍼바이저 SUP1' && !sp.btn && sp.box.includes('포트가 없습니다'));
+  await page.click('#glSlotClear');
+  check('"칸 선택 해제"를 누르면 칸 상자가 사라지고 안내 문구로 돌아옴', (await page.evaluate(() => G.slot)) === null && (await page.locator('#glDetail').innerText()).includes('한 번 더 앞면의 칸'));
   await page.mouse.click(cv.x + 8, cv.y + 8);
   check('서버실-3D: 빈 곳을 누르면 선택이 풀림', (await page.locator('#glDetail h3').innerText()).includes('요약'));
   // 확대/축소/드래그/정면
