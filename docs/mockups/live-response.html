@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>목업: 실시간 대응 모드</title>
+<style>
+:root{--bg:#0a0f14;--card:#111a23;--line:#22313f;--tx:#e6eef5;--mu:#8aa0b2;--ac:#59b4f5;--ok:#47c28b;--warn:#e8a23b;--bad:#e85a4f}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.5 "Noto Sans CJK KR","Noto Sans KR","WenQuanYi Zen Hei",sans-serif;width:1400px;height:880px;overflow:hidden}
+.top{display:flex;align-items:center;gap:14px;padding:12px 28px;border-bottom:1px solid var(--line)}
+.top b{font-size:16px}.tabs{margin-left:auto;display:flex;gap:22px;color:var(--mu)}.tabs .on{color:var(--tx);border-bottom:2px solid var(--ac);padding-bottom:4px}
+.logo{width:26px;height:26px;border-radius:6px;background:#0b2540;border:1px solid #1d4f7a;display:grid;place-items:center}.logo i{display:block;width:12px;height:12px;border-left:3px solid #e8f1f9;border-bottom:3px solid #e8f1f9}
+.bar{display:flex;align-items:center;gap:14px;padding:12px 28px;background:#0d151d;border-bottom:1px solid var(--line)}
+.bar h2{margin:0;font-size:15px}.mu{color:var(--mu)}.mono{font-family:"DejaVu Sans Mono",monospace}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}.seg span{padding:5px 14px;color:var(--mu)}.seg .on{background:#173247;color:var(--tx)}
+.clock{margin-left:auto;text-align:right}.clock b{font-size:20px}
+.wrap{display:grid;grid-template-columns:1fr 470px;gap:18px;padding:18px 28px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.card h3{margin:0 0 8px;font-size:14px}
+.tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;border:1px solid var(--line);color:var(--mu)}
+.tag.bad{color:var(--bad);border-color:#5a2a27}.tag.ok{color:var(--ok);border-color:#1f4a3a}.tag.warn{color:var(--warn);border-color:#54421d}
+.btn{display:inline-block;padding:7px 14px;border:1px solid #2b4358;border-radius:8px;background:#14222d;color:var(--tx)}
+.btn.pri{background:#1b4a6b;border-color:#2f7aa8}.btn.dim{color:var(--mu)}
+.alert{display:flex;gap:12px;align-items:center;border:1px solid #5a2a27;background:#1c1214;border-radius:10px;padding:10px 14px;margin-bottom:12px}
+.alert b{color:var(--bad)}
+.step{display:grid;grid-template-columns:26px 1fr auto;gap:10px;padding:9px 0;border-top:1px solid var(--line);align-items:start}
+.step:first-of-type{border-top:0}
+.dot{width:22px;height:22px;border-radius:50%;border:2px solid #355066;display:grid;place-items:center;font-size:12px;color:var(--mu)}
+.dot.done{background:var(--ok);border-color:var(--ok);color:#06140d}.dot.now{border-color:var(--ac);color:var(--ac);box-shadow:0 0 0 3px #59b4f522}
+.step .t{font-weight:600}.step .d{color:var(--mu);font-size:13px}
+pre{margin:6px 0 0;padding:10px 12px;background:#0a1118;border:1px solid var(--line);border-radius:8px;color:#b9d3e6;font:12.5px/1.55 "DejaVu Sans Mono",monospace;white-space:pre-wrap}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.opt{flex:1;min-width:140px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#0e1822}
+.opt.sel{border-color:var(--ac);background:#10283a}.opt b{display:block;margin-bottom:2px}.opt small{color:var(--mu)}
+.kv{display:grid;grid-template-columns:90px 1fr;gap:3px 10px;font-size:13px}.kv span:nth-child(odd){color:var(--mu)}
+.note{margin-top:10px;padding:8px 12px;border-left:3px solid var(--warn);background:#1a1710;color:#d9c9a0;font-size:13px}
+.tl{font-size:13px}.tl div{display:grid;grid-template-columns:54px 1fr;gap:8px;padding:3px 0}.tl .tm{color:var(--mu);font-family:"DejaVu Sans Mono",monospace}
+.badge{position:absolute;right:28px;bottom:14px;color:#52687a;font-size:12px}
+input.f{background:#0a1118;border:1px solid #2b4358;border-radius:6px;color:var(--tx);padding:5px 8px;width:90px;font:inherit}
+.legend{display:flex;gap:14px;color:var(--mu);font-size:12px;margin-top:4px}.legend i{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:5px}
+</style></head><body>
+<div class="top"><img src="../../site/favicon.svg" width="26" height="26" style="border-radius:6px"><b>백본 트래픽 관제</b><span class="tag warn">가상 데이터 · 목업(아직 구현 아님)</span>
+<div class="tabs"><span class="on">관제</span><span>서버실</span><span>서버실-3D</span><span>장비 터미널</span><span>이벤트 대비</span><span>월간 자료</span><span>고객 지원</span></div></div>
+<div id="app"></div>
+<script>
+const S = +new URLSearchParams(location.search).get("s") || 1;
+// 그래프: IDC_B_FS1_UP2 in (가상). 03:00~03:40, 5분 간격 → 1분 간격 느낌으로 41점
+function series(upto, drop){
+  const pts=[];for(let m=0;m<=40;m++){let v=3.3+Math.sin(m/5)*.15;
+    if(m>=20){v=3.3+6.7*Math.min(1,(m-20)/1.5)}
+    if(drop!=null&&m>=drop){v=Math.max(3.1,v-6.7*Math.min(1,(m-drop)/1.2))}
+    if(m<=upto)pts.push([m,v])}
+  return pts}
+function graph(upto,drop,marks){
+  const W=760,H=250,L=44,B=26,T=10,R=12,pw=W-L-R,ph=H-T-B;
+  const x=m=>L+pw*m/40,y=v=>T+ph*(1-v/12);
+  let g=`<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block">`;
+  for(const v of [0,3,6,9,12])g+=`<line x1="${L}" x2="${W-R}" y1="${y(v)}" y2="${y(v)}" stroke="#22313f"/><text x="${L-8}" y="${y(v)+4}" fill="#8aa0b2" font-size="11" text-anchor="end">${v}G</text>`;
+  for(const m of [0,10,20,30,40])g+=`<text x="${x(m)}" y="${H-8}" fill="#8aa0b2" font-size="11" text-anchor="middle">03:${String(m).padStart(2,"0")}</text>`;
+  g+=`<line x1="${L}" x2="${W-R}" y1="${y(10)}" y2="${y(10)}" stroke="#e85a4f" stroke-dasharray="5 4" opacity=".7"/><text x="${W-R-4}" y="${y(10)-5}" fill="#e85a4f" font-size="11" text-anchor="end">평소의 3배 기준선(가상)</text>`;
+  const p=series(upto,drop);
+  g+=`<polyline fill="none" stroke="#59b4f5" stroke-width="2.4" points="${p.map(q=>x(q[0])+","+y(q[1])).join(" ")}"/>`;
+  const last=p[p.length-1];g+=`<circle cx="${x(last[0])}" cy="${y(last[1])}" r="5" fill="#59b4f5"/>`;
+  for(const [m,c,t] of marks||[]){g+=`<line x1="${x(m)}" x2="${x(m)}" y1="${T}" y2="${H-B}" stroke="${c}" stroke-dasharray="3 3"/><text x="${x(m)+4}" y="${T+12}" fill="${c}" font-size="11">${t}</text>`}
+  return g+`</svg>`}
+const modeSeg=(auto)=>`<div class="seg"><span class="${auto?'':'on'}">내가 대응</span><span class="${auto?'on':''}">자동 대응(에이전트)</span></div>`;
+const head=(clk,sub)=>`<div class="bar"><h2>시나리오 · DDoS 공격 수신</h2><span class="mu">${sub}</span>${modeSeg(false)}<span class="btn dim">처음부터</span><div class="clock"><span class="mu">가상 시각 (1분 = 실제 3초)</span><br><b class="mono">2026-10-29 ${clk}</b></div></div>`;
+const step=(n,state,t,d,right,extra)=>`<div class="step"><div class="dot ${state}">${state==='done'?'✓':n}</div><div><div class="t">${t}</div><div class="d">${d}</div>${extra||''}</div><div>${right||''}</div></div>`;
+let html="";
+if(S==1){
+html=head("03:21","1단계 / 6 · 감지")+`<div class="wrap"><div>
+<div class="alert"><span class="tag bad">새 알림</span><div><b>IDC_B_FS1_UP2 in 3.3G → 10.0G 급증</b> <span class="mu">03:20 · 평소 같은 시간대의 3배 · 일정에 없는 경기/행사</span></div><span class="btn pri" style="margin-left:auto">확인 시작</span></div>
+<div class="card"><h3>IDC_B_FS1_UP2 · 분당 → 서초 · 100G <span class="tag">실시간</span></h3>${graph(21,null,[[20,"#e85a4f","급증 시작"]])}
+<div class="legend"><span><i style="background:#59b4f5"></i>in</span><span class="mu">그래프는 가상 시계에 맞춰 계속 움직입니다</span></div></div>
+<div class="card" style="margin-top:14px"><h3>값 직접 넣어 보기 (연습용)</h3><div class="row" style="align-items:center">회선 <input class="f" value="UP2"> in <input class="f" value="10.0"> Gbps <span class="btn">주입</span><span class="mu">→ 넣으면 위 그래프에 바로 반영되고 알림이 울립니다</span></div></div></div>
+<div><div class="card"><h3>지금 해야 할 일 <span class="tag">0 / 6</span></h3>
+${step(1,'now','이벤트 일정인지 확인','일정에 없으면 이상 징조입니다','<span class="btn pri">일정 보기</span>')}
+${step(2,'','대상·유형·공격량 파악','어느 IP로 어떤 트래픽이 얼마나 오는지')}
+${step(3,'','발생 문자 보내기','양식은 자동으로 채워 줍니다')}
+${step(4,'','차단 방법 판단','클린존 가입 여부에 따라 달라집니다')}
+${step(5,'','차단 실행과 상위 연동망 요청','')}
+${step(6,'','정상화 확인 · 해제 · 완료 문자','')}
+</div><div class="note">슬라이드를 넘기지 않습니다. 화면이 계속 흘러가고, 위 순서를 제가 직접 눌러서 진행합니다.</div></div></div>`}
+if(S==2){
+html=head("03:24","2단계 / 6 · 확인")+`<div class="wrap"><div>
+<div class="card"><h3>IDC_B_FS1_UP2 · in <span class="tag bad">10.0G 유지 중</span></h3>${graph(24,null,[[20,"#e85a4f","급증 시작"],[23,"#e8a23b","터미널 확인"]])}</div>
+<div class="card" style="margin-top:14px"><h3>터미널 · admin@IDC_B_FS1> <span class="tag ok">내가 입력함</span></h3>
+<pre>admin@IDC_B_FS1> show interfaces xe-0/0/1 extensive | match "bps|pps"
+  Input rate     : 8006843000 bps (6.1 Mpps)
+  Output rate    : 3321000000 bps
+admin@IDC_B_FS1> show route 198.51.100.77
+198.51.100.77/32   *[BGP/170] 00:00:52, via IDC_B_FS1_UP2  → 대상 가상물산</pre></div></div>
+<div><div class="card"><h3>지금 해야 할 일 <span class="tag">2 / 6</span></h3>
+${step(1,'done','이벤트 일정인지 확인','일정 없음 → 이벤트 아님 (03:22)')}
+${step(2,'done','대상·유형·공격량 파악','가상물산 198.51.100.77 · TCP · 6.7 Gbps / 6.1 Mpps (03:24)')}
+${step(3,'now','발생 문자 보내기','아래 초안을 확인하고 보내세요','')}
+${step(4,'','차단 방법 판단','')}${step(5,'','차단 실행과 상위 연동망 요청','')}${step(6,'','정상화 확인 · 해제 · 완료 문자','')}
+</div>
+<div class="card" style="margin-top:14px"><h3>발생 문자 초안 <span class="tag warn">보내기 전 확인</span></h3>
+<pre>[TEP IDC]
+[Web발신]
+[주의_분당_발생] DDoS 공격 수신
+■ 대상 : IDC_B_FS1(10.x.x.x)
+■ 일시 : 10/29 03:20 ~
+■ 공격량 : TCP (6.7 Gbps / 6.1 Mpps)
+■ 서비스영향 : 파악중</pre><div class="row" style="margin-top:8px"><span class="btn pri">보내기 (가상)</span><span class="btn dim">수정</span></div></div></div></div>`}
+if(S==3){
+html=head("03:29","4단계 / 6 · 판단 (대응 9분 경과)")+`<div class="wrap"><div>
+<div class="card"><h3>IDC_B_FS1_UP2 · in <span class="tag bad">10.0G 유지 중 · 9분째</span></h3>${graph(29,null,[[20,"#e85a4f","급증 시작"],[25,"#47c28b","발생 문자 발송"]])}</div>
+<div class="card" style="margin-top:14px"><h3>고객 현황 · 가상물산 198.51.100.77</h3><div class="kv"><span>클린존</span><span><b style="color:var(--bad)">미가입</b> <span class="mu">(제가 정한 가정)</span></span><span>서비스</span><span>응답 느려짐 (VOC 접수 0건)</span><span>공격</span><span>6.7 Gbps 지속 · 회선은 아직 여유</span></div></div></div>
+<div><div class="card"><h3>어떻게 막을까요? <span class="tag warn">내가 정함</span></h3>
+<div class="row" style="flex-direction:column">
+<div class="opt"><b>클린존으로 우회</b><small>공격만 걸러 줍니다 · 이 고객은 미가입이라 불가</small></div>
+<div class="opt sel"><b>블랙홀 (선차단)</b><small>이 IP로 가는 트래픽을 전부 버립니다 · 공격은 멈추지만 고객도 접속 불가 · 프로세스상 미가입은 선차단</small></div>
+<div class="opt"><b>조금 더 지켜보기</b><small>회선에 여유가 있어 가능하지만 다른 고객에게 번질 수 있습니다</small></div></div>
+<div class="row" style="margin-top:12px"><span class="btn pri">블랙홀 실행 (가상)</span><span class="btn dim">명령 먼저 보기</span></div>
+<div class="note">고르면 결과가 바로 그래프와 문자 내용에 반영됩니다. 지켜보기를 고르면 시간이 계속 흘러서 영향이 커집니다.</div></div>
+<div class="card" style="margin-top:14px"><h3>진행 기록</h3><div class="tl"><div><span class="tm">03:22</span>이벤트 아님 확인</div><div><span class="tm">03:24</span>공격 대상·공격량 파악</div><div><span class="tm">03:25</span>발생 문자 발송</div><div><span class="tm">03:28</span>클린존 가입 여부 조회 → 미가입</div></div></div></div></div>`}
+if(S==4){
+html=head("03:42","6단계 / 6 · 결과")+`<div class="wrap"><div>
+<div class="card"><h3>IDC_B_FS1_UP2 · in <span class="tag ok">정상 범위로 복귀</span></h3>${graph(40,31,[[20,"#e85a4f","급증 시작"],[30,"#e8a23b","블랙홀 실행 03:30"],[31,"#47c28b","in 감소"]])}</div>
+<div class="card" style="margin-top:14px"><h3>대응 결과 <span class="tag ok">내가 대응함</span></h3>
+<div class="row"><div class="opt"><b>10분</b><small>감지부터 차단까지</small></div><div class="opt"><b>5건</b><small>내가 직접 누른 단계</small></div><div class="opt"><b>3곳</b><small>사람이 확인해야 하는 지점<br>(문자 발송·차단 방식·해제)</small></div></div>
+<div class="note">같은 상황을 "자동 대응" 모드로 돌리면 감지부터 차단까지 약 2분, 문자는 바로 나가지만 고객 접속 불가를 감수한다는 판단도 에이전트가 대신합니다.</div></div></div>
+<div><div class="card"><h3>완료 문자 초안 <span class="tag warn">보내기 전 확인</span></h3>
+<pre>[TEP IDC]
+[Web발신]
+[주의_분당_완료] DDoS 공격 수신
+■ 일시 : 10/29 03:20 ~ 10/29 03:41
+■ 조치 :
+03:30 블랙홀 차단 (198.51.100.77/32)
+03:31 상위 연동망에 블랙홀 요청
+03:41 공격 종료 확인 · 블랙홀 해제
+■ 서비스영향 : 블랙홀 구간(03:30~03:41) 접속 불가
+■ VOC : 없음</pre><div class="row" style="margin-top:8px"><span class="btn pri">완료 문자 보내기 (가상)</span><span class="btn dim">메일도 만들기</span></div></div>
+<div class="card" style="margin-top:14px"><h3>배울 점</h3><div class="d mu" style="font-size:13px">클린존 미가입 고객은 막는 순간 서비스도 같이 멈춥니다. 그래서 완료 문자에 "접속 불가 구간"을 반드시 적습니다.</div></div></div></div>`}
+document.getElementById("app").innerHTML=html;
+</script></body></html>
