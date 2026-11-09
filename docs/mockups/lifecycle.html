@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><title>목업: 장비 수명주기</title>
+<style>
+:root{--bg:#0a0f14;--card:#111a23;--line:#22313f;--tx:#e6eef5;--mu:#8aa0b2;--ac:#59b4f5;--ok:#47c28b;--warn:#e8a23b;--bad:#e85a4f}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--tx);font:13px/1.45 "Noto Sans CJK KR","Noto Sans KR","WenQuanYi Zen Hei",sans-serif;width:1400px;height:880px;overflow:hidden}
+.top{display:flex;align-items:center;gap:14px;padding:9px 24px;border-bottom:1px solid var(--line)}.top b{font-size:16px}
+.tabs{margin-left:auto;display:flex;gap:22px;color:var(--mu)}.tabs .on{color:var(--tx);border-bottom:2px solid var(--ac);padding-bottom:4px}
+.tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;border:1px solid var(--line);color:var(--mu)}
+.tag.warn{color:var(--warn);border-color:#54421d}.tag.bad{color:var(--bad);border-color:#5a2a27}.tag.ok{color:var(--ok);border-color:#1f4a3a}.tag.ac{color:var(--ac);border-color:#1f4a6b}
+.mu{color:var(--mu)}.mono{font-family:"DejaVu Sans Mono",monospace}
+.sub{display:flex;gap:10px;align-items:center;padding:9px 24px;border-bottom:1px solid var(--line);background:#0d151d}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}.seg span{padding:4px 12px;color:var(--mu)}.seg .on{background:#173247;color:var(--tx)}
+.wrap{display:grid;grid-template-columns:480px 1fr;gap:14px;padding:14px 24px;height:calc(100% - 100px)}
+.c{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;min-height:0;overflow:hidden}
+.c h3{margin:0 0 6px;font-size:13.5px;display:flex;gap:8px;align-items:center}
+table{border-collapse:collapse;width:100%;font-size:12.5px}th{color:var(--mu);font-weight:400;text-align:left;padding:4px 8px;border-bottom:1px solid var(--line)}td{padding:5px 8px;border-bottom:1px solid #182430}
+tr.sel td{background:#10283a}.btn{display:inline-block;padding:5px 12px;border:1px solid #2b4358;border-radius:8px;background:#14222d;color:var(--tx)}.btn.pri{background:#1b4a6b;border-color:#2f7aa8}.btn.dim{color:var(--mu)}
+.kv{display:grid;grid-template-columns:90px 1fr 90px 1fr;gap:3px 10px;font-size:12.5px}.kv span:nth-child(odd){color:var(--mu)}
+.tl{position:relative;margin:8px 0 2px 8px;padding-left:22px;border-left:2px solid #2b4358}
+.tl .e{position:relative;padding:0 0 12px}.tl .e:before{content:"";position:absolute;left:-29px;top:3px;width:12px;height:12px;border-radius:50%;background:#355066;border:2px solid var(--bg)}
+.tl .e.done:before{background:var(--ok)}.tl .e.now:before{background:var(--ac);box-shadow:0 0 0 4px #59b4f533}.tl .e.next:before{background:transparent;border:2px dashed #6b8296}
+.tl .t{font-weight:600}.tl .d{color:var(--mu);font-size:12.5px}
+.hb{display:grid;grid-template-columns:96px 1fr 44px;gap:8px;align-items:center;margin:4px 0;font-size:12.5px}.hb div{height:13px;background:#0a1118;border:1px solid var(--line);border-radius:4px;overflow:hidden}.hb i{display:block;height:100%}
+.lab{position:absolute;right:24px;bottom:8px;color:#52687a;font-size:12px}
+</style></head><body>
+<div class="top"><img src="../../site/favicon.svg" width="26" height="26" style="border-radius:6px"><b>백본 트래픽 관제</b><span class="tag warn">가상 데이터 · 목업 (아직 구현 아님)</span>
+<div class="tabs"><span>관제</span><span>서버실</span><span>서버실-3D</span><span>장비 터미널</span><span>이벤트 대비</span><span>월간 자료</span><span>고객 지원</span><span class="on">장비 자산 (새 탭 후보)</span></div></div>
+<div id="app"></div>
+<script>
+const V=new URLSearchParams(location.search).get("v")||"1";
+const st={ "운영":"ok","예비":"ac","교체 예정":"warn","폐기 예정":"bad"};
+const devs=[["IDC_B_FS1","Juniper","분당 센터 백본 1","운영","2022-03-14","2027-03"],["IDC_B_FS2","Juniper","분당 센터 백본 2","운영","2022-03-14","2027-03"],["IDC_B_FS3","Juniper","고객 접속","운영","2023-08-02","2028-08"],["IDC_B_FS5","Juniper","고객 접속","교체 예정","2019-05-20","2024-05 (만료)"],["IDC_B_FR1","Cisco","센터 백본","운영","2020-11-09","2025-11"],["IDC_B_AS4","Huawei","랙 접속","폐기 예정","2018-02-27","2023-02 (만료)"],["(창고)SP-J-07","Juniper","예비 장비","예비","2024-01-18","2029-01"]];
+let h="";
+if(V=="1"){
+h=`<div class="sub"><span class="mu">센터</span><div class="seg"><span>전체</span><span>서초</span><span class="on">분당</span><span>구로</span><span>안산</span></div><div class="seg"><span class="on">전체 상태</span><span>운영</span><span>예비</span><span>교체 예정</span><span>폐기 예정</span></div><span class="tag warn">유지보수 만료 임박 2대</span><span class="mu" style="margin-left:auto">가상 시각 2026-10-22 21:00</span></div>
+<div class="wrap"><div class="c"><h3>장비 목록 <span class="mu">분당 22대 중 7대 표시</span></h3><table><tr><th>장비</th><th>종류</th><th>상태</th><th>유지보수 만료</th></tr>
+${devs.map((d,i)=>`<tr class="${i==3?'sel':''}"><td class="mono">${d[0]}</td><td>${d[1]}</td><td><span class="tag ${st[d[3]]}">${d[3]}</span></td><td class="mono" style="color:${d[5].includes('만료')?'#ffb3aa':'inherit'}">${d[5]}</td></tr>`).join("")}</table>
+<div style="margin-top:14px"><h3>이번 달 입·출고</h3><div class="hb"><span>입고</span><div><i style="width:40%;background:#47c28b"></i></div><span class="mono">2대</span></div><div class="hb"><span>설치(랙 장착)</span><div><i style="width:40%;background:#59b4f5"></i></div><span class="mono">2대</span></div><div class="hb"><span>교체(부품)</span><div><i style="width:60%;background:#e8a23b"></i></div><span class="mono">3건</span></div><div class="hb"><span>폐기·반출</span><div><i style="width:20%;background:#e85a4f"></i></div><span class="mono">1대</span></div></div></div>
+<div style="display:flex;flex-direction:column;gap:14px"><div class="c"><h3>IDC_B_FS5 <span class="tag warn">교체 예정</span><span class="mu">분당 · IDC_B_R07 · 12~17U</span></h3>
+<div class="kv"><span>종류</span><span>Juniper (집선)</span><span>이중화 짝</span><span class="mono">IDC_B_FS6 (R08)</span><span>입고일</span><span class="mono">2019-05-20</span><span>사용 기간</span><span>7년 5개월</span><span>유지보수</span><span style="color:#ffb3aa">2024-05 만료 (2년 5개월 지남)</span><span>시리얼</span><span class="mono">JN-SAMPLE-000512 (가상)</span></div></div>
+<div class="c" style="flex:1"><h3>수명주기 이력</h3><div class="tl">
+<div class="e done"><div class="t">입고 · 2019-05-20</div><div class="d">검수 완료 · 창고 보관 (가상)</div></div>
+<div class="e done"><div class="t">설치 · 2019-06-03</div><div class="d">IDC_B_R07 12~17U 장착 · 짝 장비 IDC_B_FS6와 이중화 연결</div></div>
+<div class="e done"><div class="t">부품 교체 · 2025-03-11</div><div class="d">팬 모듈 1개 교체 · 온도 경고 해제 확인 (가상)</div></div>
+<div class="e now"><div class="t">운영 중 · 교체 예정으로 표시</div><div class="d">유지보수 만료 후 2년 이상 경과 · 후속 장비 검토 (가정)</div></div>
+<div class="e next"><div class="t">예정 · 교체 설치 → 반출·폐기</div><div class="d">신규 장비 입고 후 짝 장비로 트래픽을 넘기고 교체 (이중화 활용)</div></div></div></div></div></div>`}
+if(V=="2"){
+h=`<div class="sub"><span class="mu">장비 상태 변경 기록</span><div class="seg"><span class="on">입고</span><span>설치</span><span>교체</span><span>반출·폐기</span></div><span class="mu" style="margin-left:auto">가상 시각 2026-10-22 21:00</span></div>
+<div class="wrap" style="grid-template-columns:1fr 1fr"><div class="c"><h3>입고 등록 <span class="tag ac">새 장비</span></h3>
+<div class="kv" style="grid-template-columns:90px 1fr"><span>장비 종류</span><span class="btn dim">Juniper ▾</span><span>용도</span><span class="btn dim">고객 접속 ▾</span><span>센터</span><span class="btn dim">분당 ▾</span><span>시리얼</span><span class="btn dim">JN-SAMPLE-000931</span><span>입고일</span><span class="btn dim">2026-10-22</span><span>입고 담당</span><span class="btn dim">(이름 입력)</span></div>
+<div style="margin-top:12px;display:flex;gap:8px"><span class="btn pri">입고 기록 저장</span><span class="btn dim">취소</span></div>
+<div class="mu" style="font-size:12px;margin-top:8px">저장하면 자산 목록에 "예비" 상태로 들어갑니다. 이후 설치 단계에서 랙과 U 위치를 정하면 "운영"으로 바뀝니다.</div></div>
+<div class="c"><h3>최근 기록 <span class="mu">누가 · 언제 · 무엇을 (실무의 로그처럼 남음)</span></h3><table><tr><th>시각</th><th>장비</th><th>처리</th><th>담당</th></tr>
+<tr><td class="mono">10/22 20:41</td><td class="mono">SP-J-07</td><td>입고 · 예비로 등록</td><td>(담당자)</td></tr>
+<tr><td class="mono">10/26 14:46</td><td class="mono">IDC_A_FS1</td><td>SFP 교체 (xe-0/0/0) · 회선 다운 시나리오와 같은 장비</td><td>(담당자)</td></tr>
+<tr><td class="mono">10/15 10:02</td><td class="mono">IDC_B_AS4</td><td>폐기 예정으로 표시</td><td>(담당자)</td></tr>
+<tr><td class="mono">09/30 17:20</td><td class="mono">IDC_G_FR2</td><td>반출 · 수리 의뢰</td><td>(담당자)</td></tr>
+<tr><td class="mono">09/12 09:35</td><td class="mono">IDC_A_FS9</td><td>설치 · R10 8~13U</td><td>(담당자)</td></tr></table>
+<div class="mu" style="font-size:12px;margin-top:8px">가상 데이터입니다. 담당자 이름은 실제 이름을 쓰지 않고 입력칸으로만 둡니다.</div></div></div>`}
+document.getElementById("app").innerHTML=h;document.body.insertAdjacentHTML("beforeend",`<div class="lab">목업 ${V}</div>`);
+</script></body></html>
