@@ -313,3 +313,20 @@ nav.tabs .submenu button.on{color:var(--text);background:#173247}
 
 #tab-gear .form{grid-template-columns:110px 1fr 110px 1fr}
 @media (max-width:900px){#tab-gear .form{grid-template-columns:110px 1fr}}
+
+/* 부드러운 전환: 탭 바꿈, 하위 메뉴, 팝업, 버튼 */
+:root{--ease:cubic-bezier(.2,.7,.2,1)}
+@keyframes tabin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes fadein{from{opacity:0}to{opacity:1}}
+@keyframes pop{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
+section.tab.on{animation:tabin .26s var(--ease) both}
+#termPane,#runbook[open],#designBox[open]{animation:tabin .24s var(--ease) both}
+nav.tabs .submenu{display:flex;opacity:0;visibility:hidden;transform:translateY(-6px);transition:opacity .16s var(--ease),transform .16s var(--ease),visibility 0s linear .16s}
+nav.tabs .tabgrp:hover .submenu,nav.tabs .tabgrp:focus-within .submenu{opacity:1;visibility:visible;transform:none;transition-delay:0s}
+.btn,nav.tabs button,.seg button{transition:background-color .15s ease,border-color .15s ease,color .15s ease,transform .12s var(--ease)}
+.btn:active,.seg button:active{transform:scale(.97)}
+table tr{transition:background-color .12s ease}
+.scnpop:not([hidden]),.phone-ov:not([hidden]){animation:fadein .2s ease both}
+.scnpop:not([hidden]) .scnpop-box,.phone-ov:not([hidden]) .phone{animation:pop .26s var(--ease) both}
+.notif:not([hidden]){animation:pop .2s var(--ease) both}
+@media (prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;animation-delay:0s!important;transition-duration:.01ms!important}}

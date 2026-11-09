@@ -73,11 +73,12 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.setViewportSize({ width: 1600, height: 900 });
 
   // 탭 순서와 센터 선택: 센터 선택은 관제·서버실에서만 보이고, 두 화면이 같은 센터로 동기화된다
-  check('위 메뉴: 관제 / 서버실▾ / 장비 터미널 / 이벤트 대비 / 월간 자료 / 고객 지원▾ (하위 메뉴: 서버실·서버실 3D / 문자 전파·방문 신청·장비 반출입)', JSON.stringify(await page.locator('#tabs > button, #tabs > .tabgrp > .grpbtn').allInnerTexts()) === JSON.stringify(['관제', '서버실', '장비 터미널', '이벤트 대비', '월간 자료', '고객 지원']) && JSON.stringify(await page.locator('#tabs .tabgrp:nth-of-type(1) .submenu button').allInnerTexts()) === JSON.stringify(['서버실', '서버실 3D']) && JSON.stringify(await page.locator('#tabs .tabgrp .submenu button').allInnerTexts()) === JSON.stringify(['서버실', '서버실 3D', '문자 전파', '방문 신청', '장비 반출입']));
+  check('위 메뉴: 관제 / 서버실▾ / 장비 터미널 / 이벤트 대비 / 월간 자료 / 고객 지원▾ (하위 메뉴: 서버실·서버실 3D / 문자 전파·방문 신청·장비 반출입)', JSON.stringify(await page.locator('#tabs > button, #tabs > .tabgrp > .grpbtn').allTextContents()) === JSON.stringify(['관제', '서버실', '장비 터미널', '이벤트 대비', '월간 자료', '고객 지원']) && JSON.stringify(await page.locator('#tabs .tabgrp:nth-of-type(1) .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D']) && JSON.stringify(await page.locator('#tabs .tabgrp .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D', '문자 전파', '방문 신청', '장비 반출입']));
   const sub0 = await page.locator('#tabs .tabgrp >> nth=1 >> .submenu').isVisible();
   await page.hover('#tabs .tabgrp >> nth=1 >> .grpbtn');
   const sub1 = await page.locator('#tabs .tabgrp >> nth=1 >> .submenu').isVisible();
   await page.hover('#tabs .tabgrp >> nth=0 >> .grpbtn');
+  await page.waitForTimeout(350);   // 하위 메뉴가 부드럽게 사라지는 시간
   const sub2 = [await page.locator('#tabs .tabgrp >> nth=0 >> .submenu').isVisible(), await page.locator('#tabs .tabgrp >> nth=1 >> .submenu').isVisible()];
   check('하위 메뉴는 평소에 숨겨져 있고, 마우스를 올리면 그 메뉴 아래에만 펼쳐짐', !sub0 && sub1 && sub2[0] && !sub2[1], JSON.stringify([sub0, sub1, sub2]));
   await page.hover('#tabs .tabgrp >> nth=1 >> .grpbtn');
