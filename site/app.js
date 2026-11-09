@@ -322,7 +322,7 @@ function seriesFor(l, fromMs, toMs) {
 function statsArr(a, from) {
   let mxi = 0, mn = a[0], sum = 0;
   for (let i = 0; i < a.length; i++) { if (a[i] > a[mxi]) mxi = i; if (a[i] < mn) mn = a[i]; sum += a[i]; }
-  return { max: a[mxi], at: from + mxi * STEP, min: mn, avg: sum / a.length, p95: p95(a) };
+  return { max: a[mxi], at: from + mxi * STEP, min: mn, avg: sum / a.length, p95: p95(a), totalGb: sum * 300 / 8 };   // 총 전송량(GB) = Σ(Gbps × 300초) ÷ 8, 1GB = 10^9 바이트
 }
 
 const DATA_END = msOf(N - 1);   // 마지막 데이터 시각
@@ -338,7 +338,7 @@ function mState() {
   return { c, ids, bad, fromStr, toStr, from: fromDay, to: Math.min(toDay + DAY - STEP, DATA_END), clamped: toDay + DAY - STEP > DATA_END };
 }
 function mCompute(m) {
-  return m.ids.map(id => { const sr = seriesFor(LINK[id], m.from, m.to); return { id, sr, st: { out: statsArr(sr.out, m.from), in: statsArr(sr.inn, m.from) } }; });
+  return m.ids.map(id => { const sr = seriesFor(LINK[id], m.from, m.to); const cap = LINK[id].cap; return { id, sr, cap, st: { out: statsArr(sr.out, m.from), in: statsArr(sr.inn, m.from) } }; });   // cap: 회선 용량(Gbps), 사용률(%) = 값 ÷ 용량 × 100
 }
 function seriesCsv(id, sr) {
   const l = LINK[id], rows = ["time,link,in_gbps,out_gbps,out_util_pct"];
@@ -346,16 +346,16 @@ function seriesCsv(id, sr) {
   return rows.join("\n");
 }
 function summaryCsv(data, m) {
-  const rows = ["from,to,link,direction,max_gbps,max_time,min_gbps,avg_gbps,p95_gbps"];
-  data.forEach(x => ["out", "in"].forEach(d => { const t = x.st[d]; rows.push(`${m.fromStr},${m.toStr},${x.id},${d},${t.max.toFixed(2)},${ymdhm(t.at)},${t.min.toFixed(2)},${t.avg.toFixed(2)},${t.p95.toFixed(2)}`); }));
+  const rows = ["from,to,link,direction,max_gbps,max_time,min_gbps,avg_gbps,p95_gbps,cap_gbps,util_avg_pct,util_max_pct,util_p95_pct,total_gb"];
+  data.forEach(x => ["out", "in"].forEach(d => { const t = x.st[d], u = v => (v / x.cap * 100).toFixed(1); rows.push(`${m.fromStr},${m.toStr},${x.id},${d},${t.max.toFixed(2)},${ymdhm(t.at)},${t.min.toFixed(2)},${t.avg.toFixed(2)},${t.p95.toFixed(2)},${x.cap},${u(t.avg)},${u(t.max)},${u(t.p95)},${t.totalGb.toFixed(1)}`); }));
   return rows.join("\n");
 }
 function renderMonthly() {
   const m = mState();
   const msg = m.bad ? "시작일이 끝나는 날보다 늦습니다. 날짜를 확인하세요." : !m.ids.length ? "회선을 선택하세요." : "";
   const data = msg ? [] : mCompute(m);
-  $("#mSum").innerHTML = `<tr><th>회선</th><th>방향</th><th class="n">최대</th><th>최대 시각</th><th class="n">최소</th><th class="n">평균</th><th class="n">95%값</th></tr>` +
-    (msg ? `<tr><td colspan="7" class="${m.bad ? "crit-t" : "muted"}">${msg}</td></tr>` : data.map(x => ["out", "in"].map(d => { const t = x.st[d]; return `<tr><td>${x.id}</td><td>${d.toUpperCase()}</td><td class="n">${t.max.toFixed(2)}</td><td>${md(t.at)}</td><td class="n">${t.min.toFixed(2)}</td><td class="n">${t.avg.toFixed(2)}</td><td class="n">${t.p95.toFixed(2)}</td></tr>`; }).join("")).join(""));
+  $("#mSum").innerHTML = `<tr><th>회선</th><th>방향</th><th class="n">최대</th><th>최대 시각</th><th class="n">최소</th><th class="n">평균</th><th class="n">95%값</th><th class="n">평균 사용률</th><th class="n">최대 사용률</th><th class="n">총 전송량(GB)</th></tr>` +
+    (msg ? `<tr><td colspan="10" class="${m.bad ? "crit-t" : "muted"}">${msg}</td></tr>` : data.map(x => ["out", "in"].map(d => { const t = x.st[d]; return `<tr><td>${x.id}</td><td>${d.toUpperCase()}</td><td class="n">${t.max.toFixed(2)}</td><td>${md(t.at)}</td><td class="n">${t.min.toFixed(2)}</td><td class="n">${t.avg.toFixed(2)}</td><td class="n">${t.p95.toFixed(2)}</td><td class="n">${(t.avg / x.cap * 100).toFixed(1)}%</td><td class="n">${(t.max / x.cap * 100).toFixed(1)}%</td><td class="n">${t.totalGb.toLocaleString("en-US", { maximumFractionDigits: 0 })}</td></tr>`; }).join("")).join(""));
   $("#mNote").textContent = [
     !m.bad && m.from < T0 ? `※ ${MIN_DAY} 이전 구간은 생성해 둔 데이터가 없어서, 같은 규칙(평소 하루 모양)으로 즉석에서 만든 가상 값입니다. 경기·사고는 없는 평소 기록입니다.` : "",
     !m.bad && m.clamped ? `※ 데이터는 ${MAX_DAY}까지만 있어서 거기까지 보냅니다.` : ""].filter(Boolean).join(" ");
@@ -368,7 +368,7 @@ ${m.c.name} 담당자님, 안녕하세요.
 
 - 대상 회선: ${m.ids.join(", ") || "(선택 없음)"}
 - 기간: ${m.fromStr} ~ ${m.toStr}
-- 첨부: 회선별 5분 단위 CSV, 요약 CSV(최대·최소·평균·95%값)
+- 첨부: 회선별 5분 단위 CSV, 요약 CSV(최대·최소·평균·95%값, 사용률, 총 전송량)
 - 단위: Gbps (IN = 센터로 들어온 트래픽, OUT = 센터에서 나간 트래픽)
 
 추가로 필요한 자료가 있으면 말씀해 주세요.

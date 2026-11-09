@@ -72,7 +72,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.setViewportSize({ width: 1600, height: 900 });
 
   // 탭 순서와 센터 선택: 센터 선택은 관제·서버실에서만 보이고, 두 화면이 같은 센터로 동기화된다
-  check('탭 순서: 관제 / 서버실 / 서버실-3D / 장비 터미널 / 이벤트 대비 / 월간 자료 / 방문 신청', JSON.stringify(await page.locator('#tabs button').allInnerTexts()) === JSON.stringify(['관제', '서버실', '서버실-3D', '장비 터미널', '이벤트 대비', '월간 자료', '방문 신청']));
+  check('탭 순서: 관제 / 서버실 / 서버실-3D / 장비 터미널 / 이벤트 대비 / 월간 자료 / 고객 지원', JSON.stringify(await page.locator('#tabs button').allInnerTexts()) === JSON.stringify(['관제', '서버실', '서버실-3D', '장비 터미널', '이벤트 대비', '월간 자료', '고객 지원']));
   const vis = {};
   for (const tab of ['monitor', 'room', 'room3d', 'term', 'event', 'monthly', 'visit']) { await page.click(`[data-tab=${tab}]`); vis[tab] = await page.locator('#centerBar').isVisible(); }
   check('센터 선택은 관제·서버실에서만 보이고 나머지 탭에서는 숨겨짐', vis.monitor && vis.room && vis.room3d && !vis.term && !vis.event && !vis.monthly && !vis.visit, JSON.stringify(vis));
@@ -350,6 +350,17 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.fill('#mMonth', '2026-11'); await page.press('#mMonth', 'Tab');
   check('대상 월을 바꾸면 시작일·끝나는 날이 따라 바뀜(데이터가 있는 날까지)', (await page.locator('#mFrom').inputValue()) === '2026-11-01' && (await page.locator('#mTo').inputValue()) === '2026-11-01');
   await page.fill('#mMonth', '2026-10'); await page.press('#mMonth', 'Tab');
+  // 요약에 사용률과 총 전송량: 데이터 구간(10/20~10/21) 안에서 독립적으로 계산한 값과 비교
+  await page.fill('#mFrom', '2026-10-20'); await page.press('#mFrom', 'Tab'); await page.fill('#mTo', '2026-10-21'); await page.press('#mTo', 'Tab');
+  const sum = await page.evaluate(() => { const m = mState(), id = m.ids[0], L = LINK[id], a = idxOf(parseT('2026-10-20T00:00')), b = idxOf(parseT('2026-10-21T23:55'));
+    let tot = 0, mx = 0; for (let i = a; i <= b; i++) { tot += L.out[i] * 300 / 8; mx = Math.max(mx, L.out[i]); }
+    const row = [...document.querySelectorAll('#mSum tr:nth-child(2) td')].map(x => x.innerText); return { head: document.querySelector('#mSum tr').innerText, row, expTot: tot, expUtilMax: mx / L.cap * 100 }; });
+  check('월간 요약 표에 평균·최대 사용률(%)과 총 전송량(GB) 열이 있음', /평균 사용률/.test(sum.head) && /최대 사용률/.test(sum.head) && /총 전송량\(GB\)/.test(sum.head), sum.head.replace(/\s+/g, ' '));
+  check('총 전송량(GB)과 최대 사용률이 독립 계산(Σ Gbps×300초÷8, 최대÷용량)과 같음', Math.abs(+sum.row[sum.row.length - 1].replace(/,/g, '') - sum.expTot) <= 1 && Math.abs(parseFloat(sum.row[sum.row.length - 2]) - sum.expUtilMax) < 0.06, JSON.stringify({ row: sum.row.slice(-3), expTot: Math.round(sum.expTot), expUtilMax: sum.expUtilMax.toFixed(1) }));
+  const [sc] = await Promise.all([page.waitForEvent('download'), page.click('#mSumCsv')]);
+  const sct = require('fs').readFileSync(await sc.path(), 'utf8').replace(/^\uFEFF/, ''), sl = sct.trim().split('\n');
+  check('요약 CSV 머리글에 cap_gbps, util_avg_pct, util_max_pct, util_p95_pct, total_gb가 있고 모든 줄 열 수가 같음', ['cap_gbps', 'util_avg_pct', 'util_max_pct', 'util_p95_pct', 'total_gb'].every(c => sl[0].includes(c)) && sl.every(l => l.split(',').length === sl[0].split(',').length) && sl.length > 2, sl[0]);
+  await page.fill('#mFrom', '2026-10-01'); await page.press('#mFrom', 'Tab'); await page.fill('#mTo', '2026-10-31'); await page.press('#mTo', 'Tab');
   await page.fill('#mFrom', '2026-05-01'); await page.press('#mFrom', 'Tab');
   const [z6] = await Promise.all([page.waitForEvent('download'), page.click('#mZip')]);
   const z6buf = require('fs').readFileSync(await z6.path());

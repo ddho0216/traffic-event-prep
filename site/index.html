@@ -17,7 +17,7 @@
     <button data-tab="term">장비 터미널</button>
     <button data-tab="event">이벤트 대비</button>
     <button data-tab="monthly">월간 자료</button>
-    <button data-tab="visit">방문 신청</button>
+    <button data-tab="visit">고객 지원</button>
   </nav>
   <button class="bell" id="bell" aria-label="알림" aria-expanded="false" title="알림 (경고 이력 · 내 업무)">
     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>
@@ -101,7 +101,7 @@
       <div id="sendPlan"></div>
     </div>
   </div>
-  <h2>2. 요약 <small>최대·최소·평균·95%값 (Gbps)</small></h2>
+  <h2>2. 요약 <small>최대·최소·평균·95%값 (Gbps), 사용률(%), 총 전송량(GB)</small></h2>
   <div class="card" style="padding:0"><table id="mSum"></table></div>
   <div class="toolbar" style="margin-top:12px">
     <button class="btn primary" id="mZip">회선별 5분 CSV + 요약을 zip으로 받기</button>
@@ -207,7 +207,7 @@
   </div>
 </section>
 
-<!-- 4. 방문 신청 -->
+<!-- 4. 고객 지원 (지금은 방문 신청. 문자 발송·장애 현황을 이 탭에 모을 예정) -->
 <section class="tab" id="tab-room3d">
   <div class="gltool">
     <span class="muted" id="glCrumb"></span>
