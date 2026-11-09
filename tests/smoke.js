@@ -312,6 +312,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('DDoS 완료 문자: 블랙홀 해제까지 끝난 뒤에만 완료, 해제 조치와 블랙홀 구간이 있음', smsCheck(dd.done.slice(dd.done.indexOf('[TEP IDC]')), '완료', '분당') && /블랙홀 해제/.test(dd.done) && /블랙홀 구간\(\d\d:\d\d~\d\d:\d\d\)/.test(dd.done) && /\[주의_분당_완료\]/.test(dd.done));
   check('DDoS 시나리오: 클린존(공격만 거름)과 블랙홀(전부 버림, 대상도 접속 불가)의 차이, 블랙홀 명령 예시(discard), 상위 연동망 요청(65535:666)이 설명됨', /클린존/.test(dd.t4) && /전부 버립니다/.test(dd.t4) && /공격만 버리고 정상 트래픽은 되돌려/.test(dd.t4) && /static route .*\/32 discard/.test(dd.t5) && /65535:666/.test(dd.t6) && /연동망에 문의할 때 확인할 3가지/.test(dd.t6));
   check('모든 시나리오의 모든 단계에 설명이 있음 (팝업이 비지 않음)', await page.evaluate(() => Object.values(buildScenarios()).every(S => S.steps.every(x => x.explain && x.explain.length > 30))));
+  check('모든 시나리오 본문에 글자 그대로의 "\\n"이 남아 있지 않음(줄바꿈이 깨지지 않음)', await page.evaluate(() => Object.values(buildScenarios()).every(S => S.steps.every(x => !String(x.detail || '').includes('\\n') && !String(x.explain || '').includes('\\n')))));
   // 탭 아이콘(로고)
   const icons = await page.evaluate(() => [...document.querySelectorAll('link[rel~=icon], link[rel=apple-touch-icon]')].map(l => l.getAttribute('href')));
   const fsx = require('fs'), siteDir = require('path').resolve(__dirname, '../site'), png = f => fsx.readFileSync(siteDir + '/' + f).subarray(0, 8).toString('hex') === '89504e470d0a1a0a';
