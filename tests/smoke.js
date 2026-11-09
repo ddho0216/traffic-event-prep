@@ -97,6 +97,10 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('#smPhone');
   const ph = await page.evaluate(() => ({ vis: !document.getElementById('phone').hidden, txt: document.getElementById('phBody').innerText, br: document.querySelectorAll('#phBody .ph-bubble br').length }));
   check('"휴대폰에서 보기": 휴대폰 화면에 초안(직접 고친 줄 포함)이 줄바꿈 그대로 말풍선으로 보임', ph.vis && ph.txt.includes('회선 3개 다운') && ph.txt.includes('(직접 고쳐 쓴 줄)') && ph.br >= 8, String(ph.br));
+  check('휴대폰 그림 안(맨 위 상태 줄)에 닫기 버튼이 있고 LTE 글자는 없음', await page.evaluate(() => { const b = document.getElementById('phoneClose'), ph = document.querySelector('#phone .phone').getBoundingClientRect(), r = b.getBoundingClientRect(); return b.closest('.ph-status') && r.top >= ph.top && r.bottom <= ph.top + 60 && r.right <= ph.right && !document.querySelector('#phone .phone').innerText.includes('LTE') && !document.querySelector('#phone > .phone-wrap > #phoneClose'); }));
+  await page.click('#phoneClose');
+  check('휴대폰 안의 닫기 버튼을 누르면 미리보기가 닫힘', await page.evaluate(() => document.getElementById('phone').hidden));
+  await page.click('#smPhone');
   await page.keyboard.press('Escape');
   check('Esc로 휴대폰 화면이 닫힘', await page.evaluate(() => document.getElementById('phone').hidden));
   // 장비 반출입: 필수 항목 확인, 저장, 합계, 구분 필터, 삭제
