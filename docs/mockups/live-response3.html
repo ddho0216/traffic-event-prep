@@ -113,11 +113,11 @@ if(V=="D"){
  <tr><td class="mono">10/12</td><td>6.1G</td><td>6분</td><td>3,310</td><td><b>4%</b> (IP 176개)</td></tr>
  <tr style="color:#ff8f84"><td class="mono">10/29</td><td>10.1G</td><td>진행 중</td><td>4,402</td><td>—</td></tr></table>
  <div class="mu" style="font-size:12px;margin-top:5px">겹침 = 이전 공격의 출발지 IP가 이번에도 나온 비율. 같은 출발지인지 다른지는 이 숫자로 직접 판단합니다.</div></div></div></div>`}
-if(V=="E"){
- HBW=108;fill=`<div class="c g-fill"><h3>공격 트래픽 구성 <span class="mu">03:25 기준 · 최근 1분 · 막대가 길수록 비중이 큼</span></h3><div style="display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:14px">
+if(V=="E"||V=="E2"){
+ HBW=108;const sv=V=="E2";fill=`<div class="c g-fill"><h3>공격 트래픽 구성 <span class="mu">03:25 기준 · 최근 1분 · 막대가 길수록 비중이 큼</span><span style="margin-left:auto;display:flex;gap:8px;align-items:center">${sv?'<span class="tag ok">저장됨 03:26 · 사건 기록 #1</span><span class="btn dim">다시 저장</span>':'<span class="btn pri">기록에 저장</span>'}</span></h3><div style="display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:14px">
  <div><div class="mu" style="font-size:12px;margin-bottom:2px">출발지 대역 (상위)</div>${hb("203.0.113.0/24",22,"#e8a23b")}${hb("192.0.2.0/24",14,"#e8a23b")}${hb("203.0.114.0/24",9,"#e8a23b")}${hb("그 밖 4,3xx개",55,"#2b4358")}</div>
  <div><div class="mu" style="font-size:12px;margin-bottom:2px">프로토콜 · 플래그</div>${hb("TCP SYN",95,"#ff8f84")}${hb("TCP ACK",3)}${hb("UDP",1)}${hb("기타",1)}</div>
- <div><div class="mu" style="font-size:12px;margin-bottom:2px">목적지 포트 · 패킷 크기</div>${hb("443",91,"#59b4f5")}${hb("80",6)}${hb("패킷 60~80B",93,"#59b4f5","93%")}${hb("패킷 1000B+",2,"#59b4f5","2%")}</div></div></div>`}
+ <div><div class="mu" style="font-size:12px;margin-bottom:2px">목적지 포트 · 패킷 크기</div>${hb("443",91,"#59b4f5")}${hb("80",6)}${hb("패킷 60~80B",93,"#59b4f5","93%")}${hb("패킷 1000B+",2,"#59b4f5","2%")}</div></div><div class="mu" style="font-size:12px;margin-top:8px">${sv?'저장한 값은 사건 기록에 들어가고, 완료 문자의 원인·조치와 대상 고객 공격 이력(비교)에서 다시 쓸 수 있습니다. 저장 시각의 값이 그대로 남습니다.':'공격이 끝난 뒤에는 이 값을 다시 볼 수 없으므로, 지금 값을 저장해 두면 나중에 보고할 때 쓸 수 있습니다.'}</div></div>`}
 if(V=="F"){
  fill=`<div class="c g-fill"><h3>같은 장비를 쓰는 고객 회선 여유 <span class="mu">IDC_B_FS3 · 회선 사용률 · 03:25</span><span class="tag">영향 받는 곳 확인</span></h3>
  ${hb("가상물산 10G",67,"#ff8f84","6.7/10G")}${hb("모의커머스 10G",12,"#47c28b","1.2/10G")}${hb("가상은행 10G",8,"#47c28b","0.8/10G")}${hb("예시금융 1G",31,"#47c28b","0.3/1G")}${hb("IDC_B_FS3 업링크 100G",9,"#47c28b","9/100G")}
