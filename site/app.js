@@ -233,10 +233,19 @@ function csvOf(ids, s, e) {
 function viewRange() { const e = clamp(state.end, 0, N - 1); return [Math.max(0, e - state.win + 1), e]; }
 const fileStamp = ms => ymdhm(ms).replace(/[- :]/g, "").slice(0, 12);
 
+// 기준 시각 입력: 데이터 범위를 벗어나면 가까운 시각으로 옮기고 이유를 입력칸 옆에 알려 준다
+function timeNote(inp, ms) {
+  let el = inp.parentNode.querySelector(".timenote");
+  if (!el) { el = document.createElement("span"); el.className = "timenote muted"; inp.parentNode.appendChild(el); }
+  const i = idxOf(ms), out = i < 0 || i > N - 1;
+  el.textContent = out ? ` 이 날짜는 데이터가 없어 ${ymdhm(msOf(clamp(i, 0, N - 1))).slice(5)}로 옮겼습니다 (데이터 ${ymdhm(T0).slice(5, 10)} ~ ${ymdhm(msOf(N - 1)).slice(5, 10)})` : ` 데이터 ${ymdhm(T0).slice(5, 10)} ~ ${ymdhm(msOf(N - 1)).slice(5, 10)}`;
+  el.style.color = out ? "var(--warn,#e8a23b)" : "";
+}
 (function initMonitor() {
   buildGrid();
   const et = $("#endTime"); et.min = isoLocal(T0); et.max = isoLocal(msOf(N - 1));
-  et.addEventListener("change", () => { if (et.value) { state.end = idxOf(parseT(et.value)); renderAll(); } });
+  timeNote(et, parseT(et.value || DATA.start));
+  et.addEventListener("change", () => { if (et.value) { timeNote(et, parseT(et.value)); state.end = idxOf(parseT(et.value)); renderAll(); } });
   $("#prev").onclick = () => { state.end -= state.win; renderAll(); };
   $("#next").onclick = () => { state.end += state.win; renderAll(); };
   $("#goNow").onclick = () => { stopScn(); goNow(); };
@@ -895,7 +904,7 @@ function renderInspections() {
     `<tr><td colspan="6" class="muted">아직 점검 기록이 없습니다.</td></tr>`);
 }
 (function initRoom() {
-  $("#srTime").addEventListener("change", e => { if (e.target.value) { sr.end = idxOf(parseT(e.target.value)); renderServerRoom(); } });
+  $("#srTime").addEventListener("change", e => { if (e.target.value) { timeNote(e.target, parseT(e.target.value)); sr.end = idxOf(parseT(e.target.value)); renderServerRoom(); } });
   $("#srPrev").onclick = () => { sr.end -= cfg.step; renderServerRoom(); };
   $("#srNext").onclick = () => { sr.end += cfg.step; renderServerRoom(); };
   $$("[data-sr]").forEach(b => b.onclick = () => {

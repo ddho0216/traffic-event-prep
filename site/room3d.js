@@ -419,7 +419,7 @@ function render3d() {
 
 /* ---------- 이벤트 ---------- */
 (function initRoom3d() {
-  $("#r3Time").addEventListener("change", e => { if (e.target.value) { sr.end = idxOf(parseT(e.target.value)); render3d(); } });
+  $("#r3Time").addEventListener("change", e => { if (e.target.value) { timeNote(e.target, parseT(e.target.value)); sr.end = idxOf(parseT(e.target.value)); render3d(); } });
   $("#r3Prev").onclick = () => { sr.end -= cfg.step; render3d(); };
   $("#r3Next").onclick = () => { sr.end += cfg.step; render3d(); };
   $("#r3RowSel").onchange = e => { G.row = +e.target.value; G.sel = null; render3d(); };
