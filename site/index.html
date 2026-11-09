@@ -15,12 +15,11 @@
   <span class="badge">가상 데이터 · 센터는 지명만 빌린 가상 센터</span>
   <nav class="tabs" id="tabs">
     <button data-tab="monitor" class="on">관제</button>
-    <button data-tab="room">서버실</button>
-    <button data-tab="room3d">서버실-3D</button>
+    <div class="tabgrp"><button data-tab="room" class="grpbtn">서버실</button><div class="submenu"><button data-tab="room">서버실</button><button data-tab="room3d">서버실 3D</button></div></div>
     <button data-tab="term">장비 터미널</button>
     <button data-tab="event">이벤트 대비</button>
     <button data-tab="monthly">월간 자료</button>
-    <button data-tab="visit">고객 지원</button>
+    <div class="tabgrp"><button data-tab="sms" class="grpbtn">고객 지원</button><div class="submenu"><button data-tab="sms">문자 전파</button><button data-tab="visit">방문 신청</button><button data-tab="gear">장비 반출입</button></div></div>
   </nav>
   <button class="bell" id="bell" aria-label="알림" aria-expanded="false" title="알림 (경고 이력 · 내 업무)">
     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>
@@ -297,6 +296,79 @@
   <textarea id="vReply" rows="8" placeholder="방문 등록을 하면 회신 초안이 여기에 만들어집니다."></textarea>
 </section>
 
+<!-- 6. 문자 전파 -->
+<section class="tab" id="tab-sms">
+  <p class="note">장애 전파 문자를 쓰는 곳입니다. 단계(발생·경과·완료)를 고르면 양식이 채워지고, 초안을 고친 뒤 "휴대폰에서 보기"를 누르면 받는 사람 화면으로 보입니다. 내용은 모두 가상이며 실제로 발송되지 않습니다.</p>
+  <div class="cols">
+    <div class="card">
+      <h3>1. 단계와 내용</h3>
+      <div class="toolbar" id="smStage"><button class="btn primary" data-st="발생">발생</button><button class="btn" data-st="경과">경과</button><button class="btn" data-st="완료">완료</button></div>
+      <div class="form">
+        <span>센터</span><select id="smCenter"></select>
+        <span>제목</span><input type="text" id="smTitle">
+        <span>대상</span><input type="text" id="smTarget">
+        <span>시작 일시</span><input type="text" id="smFrom">
+        <div class="dc" id="smToRow" hidden><span>끝 일시</span><input type="text" id="smTo"></div>
+        <span>원인</span><input type="text" id="smCause">
+        <div class="dc" id="smActsRow" hidden><span>조치(한 줄에 하나, 시각으로 시작)</span><textarea id="smActs" rows="4"></textarea></div>
+        <span>서비스영향</span><input type="text" id="smImpact">
+        <span>VOC</span><input type="text" id="smVoc">
+      </div>
+      <p class="note" style="font-size:12.5px">완료 전에는 항상 "경과"로 보내고, "완료"는 정말 다 끝났을 때만 씁니다. 끝 일시는 완료 문자에만 들어갑니다.</p>
+    </div>
+    <div class="card">
+      <h3>2. 초안 <span class="muted" id="smCount"></span></h3>
+      <textarea id="smDraft" rows="17" spellcheck="false"></textarea>
+      <div class="toolbar" style="margin-top:8px">
+        <button class="btn primary" id="smPhone">휴대폰에서 보기</button>
+        <button class="btn" id="smCopy">복사</button>
+        <button class="btn" id="smReset">양식으로 되돌리기</button>
+        <label class="chk" style="margin-left:auto">도착 시각 <input type="text" id="smClock" value="03:21" size="5"></label>
+      </div>
+      <p class="note" id="smMsg" style="font-size:12.5px"></p>
+    </div>
+  </div>
+</section>
+
+<!-- 7. 장비 반출입 -->
+<section class="tab" id="tab-gear">
+  <p class="note">장비를 들여오거나(반입) 내보낼(반출) 때 남기는 기록입니다. 장비 이름, 모델명, 수량, 반출입 회사, 담당자를 적습니다. 예시 기록은 모두 가상이고, 입력한 내용은 이 브라우저에만 저장됩니다.</p>
+  <div class="card">
+    <h3>반출입 등록</h3>
+    <div class="form">
+      <span>구분</span><div><label class="chk"><input type="radio" name="gDir" value="반입" checked> 반입 (들어옴)</label><label class="chk"><input type="radio" name="gDir" value="반출"> 반출 (나감)</label></div>
+      <span>일시</span><input type="datetime-local" id="gWhen">
+      <span>장비 이름</span><input type="text" id="gName" placeholder="예: IDC_B_FS9 또는 예비 SFP+ 10G">
+      <span>모델명</span><input type="text" id="gModel" placeholder="예: 모델명 또는 제품명">
+      <span>수량(대)</span><input type="number" id="gQty" min="1" value="1" style="width:90px">
+      <span>반출입 회사</span><input type="text" id="gCompany" placeholder="장비를 가져오거나 가져가는 회사">
+      <span>업체 담당자</span><input type="text" id="gWho" placeholder="회사 쪽 담당자 (실제 이름 대신 가상 이름)">
+      <span>우리 담당자</span><input type="text" id="gMine" placeholder="확인한 관제 담당자">
+      <span>센터</span><select id="gCenter"></select>
+      <span>사유</span><select id="gPurpose"><option>신규 설치</option><option>교체</option><option>수리 의뢰</option><option>폐기</option><option>예비품 보충</option><option>임시 반입</option><option>기타</option></select>
+      <span>비고</span><input type="text" id="gNote">
+    </div>
+    <div class="toolbar" style="margin-top:10px"><button class="btn primary" id="gSave">기록 저장</button><button class="btn" id="gCsv">CSV로 내려받기</button><span class="muted" id="gMsg"></span></div>
+  </div>
+  <h2>반출입 기록 <span id="gSum" style="font-weight:400;font-size:13px"></span></h2>
+  <div class="toolbar" id="gFilter"><button class="btn primary" data-f="전체">전체</button><button class="btn" data-f="반입">반입</button><button class="btn" data-f="반출">반출</button></div>
+  <div class="card" style="padding:0;overflow:auto"><table id="gTbl"></table></div>
+</section>
+
+<div class="phone-ov" id="phone" hidden role="dialog" aria-label="휴대폰 미리보기">
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="ph-notch"></div>
+      <div class="ph-status"><span id="phClock">03:21</span><span>LTE</span></div>
+      <div class="ph-head"><span class="ph-back">‹</span><div><b id="phName">TEP IDC</b><small>문자 메시지</small></div></div>
+      <div class="ph-body" id="phBody"></div>
+      <div class="ph-input">문자 메시지</div>
+    </div>
+    <p class="note" id="phWarn" style="max-width:320px"></p>
+    <button class="btn" id="phoneClose">닫기</button>
+  </div>
+</div>
+
 <!-- 5. 장비 터미널 -->
 <section class="tab" id="tab-term">
   <p class="note">가상 장비입니다. 실제 장비에는 접속하지 않으며, 출력은 전부 지어낸 값입니다.</p>
@@ -355,5 +427,6 @@
 <script src="app.js"></script>
 <script src="room3d.js"></script>
 <script src="design.js"></script>
+<script src="support.js"></script>
 </body>
 </html>

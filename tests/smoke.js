@@ -12,6 +12,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 900 }, acceptDownloads: true });
   const page = await ctx.newPage();
+  const goTab = t => page.evaluate(x => document.querySelector(`#tabs button[data-tab="${x}"]`).click(), t);   // 하위 메뉴(마우스를 올려야 보임)에 있는 탭도 직접 누른다
   const errors = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
@@ -46,7 +47,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('내 업무 탭에 업무 목록이 있음', (await page.locator('#taskTbl').innerText()).includes('월간·주간 자료 발송'));
   await page.keyboard.press('Escape');
   check('Esc로 알림이 닫힘', !(await page.locator('#notif').isVisible()));
-  await page.click('[data-tab=room]');
+  await goTab('room');
   await page.click('#bell'); await page.click('[data-np=alerts]');
   await page.locator('#alertTbl tr.click').first().click();
   check('알림 행을 누르면 닫히고 관제의 그 시각으로 이동 (10/21)', !(await page.locator('#notif').isVisible()) && (await page.locator('#tab-monitor').isVisible()) && (await page.locator('#endTime').inputValue()).startsWith('2026-10-21'));
@@ -72,12 +73,55 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.setViewportSize({ width: 1600, height: 900 });
 
   // 탭 순서와 센터 선택: 센터 선택은 관제·서버실에서만 보이고, 두 화면이 같은 센터로 동기화된다
-  check('탭 순서: 관제 / 서버실 / 서버실-3D / 장비 터미널 / 이벤트 대비 / 월간 자료 / 고객 지원', JSON.stringify(await page.locator('#tabs button').allInnerTexts()) === JSON.stringify(['관제', '서버실', '서버실-3D', '장비 터미널', '이벤트 대비', '월간 자료', '고객 지원']));
+  check('위 메뉴: 관제 / 서버실▾ / 장비 터미널 / 이벤트 대비 / 월간 자료 / 고객 지원▾ (하위 메뉴: 서버실·서버실 3D / 문자 전파·방문 신청·장비 반출입)', JSON.stringify(await page.locator('#tabs > button, #tabs > .tabgrp > .grpbtn').allInnerTexts()) === JSON.stringify(['관제', '서버실', '장비 터미널', '이벤트 대비', '월간 자료', '고객 지원']) && JSON.stringify(await page.locator('#tabs .tabgrp:nth-of-type(1) .submenu button').allInnerTexts()) === JSON.stringify(['서버실', '서버실 3D']) && JSON.stringify(await page.locator('#tabs .tabgrp .submenu button').allInnerTexts()) === JSON.stringify(['서버실', '서버실 3D', '문자 전파', '방문 신청', '장비 반출입']));
+  const sub0 = await page.locator('#tabs .tabgrp >> nth=1 >> .submenu').isVisible();
+  await page.hover('#tabs .tabgrp >> nth=1 >> .grpbtn');
+  const sub1 = await page.locator('#tabs .tabgrp >> nth=1 >> .submenu').isVisible();
+  await page.hover('#tabs .tabgrp >> nth=0 >> .grpbtn');
+  const sub2 = [await page.locator('#tabs .tabgrp >> nth=0 >> .submenu').isVisible(), await page.locator('#tabs .tabgrp >> nth=1 >> .submenu').isVisible()];
+  check('하위 메뉴는 평소에 숨겨져 있고, 마우스를 올리면 그 메뉴 아래에만 펼쳐짐', !sub0 && sub1 && sub2[0] && !sub2[1], JSON.stringify([sub0, sub1, sub2]));
+  await page.hover('#tabs .tabgrp >> nth=1 >> .grpbtn');
+  await page.click('#tabs .tabgrp >> nth=1 >> .submenu button[data-tab=gear]');
+  check('고객 지원 하위 메뉴에서 장비 반출입을 누르면 그 화면이 열리고 위 메뉴(고객 지원)가 강조됨', (await page.locator('#tab-gear').isVisible()) && (await page.evaluate(() => document.querySelectorAll('#tabs .tabgrp')[1].classList.contains('on'))));
+  // 문자 전파: 단계별 양식 → 초안 수정 → 휴대폰 미리보기
+  await goTab('sms');
+  const sm0 = await page.inputValue('#smDraft');
+  check('문자 전파: 발생 양식이 채워져 있고 [TEP IDC]·[Web발신]·[주의_센터_발생] 순서임', /^\[TEP IDC\]\n\[Web발신\]\n\[주의_.+_발생\] /.test(sm0) && sm0.includes('■ 서비스영향 : 파악중') && !sm0.includes('■ 조치') && !(await page.locator('#smToRow').isVisible()));
+  await page.click('#smStage [data-st=완료]');
+  const sm1 = await page.inputValue('#smDraft');
+  check('완료를 고르면 끝 일시·조치 입력칸이 나오고 문자에 시작~끝 일시와 조치 시간표가 들어감', (await page.locator('#smToRow').isVisible()) && /■ 일시 : \S+ \S+ ~ \S+ \S+/.test(sm1) && /■ 조치 :\n\d\d:\d\d /.test(sm1) && sm1.includes('[주의_') && sm1.includes('_완료]'));
+  await page.fill('#smTitle', '회선 3개 다운');
+  check('입력칸을 고치면 초안이 바로 바뀜', (await page.inputValue('#smDraft')).includes('회선 3개 다운'));
+  await page.fill('#smDraft', (await page.inputValue('#smDraft')) + '\n(직접 고쳐 쓴 줄)');
+  await page.click('#smPhone');
+  const ph = await page.evaluate(() => ({ vis: !document.getElementById('phone').hidden, txt: document.getElementById('phBody').innerText, br: document.querySelectorAll('#phBody .ph-bubble br').length }));
+  check('"휴대폰에서 보기": 휴대폰 화면에 초안(직접 고친 줄 포함)이 줄바꿈 그대로 말풍선으로 보임', ph.vis && ph.txt.includes('회선 3개 다운') && ph.txt.includes('(직접 고쳐 쓴 줄)') && ph.br >= 8, String(ph.br));
+  await page.keyboard.press('Escape');
+  check('Esc로 휴대폰 화면이 닫힘', await page.evaluate(() => document.getElementById('phone').hidden));
+  // 장비 반출입: 필수 항목 확인, 저장, 합계, 구분 필터, 삭제
+  await goTab('gear');
+  const g0 = await page.locator('#gTbl tr.click, #gTbl tr').count();
+  check('장비 반출입: 예시 기록(가상)이 표로 보이고 반입·반출 합계가 나옴', g0 >= 5 && /반입 \d+대/.test(await page.locator('#gSum').innerText()) && /반출 \d+대/.test(await page.locator('#gSum').innerText()));
+  await page.click('#gSave');
+  check('필수 항목을 비우고 저장하면 빠진 항목을 알려 주고 저장하지 않음', (await page.locator('#gMsg').innerText()).includes('빠진 항목') && (await page.locator('#gTbl tr').count()) === g0);
+  await page.fill('#gName', 'IDC_B_FS10'); await page.fill('#gModel', '시험용 모델'); await page.fill('#gQty', '3'); await page.fill('#gCompany', '시험업체'); await page.fill('#gMine', '관제담당(가상)');
+  await page.check('input[name=gDir][value=반출]');
+  await page.click('#gSave');
+  const g1 = await page.evaluate(() => ({ rows: document.querySelectorAll('#gTbl tr').length, first: document.querySelector('#gTbl tr:nth-child(2)').innerText, sum: document.getElementById('gSum').innerText }));
+  check('저장하면 맨 위에 새 기록(장비 이름·모델명·3대·회사·담당자)이 생기고 합계가 오름', g1.rows === g0 + 1 && ['IDC_B_FS10', '시험용 모델', '3대', '시험업체', '관제담당(가상)', '반출'].every(w => g1.first.includes(w)), g1.first.slice(0, 80).replace(/\s+/g, ' '));
+  await page.click('#gFilter [data-f=반입]');
+  check('"반입"만 보기를 누르면 반출 기록이 사라짐', (await page.locator('#gTbl tr:has(.tag.warn)').count()) === 0);
+  await page.click('#gFilter [data-f=전체]');
+  await page.click('#gTbl tr:nth-child(2) [data-del]');
+  check('삭제하면 그 기록이 없어짐', (await page.locator('#gTbl tr').count()) === g0);
+  const [gcsv] = await Promise.all([page.waitForEvent('download'), page.click('#gCsv')]);
+  const gtxt = require('fs').readFileSync(await gcsv.path(), 'utf8');
+  check('CSV: 열 제목(일시·구분·장비 이름·모델명·수량·회사·담당자)이 있고 기록 수만큼 행이 있음', gcsv.suggestedFilename() === 'gear_log.csv' && gtxt.includes('일시,구분,장비 이름,모델명,수량,회사') && gtxt.trim().split('\n').length === g0);
   const vis = {};
-  for (const tab of ['monitor', 'room', 'room3d', 'term', 'event', 'monthly', 'visit']) { await page.click(`[data-tab=${tab}]`); vis[tab] = await page.locator('#centerBar').isVisible(); }
-  check('센터 선택은 관제·서버실에서만 보이고 나머지 탭에서는 숨겨짐', vis.monitor && vis.room && vis.room3d && !vis.term && !vis.event && !vis.monthly && !vis.visit, JSON.stringify(vis));
+  for (const tab of ['monitor', 'room', 'room3d', 'term', 'event', 'monthly', 'visit', 'sms', 'gear']) { await goTab(tab); vis[tab] = await page.locator('#centerBar').isVisible(); }
+  check('센터 선택은 관제·서버실에서만 보이고 나머지 탭에서는 숨겨짐', vis.monitor && vis.room && vis.room3d && !vis.term && !vis.event && !vis.monthly && !vis.visit && !vis.sms && !vis.gear, JSON.stringify(vis));
   // 서버실-3D (WebGL): 랙 8개 정면, 목록·상세·아래 영역 연동, 장비 클릭, 확대/축소, 드래그
-  await page.click('[data-tab=room3d]');
+  await goTab('room3d');
   await page.click('#centerBar [data-center=ALL]');
   await page.waitForFunction(() => window.THREE && document.querySelectorAll('#glList .gli').length > 0, null, { timeout: 15000 });
   check('서버실-3D: 전체 보기 왼쪽 목록에 랙 46개', (await page.locator('#glList .gli').count()) === 46, await page.locator('#glList .gli').count());
@@ -177,7 +221,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('#glPadTog');
   const big = await page.locator('[data-pan=up]').boundingBox();
   check('화면 버튼은 터치하기 쉬운 크기(44px 이상)', big.width >= 44 && big.height >= 44, `${big.width}x${big.height}`);
-  await page.click('[data-tab=monitor]');
+  await goTab('monitor');
   const barMon = await page.locator('#centerBar').innerText();
   const order = await page.locator('#centerBar .cbtn').evaluateAll(els => els.map(e => e.dataset.center));
   check('센터 순서: 전체 → 서초 → 분당 → 구로 → 안산', JSON.stringify(order) === JSON.stringify(['ALL', 'S', 'B', 'G', 'A']), order.join());
@@ -187,7 +231,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('#centerBar [data-center=S]');
   check('서초 관제에도 그 회선이 보임', (await page.locator('#p-IDC_S_FS2_TOB1:visible').count()) === 1);
   await page.click('#centerBar [data-center=ALL]');
-  await page.click('[data-tab=room]');
+  await goTab('room');
   const barRoom = await page.locator('#centerBar').innerText();
   check('센터 버튼 옆의 숫자: 관제에는 없고 서버실에서만 "랙 · 장비" 수가 보임', !/\d/.test(barMon) && /랙 10 · 장비 22/.test(barRoom) && /랙 46 · 장비 120/.test(barRoom), barRoom.replace(/\n/g, ' '));
   const expectBy = await page.evaluate(() => Object.fromEntries(Object.keys(TOPOLOGY.centers).map(c => [c, {
@@ -197,10 +241,10 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   }])));
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   for (const code of ['B', 'S', 'G', 'A']) {
-    await page.click('[data-tab=monitor]');
+    await goTab('monitor');
     await page.click(`#centerBar [data-center=${code}]`);
     const panels = (await page.locator('.panel:visible').evaluateAll(els => els.map(e => e.id.replace('p-', '')))).sort();
-    await page.click('[data-tab=room]');
+    await goTab('room');
     const racks = (await page.locator('#racks .rack').evaluateAll(els => els.map(e => e.dataset.rack))).sort();
     const devs = (await page.locator('#racks .rdev').evaluateAll(els => els.map(e => e.dataset.dev))).sort();
     const e = expectBy[code];
@@ -211,25 +255,25 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
       `그래프 ${same(panels, e.panels)}, 랙 ${same(racks, e.racks)}, 이름 ${allCode}`);
   }
   // 터미널은 센터 선택과 상관없이 전체 장비를 보여 준다
-  await page.click('[data-tab=monitor]'); await page.click('#centerBar [data-center=S]');
-  await page.click('[data-tab=term]');
+  await goTab('monitor'); await page.click('#centerBar [data-center=S]');
+  await goTab('term');
   const devCount = await page.locator('#devTbl tr.click').count();
   check('터미널·설계도는 센터 선택과 상관없이 전체 장비를 보여 줌 (서초를 골라도 120대)', devCount === (await page.evaluate(() => TOPOLOGY.devices.length)) && devCount === 120, String(devCount));
   // 고객사 19곳, 모든 회선에 고객사가 있고, 제목은 길면 줄여서 보인다
   const cust = await page.evaluate(() => ({ n: CUSTOMERS.length, keys: new Set(CUSTOMERS.map(c => c.key)).size, bad: CUSTOMERS.flatMap(c => c.links).filter(id => !LINK[id]), none: LINKS.filter(l => custOf(l.id).length === 0).map(l => l.id) }));
   check('고객사 19곳(가상), 이름·키 중복 없음, 존재하지 않는 회선 없음, 고객사가 없는 회선 없음', cust.n === 19 && cust.keys === 19 && cust.bad.length === 0 && cust.none.length === 0, JSON.stringify(cust));
-  await page.click('[data-tab=monitor]'); await page.click('#centerBar [data-center=ALL]');
+  await goTab('monitor'); await page.click('#centerBar [data-center=ALL]');
   const titles = await page.locator('.panel .hd b').allInnerTexts();
   check('그래프 제목에 "공용"이 없고, 고객사가 3곳 이상이면 "외 N곳"으로 줄여 보임', titles.every(t => !t.includes('공용')) && titles.some(t => /외 \d+곳/.test(t)) && titles.every(t => t.split(' · ').length <= 2 || /외 \d+곳/.test(t)), titles.join(' | '));
   // 서초를 보다가 "냉각 이상" 버튼을 누르면 사건이 있는 분당으로 센터가 맞춰진다
   await page.click('#centerBar [data-center=S]');
-  await page.click('[data-tab=room]');
+  await goTab('room');
   await page.click('[data-sr="2026-10-26T15:55"]');
   check('냉각 이상 버튼: 서초를 보고 있어도 사건이 있는 분당으로 맞춰지고 IDC_B_R08가 보임', (await page.locator('#centerBar .cbtn.on').getAttribute('data-center')) === 'B' && (await page.locator('.rack[data-rack="IDC_B_R08"]').count()) === 1);
   check('서버실 화면에 옛 랙 이름(A-03)이 없음', !(await page.locator('#tab-room').innerText()).includes('A-03'));
   // 서버실에서 장비를 누르면 그 장비의 터미널이 열린다 (서초)
   await page.click('#centerBar [data-center=S]');
-  await page.click('[data-tab=room]');
+  await goTab('room');
   const [popS] = await Promise.all([ctx.waitForEvent('page'), page.click('#racks .rdev >> nth=0')]);
   await popS.waitForLoadState('load');
   const tgt = await popS.locator('#termTarget').innerText();
@@ -239,14 +283,14 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('#centerBar [data-center=G]');
   await page.reload({ waitUntil: 'load' });
   await page.waitForTimeout(300);
-  await page.click('[data-tab=monitor]');   // 새로고침한 주소에 #room이 남아 있을 수 있어 관제 화면으로 간다
+  await goTab('monitor');   // 새로고침한 주소에 #room이 남아 있을 수 있어 관제 화면으로 간다
   check('센터 선택(구로)이 새로고침 후에도 유지됨', (await page.locator('#centerBar .cbtn.on').getAttribute('data-center')) === 'G' && (await page.locator('.panel:visible').count()) === 2);
   await page.click('#centerBar [data-center=ALL]');
   check('전체를 고르면 그래프 15개가 모두 보임', (await page.locator('.panel:visible').count()) === 15);
 
   // 시나리오 4가지: 시간이 흘러가고, 단계(감지·확인·조치·결과)가 나오고, 닫으면 현재로 돌아온다
   // 시나리오 이전/다음: 팝업과 위쪽 막대 모두
-  await page.click('[data-tab=monitor]');
+  await goTab('monitor');
   await page.click('#scnBtn'); await page.click('#scnMenu [data-scn=calm]');
   await page.waitForSelector('#scnPop:not([hidden])');
   check('시나리오 팝업: 1단계에서는 "이전"이 막혀 있음', await page.locator('#scnPopPrev').isDisabled());
@@ -322,7 +366,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const scenarios = [['calm', '평일 오후 7시', 4, ['그래프 15개 확인', '서버실 확인', '이상 없음']], ['drop', '트래픽 급감', 6, ['급감', 'IDC_B_FS2_INTL1', '광값', '예시미디어', '회복']],
     ['redundancy', '이중화로 무사히 넘기기', 8, ['이중화', '전원 꺼짐', '트래픽은 거의 그대로', '고객 영향 없음']], ['linkDown', '업링크 회선 다운', 9, ['Admin', '트래픽(전/후)', '광값', 'ping', '연동망', '원인 확인', '회복']], ['ddos', 'DDoS 공격 수신', 10, ['DDoS', '공격량', '클린존', '블랙홀', '정상화', '해제']], ['surge', '트래픽 폭주', 7, ['사전 연락', '분산', '하이드레이션', '경고선 80%', '사후 정리', '[TEP IDC]']], ['temp', '서버실 온도 변화', 7, ['온도 경고', '빨강 깜박임', '터미널', '냉각 복구', '-40.00 dBm']]];
   for (const [id, name, n, words] of scenarios) {
-    await page.click('[data-tab=monitor]');
+    await goTab('monitor');
     await page.click('#scnBtn'); await page.click(`#scnMenu [data-scn=${id}]`);
     if (id === 'linkDown') await page.click('[data-ldcause=work]');   // 복구 원인을 먼저 고른다
     await page.waitForSelector('#scnPop:not([hidden])', { timeout: 30000 });   // 첫 단계가 되면 팝업이 뜬다
@@ -359,23 +403,23 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   }
 
   // 월간 자료: 정기 발송 고객사를 월초·월말·매주로 나눠 접어 둔다
-  await page.click('[data-tab=monthly]');
+  await goTab('monthly');
   const plan = await page.evaluate(() => [...document.querySelectorAll('#sendPlan details')].map(d => ({ open: d.open, sum: d.querySelector('summary').innerText, names: [...d.querySelectorAll('tr > td:first-child')].map(x => x.textContent.trim()), boxes: d.querySelectorAll('input[type=checkbox]').length })));
   check('이번 달 발송 현황: 월초·월말·매주 3묶음이 모두 접혀 있고, 정해 준 고객사만 나옴(월초 예시미디어·샘플게임즈 / 월말 가상은행·예시금융 / 매주 데모스트리밍)', plan.length === 3 && plan.every(g => !g.open) && JSON.stringify(plan.map(g => g.names)) === JSON.stringify([['예시미디어', '샘플게임즈'], ['가상은행', '예시금융'], ['데모스트리밍']]) && /월초 발송/.test(plan[0].sum) && /월말 발송/.test(plan[1].sum) && /매주 발송/.test(plan[2].sum), JSON.stringify(plan.map(g => g.sum)));
   check('매주 묶음은 이번 달 월요일 칸(10/5·12·19·26)이 있고 아직 안 온 날은 예정으로 표시', plan[2].boxes === 4 && (await page.evaluate(() => document.querySelector('#sendPlan details[data-plan=weekly]').textContent)).includes('10-26 (예정)'));
   await page.click('#sendPlan details[data-plan=start] > summary');
   await page.click('#sendPlan details[data-plan=start] input >> nth=0');
   check('묶음을 펼쳐 발송 완료를 체크하면 완료 수가 올라가고 묶음은 열린 채로 남음', (await page.locator('#sendPlan details[data-plan=start] > summary').innerText()).includes('완료 1/2') && (await page.evaluate(() => document.querySelector('#sendPlan details[data-plan=start]').open)));
-  await page.click('[data-tab=event]');
+  await goTab('event');
   const planText = await page.locator('#evPlan').innerText();
   check('센터 이름이 지명(분당·안산·구로·서초)으로 나옴', ['분당 → 중앙 백본 (A)', '안산 → 중앙 백본 (Juniper)', '구로 → 중앙 백본', '서초 센터 백본 (Cisco)'].every(w => planText.includes(w)) && !/우리 센터|센터B|센터C|센터D/.test(planText), planText.split('\n').slice(0, 3).join(' | '));
   for (const t of ['monthly', 'event', 'room', 'visit', 'term']) {
-    await page.click(`[data-tab=${t}]`);
+    await goTab(t);
     await page.waitForTimeout(150);
     check(`${t} 탭 열림`, await page.locator('#tab-' + t).isVisible());
   }
 
-  await page.click('[data-tab=monthly]');
+  await goTab('monthly');
   const [zip] = await Promise.all([page.waitForEvent('download'), page.click('#mZip')]);
   const zbuf = require('fs').readFileSync(await zip.path());
   check('월간 자료 zip 시그니처(PK)와 영문 파일 이름', zbuf[0] === 0x50 && zbuf[1] === 0x4b && /^traffic_gasang_.*\.zip$/.test(zip.suggestedFilename()), zip.suggestedFilename());
@@ -417,7 +461,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('시작일이 끝나는 날보다 늦으면 안내가 뜸', (await page.locator('#mSum').innerText()).includes('늦습니다'));
   await page.fill('#mMonth', '2026-10'); await page.press('#mMonth', 'Tab');
 
-  await page.click('[data-tab=room]');
+  await goTab('room');
   await page.click('[data-sr="2026-10-26T16:15"]');
   check('냉각 이상 시 위험 랙 1개', (await page.locator('.rack.hot, .rack.crit').count()) === 1);
 
@@ -447,16 +491,16 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('채워 둔 첫 명령(회선 설명)이 실행됨', (await pop.locator('#termOut').innerText()).includes('Admin Link Description'));
   await pop.close();
 
-  await page.click('[data-tab=room]');
+  await goTab('room');
   await page.click('#homeLink');
   check('제목을 누르면 관제(홈)로 이동', await page.locator('#tab-monitor').isVisible());
 
-  await page.click('[data-tab=visit]');
+  await goTab('visit');
   await page.click('#vParse');
   await page.click('#vReg');
   check('방문 등록 후 회신 초안이 생김', (await page.locator('#vReply').inputValue()).includes('방문 등록 완료'));
 
-  await page.click('[data-tab=term]');
+  await goTab('term');
   const opts = async () => (await page.locator('#devSel option').allInnerTexts()).map(o => o.split(' · ')[0]);
   check('제조사 기본값은 Juniper이고 Juniper 장비만 나옴', (await page.locator('#vendorSel').inputValue()) === 'juniper' && (await opts()).length === 34 && (await opts()).includes('IDC_B_FS1') && (await opts()).includes('IDC_S_FS1'));
   await page.selectOption('#vendorSel', 'cisco');
@@ -472,7 +516,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('#qcmd button');
   await page.press('#termIn', 'Enter');
   // 장비 터미널 화면 정리: 접이식 매뉴얼, 목적별 명령(설명), 접이식 설계도(그림)와 PDF
-  await page.click('[data-tab=term]');
+  await goTab('term');
   const fold0 = await page.evaluate(() => ({ rb: document.getElementById('runbook').open, dg: document.getElementById('designBox').open, tb: document.getElementById('dgTables').open }));
   check('장애 매뉴얼과 설계도는 평소에 안 보이고 터미널이 먼저 보임', !fold0.rb && !fold0.dg && !fold0.tb, JSON.stringify(fold0));
   await page.click('#runbookBtn');

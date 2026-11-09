@@ -99,7 +99,8 @@ const ALERTS = (() => { const r = Lib.detectTraffic(DATA); Object.assign(DROP, r
 
 /* ---------- 탭 ---------- */
 function showTab(name) {
-  $$("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
+  $$("#tabs button[data-tab]").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
+  $$("#tabs .tabgrp").forEach(g => g.classList.toggle("on", [...g.querySelectorAll(".submenu button")].some(b => b.dataset.tab === name)));
   $$("section.tab").forEach(s => s.classList.toggle("on", s.id === "tab-" + name));
   if (typeof renderCenterBar === "function") {   // 센터 선택은 관제와 서버실에서만 보인다
     $("#centerBar").hidden = !(name === "monitor" || name === "room" || name === "room3d");
@@ -112,7 +113,7 @@ function showTab(name) {
   if (name === "term" && typeof termSync === "function") termSync();
   try { history.replaceState(null, "", "#" + name); } catch (e) { /* 무시 */ }
 }
-$("#tabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) showTab(b.dataset.tab); });
+$("#tabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { showTab(b.dataset.tab); if (document.activeElement) document.activeElement.blur(); } });
 
 /* ---------- 1. 관제 ---------- */
 const NOW_IDX = idxOf(parseT("2026-10-22T21:00"));   // 가상 "현재" 시각: 평소 저녁
@@ -1469,5 +1470,5 @@ if (qs.get("popup") === "term") {
   document.title = `${qs.get("dev")} 터미널 (가상)`;
   $("#termIn").focus();
 } else {
-  showTab(["monitor", "monthly", "event", "room", "room3d", "visit", "term"].includes(h0) ? h0 : "monitor");
+  showTab(["monitor", "monthly", "event", "room", "room3d", "visit", "term", "sms", "gear"].includes(h0) ? h0 : "monitor");
 }
