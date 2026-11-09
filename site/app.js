@@ -1470,5 +1470,5 @@ if (qs.get("popup") === "term") {
   document.title = `${qs.get("dev")} 터미널 (가상)`;
   $("#termIn").focus();
 } else {
-  showTab(["monitor", "monthly", "event", "room", "room3d", "visit", "term", "sms", "gear"].includes(h0) ? h0 : "monitor");
+  showTab(["monitor", "monthly", "event", "room", "room3d", "visit", "term", "sms", "gear", "live"].includes(h0) ? h0 : "monitor");
 }

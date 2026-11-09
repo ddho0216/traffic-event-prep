@@ -34,13 +34,16 @@
   sv("smReset").onclick = () => setStage(stage, true);
   sv("smCopy").onclick = async () => { try { await navigator.clipboard.writeText(sv("smDraft").value); sv("smMsg").textContent = "복사했습니다"; } catch (e) { sv("smDraft").select(); sv("smMsg").textContent = "선택했습니다. Ctrl+C로 복사하세요"; } };
   const phoneText = t => esc(t).replace(/\n/g, "<br>");
-  function showPhone() {
-    const t = sv("smDraft").value.trim(); if (!t) { sv("smMsg").textContent = "초안이 비어 있습니다"; return; }
-    const lines = t.split("\n"), first = lines[0] || COMPANY;
-    sv("phBody").innerHTML = `<div class="ph-date">오늘 ${sv("smClock").value || "03:21"}</div><div class="ph-bubble">${phoneText(t)}</div><div class="ph-time">${sv("smClock").value || "03:21"}</div>`;
-    sv("phClock").textContent = sv("smClock").value || "03:21"; sv("phName").textContent = first.replace(/^\[|\]$/g, "");
+  window.openPhone = (text, clock) => {   // 다른 화면(실시간 대응)에서도 같은 휴대폰 미리보기를 쓴다
+    const t = String(text).trim(), lines = t.split("\n"), first = lines[0] || COMPANY, ck = clock || "03:21";
+    sv("phBody").innerHTML = `<div class="ph-date">오늘 ${esc(ck)}</div><div class="ph-bubble">${phoneText(t)}</div><div class="ph-time">${esc(ck)}</div>`;
+    sv("phClock").textContent = ck; sv("phName").textContent = first.replace(/^\[|\]$/g, "");
     sv("phWarn").textContent = bytes(t) > 90 ? `약 ${bytes(t)}바이트라서 일반 문자(SMS)가 아니라 장문(LMS)으로 가는 길이입니다 (기준은 현장 시스템에 따라 다를 수 있음)` : "짧은 문자 길이입니다";
     sv("phone").hidden = false; sv("phoneClose").focus();
+  };
+  function showPhone() {
+    const t = sv("smDraft").value.trim(); if (!t) { sv("smMsg").textContent = "초안이 비어 있습니다"; return; }
+    openPhone(t, sv("smClock").value);
   }
   sv("smPhone").onclick = showPhone;
   sv("phoneClose").onclick = () => { sv("phone").hidden = true; };

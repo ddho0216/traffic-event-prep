@@ -73,7 +73,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.setViewportSize({ width: 1600, height: 900 });
 
   // 탭 순서와 센터 선택: 센터 선택은 관제·서버실에서만 보이고, 두 화면이 같은 센터로 동기화된다
-  check('위 메뉴: 관제 / 서버실▾ / 장비 터미널 / 이벤트 대비 / 월간 자료 / 고객 지원▾ (하위 메뉴: 서버실·서버실 3D / 문자 전파·방문 신청·장비 반출입)', JSON.stringify(await page.locator('#tabs > button, #tabs > .tabgrp > .grpbtn').allTextContents()) === JSON.stringify(['관제', '서버실', '장비 터미널', '이벤트 대비', '월간 자료', '고객 지원']) && JSON.stringify(await page.locator('#tabs .tabgrp:nth-of-type(1) .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D']) && JSON.stringify(await page.locator('#tabs .tabgrp .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D', '문자 전파', '방문 신청', '장비 반출입']));
+  check('위 메뉴: 관제 / 서버실▾ / 장비 터미널 / 이벤트 대비 / 월간 자료 / 고객 지원▾ (하위 메뉴: 서버실·서버실 3D / 문자 전파·방문 신청·장비 반출입)', JSON.stringify(await page.locator('#tabs > button, #tabs > .tabgrp > .grpbtn').allTextContents()) === JSON.stringify(['관제', '서버실', '장비 터미널', '실시간 대응 시험판', '이벤트 대비', '월간 자료', '고객 지원']) && JSON.stringify(await page.locator('#tabs .tabgrp:nth-of-type(1) .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D']) && JSON.stringify(await page.locator('#tabs .tabgrp .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D', '문자 전파', '방문 신청', '장비 반출입']));
   const sub0 = await page.locator('#tabs .tabgrp >> nth=1 >> .submenu').isVisible();
   await page.hover('#tabs .tabgrp >> nth=1 >> .grpbtn');
   const sub1 = await page.locator('#tabs .tabgrp >> nth=1 >> .submenu').isVisible();
@@ -118,9 +118,75 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const [gcsv] = await Promise.all([page.waitForEvent('download'), page.click('#gCsv')]);
   const gtxt = require('fs').readFileSync(await gcsv.path(), 'utf8');
   check('CSV: 열 제목(일시·구분·장비 이름·모델명·수량·회사·담당자)이 있고 기록 수만큼 행이 있음', gcsv.suggestedFilename() === 'gear_log.csv' && gtxt.includes('일시,구분,장비 이름,모델명,수량,회사') && gtxt.trim().split('\n').length === g0);
+  // 실시간 대응(시험판): 목업(mock3-E2)대로 가상 시계가 흐르고, 알림은 3분 늦게 뜨고, 직접 확인·판단·조치한다
+  await goTab('live');
+  const lv = async () => page.evaluate(() => ({ t: LIVE.state.t, now: document.getElementById('lvNow').textContent, alert: document.getElementById('lvAlert').className, comp: document.getElementById('lvComp').innerText, timer: document.getElementById('lvTimer').innerText, prog: document.getElementById('lvProg').textContent, draft: document.getElementById('lvDraft').value, term: document.getElementById('lvTermOut').textContent, log: document.getElementById('lvLog').innerText }));
+  await page.evaluate(() => LIVE.reset(false));
+  let L = await lv();
+  check('실시간 대응: 시작 전에는 알림이 없고 공격 구성은 "알림을 확인하면 표시"로 가려져 있음, 해야 할 일 0/6', L.alert.includes('idle') && L.comp.includes('알림을 확인하면') && L.prog.includes('0 / 6'));
+  await page.evaluate(() => LIVE.jump(22));
+  L = await lv();
+  check('급증이 시작된 뒤에도(03:22) 알림은 아직 안 뜸: 탐지 지연 3분(눈으로 먼저 알아채는 구간)', !L.alert.includes('hot') && parseFloat(L.now) > 5, L.now + ' ' + L.alert);
+  await page.evaluate(() => LIVE.jump(23));
+  check('03:23에 빨간 알림 줄이 뜨고 급증 시작 03:20·지연 3분이 적힘', (await page.locator('#lvAlert.hot').isVisible()) && (await page.locator('#lvAlert').innerText()).includes('지연 3분') && (await page.locator('#lvAck').isVisible()));
+  check('알림을 확인하기 전에는 조치 버튼이 막혀 있음', await page.locator('#lvTodo [data-a=ev]').isDisabled());
+  await page.click('#lvAck');
+  L = await lv();
+  check('확인하기를 누르면 공격 트래픽 구성(출발지 대역·SYN·443·패킷 크기)이 나타나고 기록에 알림 확인이 남음', L.comp.includes('203.0.113.0/24') && L.comp.includes('TCP SYN') && L.comp.includes('443') && L.log.includes('알림 확인'));
+  check('발생 문자 기한 타이머: 알림 후 8분(03:31)까지 남은 시간이 보임', /8:00 남음|7:\d\d 남음/.test(L.timer), L.timer.replace(/\n/g, ' '));
+  const draft0 = L.draft;
+  check('발생 문자 초안: 공격량(Gbps/Mpps)이 현재 값으로 자동 채워짐, 양식은 [TEP IDC]·[Web발신]·[주의_분당_발생]', /\[주의_분당_발생\]/.test(draft0) && /■ 공격량 : TCP \(6\.\d Gbps \/ 6\.\d Mpps\)/.test(draft0) && draft0.includes('■ 서비스영향 : 파악중'));
+  await page.fill('#lvTermIn', 'show interfaces xe-0/0/1 extensive | match "bps|pps"'); await page.press('#lvTermIn', 'Enter');
+  await page.fill('#lvTermIn', 'show route 198.51.100.77'); await page.press('#lvTermIn', 'Enter');
+  await page.fill('#lvTermIn', '엉뚱한 명령'); await page.press('#lvTermIn', 'Enter');
+  L = await lv();
+  check('터미널: 속도 확인은 가상 시각의 bps/pps, 경로 확인은 BGP 경로, 모르는 명령은 거절', /Input rate +: \d{9,} bps \(\d{6,} pps\)/.test(L.term) && L.term.includes('[BGP/170]') && L.term.includes('unknown command'));
+  await page.click('#lvTodo [data-a=ev]'); await page.click('#lvTodo [data-a=ip]');
+  await page.click('#lvTodo [data-a=clean]');
+  check('클린존 우회를 누르면 미가입이라 불가라고 알려 주고 차단 방법 단계는 그대로 남음', (await page.locator('#lvSendMsg').innerText()).includes('미가입') && (await page.locator('#lvProg').innerText()).includes('2 / 6'));
+  await page.click('#lvSave');
+  check('"기록에 저장": 저장됨 표시가 나오고 브라우저에 사건 기록이 남음', (await page.locator('#lvSaved').isVisible()) && (await page.evaluate(() => JSON.parse(localStorage.getItem('live:records')).length)) >= 1);
+  await page.evaluate(() => LIVE.jump(26));
+  await page.click('#lvSend');
+  const ph2 = await page.evaluate(() => ({ vis: !document.getElementById('phone').hidden, txt: document.getElementById('phBody').innerText }));
+  L = await lv();
+  check('발생 문자를 보내면 휴대폰 미리보기가 뜨고, 타이머가 기한 안 발송(알림 후 3분)으로 바뀌고 3번 단계가 끝남', ph2.vis && ph2.txt.includes('[주의_분당_발생]') && L.timer.includes('기한 안') && L.prog.includes('3 / 6'), L.timer.replace(/\n/g, ' '));
+  await page.keyboard.press('Escape');
+  await page.click('#lvTodo [data-a=bh]');
+  await page.click('#lvTodo [data-a=exec]');
+  const before = parseFloat((await lv()).now);
+  await page.evaluate(() => LIVE.advance(3));
+  L = await lv();
+  check('블랙홀을 실행하면 몇 분 뒤 그래프의 in이 평소 값으로 떨어지고, 경로가 Discard로 바뀜', before > 8 && parseFloat(L.now) < 5 && (await (async () => { await page.fill('#lvTermIn', 'show route 198.51.100.77'); await page.press('#lvTermIn', 'Enter'); return (await lv()).term.includes('Discard'); })()), `${before} → ${L.now}`);
+  await page.click('#lvTodo [data-a=up]');
+  L = await lv();
+  check('상위 연동망 요청까지 하면 5번 단계 완료, 조치 내용이 내 기록에 남음', L.prog.includes('5 / 6') && L.log.includes('블랙홀 차단') && L.log.includes('65535:666'));
+  check('공격이 끝나기 전(03:30)에는 블랙홀로 버려지는 양이 구성 카드에 보임', (await page.locator('#lvCompSub').innerText()).includes('블랙홀로 버려지는 양'));
+  // 공격이 끝난 뒤 해제 → 완료 문자 → 결과
+  await page.evaluate(() => LIVE.jump(42));
+  await page.click('#lvTodo [data-a=rel]');
+  await page.evaluate(() => LIVE.advance(3));
+  await page.click('#lvStage [data-st=완료]');
+  const dn = await page.inputValue('#lvDraft');
+  check('완료 문자: 시작~끝 일시, 직접 한 조치 시간표(블랙홀 차단·연동망 요청·해제), 블랙홀 구간이 서비스영향에 적힘', /■ 일시 : 10\/29 03:20 ~ 10\/29 03:4\d/.test(dn) && dn.includes('블랙홀 차단') && dn.includes('65535:666') && dn.includes('블랙홀 해제') && /블랙홀 구간\(03:2\d~03:4\d\)/.test(dn) && dn.includes('_완료]'));
+  await page.click('#lvSend');
+  await page.keyboard.press('Escape');
+  const res = await page.evaluate(() => ({ vis: !document.getElementById('lvResult').hidden, txt: document.getElementById('lvResBody').innerText }));
+  check('완료 문자를 보내면 대응 결과가 나옴: 알림→확인·문자·차단 시간, 블랙홀 구간, 클린존 확인 여부, 기록 저장 여부', res.vis && ['알림 → 발생 문자', '기한 8분 안', '알림 → 차단', '블랙홀 구간', '클린존 가입 확인', '확인함', '사건 기록 저장', '발생 → 완료'].every(w => res.txt.includes(w)), res.txt.slice(0, 80).replace(/\n/g, ' '));
+  // 너무 일찍 해제하면 공격이 다시 들어온다, 문자를 늦게 보내면 기한 초과
+  await page.evaluate(() => LIVE.reset(false));
+  await page.evaluate(() => LIVE.jump(25)); await page.click('#lvAck'); await page.click('#lvTodo [data-a=bh]'); await page.click('#lvTodo [data-a=exec]');
+  await page.evaluate(() => LIVE.advance(3)); const low = parseFloat((await lv()).now);
+  await page.click('#lvTodo [data-a=rel]'); await page.evaluate(() => LIVE.advance(2)); const high = parseFloat((await lv()).now);
+  check('공격이 끝나기 전에 블랙홀을 해제하면 그래프의 in이 다시 올라감', low < 5 && high > 8, `${low} → ${high}`);
+  await page.evaluate(() => LIVE.reset(false));
+  await page.evaluate(() => LIVE.jump(33)); await page.click('#lvAck'); await page.click('#lvSend');
+  check('발생 문자를 8분 뒤에 보내면 "기한 초과"로 표시됨', (await lv()).timer.includes('기한 초과'));
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => LIVE.reset(false));
   const vis = {};
-  for (const tab of ['monitor', 'room', 'room3d', 'term', 'event', 'monthly', 'visit', 'sms', 'gear']) { await goTab(tab); vis[tab] = await page.locator('#centerBar').isVisible(); }
-  check('센터 선택은 관제·서버실에서만 보이고 나머지 탭에서는 숨겨짐', vis.monitor && vis.room && vis.room3d && !vis.term && !vis.event && !vis.monthly && !vis.visit && !vis.sms && !vis.gear, JSON.stringify(vis));
+  for (const tab of ['monitor', 'room', 'room3d', 'term', 'event', 'monthly', 'visit', 'sms', 'gear', 'live']) { await goTab(tab); vis[tab] = await page.locator('#centerBar').isVisible(); }
+  check('센터 선택은 관제·서버실에서만 보이고 나머지 탭에서는 숨겨짐', vis.monitor && vis.room && vis.room3d && !vis.term && !vis.event && !vis.monthly && !vis.visit && !vis.sms && !vis.gear && !vis.live, JSON.stringify(vis));
   // 서버실-3D (WebGL): 랙 8개 정면, 목록·상세·아래 영역 연동, 장비 클릭, 확대/축소, 드래그
   await goTab('room3d');
   await page.click('#centerBar [data-center=ALL]');

@@ -17,6 +17,7 @@
     <button data-tab="monitor" class="on">관제</button>
     <div class="tabgrp"><button data-tab="room" class="grpbtn">서버실</button><div class="submenu"><button data-tab="room">서버실</button><button data-tab="room3d">서버실 3D</button></div></div>
     <button data-tab="term">장비 터미널</button>
+    <button data-tab="live">실시간 대응 <small class="beta">시험판</small></button>
     <button data-tab="event">이벤트 대비</button>
     <button data-tab="monthly">월간 자료</button>
     <div class="tabgrp"><button data-tab="sms" class="grpbtn">고객 지원</button><div class="submenu"><button data-tab="sms">문자 전파</button><button data-tab="visit">방문 신청</button><button data-tab="gear">장비 반출입</button></div></div>
@@ -296,6 +297,9 @@
   <textarea id="vReply" rows="8" placeholder="방문 등록을 하면 회신 초안이 여기에 만들어집니다."></textarea>
 </section>
 
+<!-- 8. 실시간 대응 (시험판) -->
+<section class="tab" id="tab-live"></section>
+
 <!-- 6. 문자 전파 -->
 <section class="tab" id="tab-sms">
   <p class="note">장애 전파 문자를 쓰는 곳입니다. 단계(발생·경과·완료)를 고르면 양식이 채워지고, 초안을 고친 뒤 "휴대폰에서 보기"를 누르면 받는 사람 화면으로 보입니다. 내용은 모두 가상이며 실제로 발송되지 않습니다.</p>
@@ -428,5 +432,6 @@
 <script src="room3d.js"></script>
 <script src="design.js"></script>
 <script src="support.js"></script>
+<script src="live.js"></script>
 </body>
 </html>
