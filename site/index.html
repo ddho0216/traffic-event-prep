@@ -301,7 +301,8 @@
 <section class="tab" id="tab-term">
   <p class="note">가상 장비입니다. 실제 장비에는 접속하지 않으며, 출력은 전부 지어낸 값입니다.</p>
   <p class="note" id="termTarget" style="color:var(--in);font-size:13px"></p>
-  <div class="cols" style="grid-template-columns:2fr 1fr">
+  <div class="toolbar"><span class="seg" id="termNav"><button class="btn on" data-pane="term">터미널</button><button class="btn" data-pane="runbook">장애 매뉴얼</button><button class="btn" data-pane="design">설계도</button></span></div>
+  <div class="cols" id="termPane" style="grid-template-columns:2fr 1fr">
     <div>
       <div class="toolbar"><label>제조사 <select id="vendorSel"></select></label>
       <label>장비 <select id="devSel"></select></label><button class="btn" id="termClear">화면 지우기</button><button class="btn" id="runbookBtn" title="장애가 났을 때 순서대로 따라 할 수 있는 매뉴얼을 펼칩니다">장애 매뉴얼 열기</button></div>

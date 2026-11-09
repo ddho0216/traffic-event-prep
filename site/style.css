@@ -281,3 +281,7 @@ details.fold.sub{margin-top:10px;border:1px solid var(--line);border-radius:3px}
 
 header.top h1 a{display:inline-flex;align-items:center;gap:9px}
 header.top .logo{display:block;border-radius:6px}
+
+#runbook>summary,#designBox>summary{display:none}
+#runbook:not([open]),#designBox:not([open]){display:none}
+#termNav{margin-bottom:2px}

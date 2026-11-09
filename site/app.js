@@ -826,10 +826,13 @@ function openDeviceTerminal(devId) {   // 랙 안 장비를 누르면 그 장비
   fillVendors("juniper");   // 가장 많이 쓰는 Juniper가 기본
   $("#vendorSel").onchange = () => { fillDevices($("#vendorSel").value); termBanner(); };
   $("#devSel").onchange = termBanner;
-  ["devTbl", "custTbl", "linkTbl"].forEach(id => $("#" + id).addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { selectDevice(tr.dataset.dev); $("#termIn").focus(); window.scrollTo({ top: 0, behavior: "smooth" }); } }));
+  ["devTbl", "custTbl", "linkTbl"].forEach(id => $("#" + id).addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { showTermPane("term"); selectDevice(tr.dataset.dev); $("#termIn").focus(); window.scrollTo({ top: 0, behavior: "smooth" }); } }));
   renderDesign();
   $("#termClear").onclick = termBanner;
-  $("#runbookBtn").onclick = () => { const d = $("#runbook"); d.open = !d.open; if (d.open) d.scrollIntoView({ behavior: "smooth", block: "start" }); $("#runbookBtn").textContent = d.open ? "장애 매뉴얼 접기" : "장애 매뉴얼 열기"; };
+  // 터미널 탭 안의 보조 메뉴: 터미널 / 장애 매뉴얼 / 설계도 (한 번에 하나만 보인다)
+  window.showTermPane = p => { $("#termPane").style.display = p === "term" ? "" : "none"; $("#runbook").open = p === "runbook"; $("#designBox").open = p === "design"; $("#runbookBtn").textContent = p === "runbook" ? "장애 매뉴얼 접기" : "장애 매뉴얼 열기"; $$("#termNav button").forEach(b => b.classList.toggle("on", b.dataset.pane === p)); };
+  $("#termNav").addEventListener("click", e => { const b = e.target.closest("button"); if (b) showTermPane(b.dataset.pane); });
+  $("#runbookBtn").onclick = () => showTermPane($("#runbook").open ? "term" : "runbook");
   $("#runbook").addEventListener("toggle", () => { $("#runbookBtn").textContent = $("#runbook").open ? "장애 매뉴얼 접기" : "장애 매뉴얼 열기"; });
   $("#qcmd").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { $("#termIn").value = b.dataset.c; $("#termIn").focus(); } });
   $("#termIn").addEventListener("keydown", e => {

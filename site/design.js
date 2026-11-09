@@ -126,7 +126,7 @@ function renderDiagram() {
   const tabs = $("#dgTabs"); if (!tabs) return;
   tabs.innerHTML = `<button class="btn" data-dg="ALL">전체</button>` + DG_CODES.map(c => `<button class="btn" data-dg="${c}">${TOPOLOGY.centers[c].replace(" 센터", "")}</button>`).join("");
   tabs.addEventListener("click", e => { const b = e.target.closest("button"); if (b) { dgCur = b.dataset.dg; renderDiagram(); } });
-  $("#dgView").addEventListener("click", e => { const g = e.target.closest("[data-dev]"); if (g) { selectDevice(g.dataset.dev); window.scrollTo({ top: 0, behavior: "smooth" }); $("#termIn").focus(); } });
+  $("#dgView").addEventListener("click", e => { const g = e.target.closest("[data-dev]"); if (g) { showTermPane("term"); selectDevice(g.dataset.dev); window.scrollTo({ top: 0, behavior: "smooth" }); $("#termIn").focus(); } });
   const box = $("#designBox");
   box.addEventListener("toggle", () => { if (box.open) renderDiagram(); });
   $("#dgPdf").onclick = makeDesignPdf;

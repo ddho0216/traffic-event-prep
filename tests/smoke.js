@@ -474,11 +474,15 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   // 장비 터미널 화면 정리: 접이식 매뉴얼, 목적별 명령(설명), 접이식 설계도(그림)와 PDF
   await page.click('[data-tab=term]');
   const fold0 = await page.evaluate(() => ({ rb: document.getElementById('runbook').open, dg: document.getElementById('designBox').open, tb: document.getElementById('dgTables').open }));
-  check('장애 매뉴얼과 설계도는 평소에 접혀 있음', !fold0.rb && !fold0.dg && !fold0.tb, JSON.stringify(fold0));
+  check('장애 매뉴얼과 설계도는 평소에 안 보이고 터미널이 먼저 보임', !fold0.rb && !fold0.dg && !fold0.tb, JSON.stringify(fold0));
   await page.click('#runbookBtn');
   check('"장애 매뉴얼 열기" 버튼으로 매뉴얼이 펼쳐지고 버튼 글자가 바뀜', (await page.evaluate(() => document.getElementById('runbook').open)) && (await page.locator('#runbookBtn').innerText()).includes('접기') && (await page.locator('#runbook li').count()) >= 8);
-  await page.click('#runbookBtn');
-  check('다시 누르면 접힘', !(await page.evaluate(() => document.getElementById('runbook').open)));
+  await page.click('#termNav [data-pane=term]');   // 매뉴얼을 보는 동안 터미널 칸은 숨겨지므로 위의 보조 메뉴로 돌아온다
+  check('다시 누르면 터미널로 돌아옴', !(await page.evaluate(() => document.getElementById('runbook').open)) && (await page.locator('#termOut').isVisible()));
+  await page.click('#termNav [data-pane=runbook]');
+  const rbTop = await page.evaluate(() => document.getElementById('runbook').getBoundingClientRect().top);
+  check('터미널 위 보조 메뉴(터미널·장애 매뉴얼·설계도)로 맨 아래까지 내려가지 않고 매뉴얼이 바로 위쪽에 열림', (await page.locator('#termNav button').count()) === 3 && rbTop < 400 && !(await page.locator('#termOut').isVisible()), String(Math.round(rbTop)));
+  await page.click('#termNav [data-pane=term]');
   const grp = await page.evaluate(() => ({ groups: [...document.querySelectorAll('#qcmd .qgrp h4')].map(h => h.innerText), bad: [...document.querySelectorAll('#qcmd button')].filter(b => !b.title.includes('무엇을 위해') || !b.title.includes('읽는 법') || !b.querySelector('.why').innerText.trim()).map(b => b.dataset.c) }));
   check('명령이 목적별 묶음(1.회선 상태 확인 ~)으로 정리되고, 모든 명령에 한 줄 설명과 마우스 설명(무엇을 위해·읽는 법)이 있음', grp.groups.length >= 4 && grp.groups[0].startsWith('1. 회선 상태 확인') && grp.bad.length === 0, JSON.stringify(grp));
   await page.selectOption('#vendorSel', 'cisco');
@@ -486,7 +490,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('Cisco·Huawei 장비도 같은 묶음과 설명으로 나옴', cg.n >= 3 && cg.titles.includes('읽는 법'));
   await page.selectOption('#vendorSel', 'juniper');
   // 설계도(그림)
-  await page.click('#designBox > summary');
+  await page.click('#termNav [data-pane=design]');
   await page.waitForSelector('#dgView svg');   // 펼침 이벤트 뒤에 그려진다
   const dg = await page.evaluate(() => ({ svg: !!document.querySelector('#dgView svg'), txt: document.querySelector('#dgView').textContent }));
   check('설계도를 펼치면 전체 구성도(그림)가 나옴: 4개 센터와 중앙 백본 이중화 표시', dg.svg && ['서초 센터', '분당 센터', '구로 센터', '안산 센터', 'IDC_S_FS1', 'IDC_S_FS2'].every(w => dg.txt.includes(w)), dg.txt.slice(0, 60).replace(/\n/g, ' '));
@@ -499,7 +503,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('#dgView [data-dev="IDC_B_FS6"]');
   check('설계도의 장비를 누르면 그 장비의 터미널이 선택됨', (await page.locator('#devSel').inputValue()) === 'IDC_B_FS6');
   await page.evaluate(() => selectDevice('IDC_B_FS1'));   // 이후 시험은 꺼지지 않은 장비로 이어 간다
-  await page.click('#designBox > summary'); await page.click('#designBox > summary');
+  await page.click('#termNav [data-pane=design]');   // 장비를 눌러 터미널로 갔으니 설계도를 다시 연다
   await page.click('#dgTables > summary');
   check('"표로 보기"를 펼치면 장비 표가 보임 (장비 120행)', (await page.locator('#devTbl tr.click').count()) === 120 && (await page.locator('#devTbl').isVisible()));
   const fs = require('fs');
@@ -511,6 +515,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('PDF: 11쪽(전체 1 + 센터 4 + 고객사 1 + 회선 1 + 장비 4)이고 크기가 충분함', (txt.match(/\/Type \/Page \//g) || []).length === 11 && /\/Count 11/.test(txt) && buf.length > 150000, `${(txt.match(/\/Type \/Page \//g) || []).length}쪽 ${buf.length}B`);
   check('PDF: 교차 참조(xref) 표의 위치가 실제 객체 위치와 모두 맞음 (열 때 오류 없음)', txt.slice(xrefAt, xrefAt + 4) === 'xref' && xrefLines.length === objOffsets.length && xrefLines.every((l, k) => +l.slice(0, 10) === objOffsets[k][1]), `${xrefLines.length}/${objOffsets.length}`);
   check('PDF 만든 뒤 버튼이 다시 눌림', !(await page.locator('#dgPdf').isDisabled()) && (await page.locator('#dgMsg').innerText()).includes('내려받았습니다'));
+  await page.click('#termNav [data-pane=term]');   // 설계도를 보고 있었으므로 터미널로 돌아온다
   await page.click('#qcmd button'); await page.press('#termIn', 'Enter');   // 위 확인 때문에 지워진 출력을 다시 만든다
   check('터미널 명령 출력 (첫 자주 쓰는 명령 = 회선 설명)', (await page.locator('#termOut').innerText()).includes('Admin Link Description'));
   // 꺼진 장비: 그 시각에는 터미널이 응답하지 않고, 옆 장비 포트는 Down·빛 없음, 복구 뒤에는 정상
