@@ -400,6 +400,118 @@
     };
   })();
 
+  /* ---------- 이중화로 무사히 넘기기 (장비 한 대가 꺼져도 짝 장비가 받는다, 사이트의 실제 가상 데이터) ---------- */
+  SCEN.redundancy = (() => {
+    const OUT = OUTAGES.find(o => o.dev === "IDC_B_FS7") || OUTAGES.find(o => o.dev !== "IDC_B_FS6"), D1 = OUT.dev, D2 = DEV[D1].partner, DEADLINE = 8, K = 2 / 3;
+    const lu = DEV[D1].ifs.filter(f => f[10] && !f[11]), sumG = lu.reduce((q, f) => q + f[9], 0), custOn = [...new Set(lu.map(f => f[10].customer))];
+    const rLinks = [...new Set(CUSTOMERS.filter(c => custOn.includes(c.name)).flatMap(c => c.links).filter(id => LINK[id] && codeOf(id) === codeOf(D1)))].slice(0, 3), MAIN = rLinks[0] || "IDC_B_FS1_UP2";
+    const w0 = OUT.s - 30 * 60000, realMin = Math.round((OUT.e - OUT.s) / 60000), dS = 30, len = Math.round(realMin * K), dE = dS + len, ALERT = dS + 3, START = 20, END = dE + 12;
+    const dm = m => m <= dS ? m : (m <= dE ? dS + (m - dS) / K : m + (realMin - len));   // 가상 분 → 실제 데이터 분 (복구까지 기다리는 시간을 2/3로 줄임)
+    const idxAt = ms => Math.floor((ms - T0) / STEP);
+    const outAtM = (id, m) => LINK[id].out[idxAt(w0 + Math.floor(dm(m)) * 60000)], prevAtM = (id, m) => LINK[id].out[idxAt(w0 + Math.floor(dm(m)) * 60000) - PER_DAY];
+    const iso = m => isoLocal(w0 + Math.floor(dm(m)) * 60000);
+    const off = m => m >= dS && m < dE;
+    const runLive = (dev, cmd, m) => runOn(dev, cmd, [], iso(m)).split("\n").slice(1).join("\n");
+    const clock0 = Math.floor((w0 % 86400000) / 60000), date = ymdhm(OUT.s).slice(5, 10).replace("-", "/");
+    const hubIp = withTime(OUT.s + 20 * 60000, () => (DEV[D2].ifs.find(f => f[8] && f[5] === "up") || [])[8]);
+    const CMDS = { desc: "show interfaces descriptions", ping: `ping ${hubIp} rapid count 100` };
+    const runShow = (dev, cmd) => { setDev(dev); term(`admin@${dev}> ${cmd}`); term(runLive(dev, cmd, cur())); };
+    const traffic = (a, b) => rLinks.map(id => `${id}: ${gb(outAtM(id, a))}G → ${gb(outAtM(id, b))}G (${((outAtM(id, b) / outAtM(id, a) - 1) * 100).toFixed(1)}%)`).join("\n");
+    const why = OUT.why || "전원 이상";
+    return {
+      id: "redundancy", name: "이중화로 무사히 넘기기", clock0, date, start: START, end: END, alertAt: ALERT, deadline: DEADLINE, stages: ["발생", "경과", "완료"],
+      linkTitle: `${MAIN} · out`, linkDesc: `${D1}에 꽂힌 고객 회선 · 점선=전날 같은 시각`, dev: D1, devs: [D1, D2],
+      termQuick: [["회선 설명", CMDS.desc], ["ping", CMDS.ping]],
+      cardTitle: `짝 장비 상태 · ${D1} ↔ ${D2}`, cardSave: false,
+      init: () => ({ dev: D1, replaced: false }),
+      sub: () => alerted() ? `알림 ${fmt(ALERT)}${S.ack != null ? ` · 내가 확인 ${fmt(S.ack)}` : ""}` : "정상 감시 중",
+      intro: `가상 장비에 연결됨. 실제 장비가 아닙니다. 위의 장비 버튼으로 ${D1}과 짝 장비 ${D2}를 오가며 확인할 수 있습니다.`,
+      chart() {
+        const W = 760, H = 168, Lm = 36, B = 16, T = 6, R = 6, n = END, upto = cur(), cap = Math.ceil(Math.max(...Array.from({ length: n + 1 }, (_, m) => Math.max(outAtM(MAIN, m), prevAtM(MAIN, m) || 0))) * 1.25 / 5) * 5;
+        const x = m => Lm + (W - Lm - R) * m / n, y = v => T + (H - T - B) * (1 - v / cap);
+        let g = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${MAIN} out 그래프">`;
+        for (const v of [0, cap / 2, cap]) g += `<line x1="${Lm}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="#26323d"/><text x="${Lm - 5}" y="${y(v) + 3}" fill="#7b8a98" font-size="10" text-anchor="end">${Math.round(v)}G</text>`;
+        for (let m = 0; m <= n; m += 20) g += `<text x="${x(m)}" y="${H - 3}" fill="#7b8a98" font-size="10" text-anchor="middle">${fmt(m)}</text>`;
+        const ref = []; for (let m = 0; m <= n; m++) ref.push(`${x(m)},${y(prevAtM(MAIN, m) || 0)}`);
+        g += `<polyline fill="none" stroke="#3b4f61" stroke-width="1.2" stroke-dasharray="3 3" points="${ref.join(" ")}"/>`;
+        const pts = []; for (let m = 0; m <= upto; m++) pts.push(`${x(m)},${y(outAtM(MAIN, m))}`);
+        g += `<polyline fill="none" stroke="#59b4f5" stroke-width="2" points="${pts.join(" ")}"/><circle cx="${x(upto)}" cy="${y(outAtM(MAIN, upto))}" r="3.5" fill="#59b4f5"/>`;
+        if (upto >= dS) g += `<line x1="${x(dS)}" x2="${x(dS)}" y1="${T}" y2="${H - B}" stroke="#e8a23b" stroke-dasharray="3 3"/><text x="${x(dS) + 3}" y="${T + 10}" fill="#e8a23b" font-size="10">${D1} 꺼짐 ${fmt(dS)}</text>`;
+        if (upto >= dE) g += `<line x1="${x(dE)}" x2="${x(dE)}" y1="${T}" y2="${H - B}" stroke="#47c28b" stroke-dasharray="3 3"/><text x="${x(dE) + 3}" y="${T + 22}" fill="#47c28b" font-size="10">전원 복구 ${fmt(dE)}</text>`;
+        return { svg: g + "</svg>", now: `${gb(outAtM(MAIN, upto))}G`, bad: false };
+      },
+      alertBar() {
+        const m = cur();
+        if (!alerted()) return ["idle", '● 알림 없음 · 정상 감시 중 <span class="muted">(장비가 꺼지고 1~3분이 지나야 알림이 뜹니다)</span>'];
+        if (m >= dE + 3) return ["ok", `● ${D1} 정상 복귀 <span class="muted">${fmt(m)} · 이중화가 원래 상태로 돌아왔습니다</span>`];
+        if (m >= dE) return ["warn", `● ${D1} 전원 복구 <span class="muted">${fmt(m)} · 이중화 복귀를 확인하세요</span>`];
+        return ["hot", `<span class="lv-dot"></span>${D1} 응답 없음 (전원 꺼짐 의심) 감지 <span class="muted">${fmt(ALERT)} · 꺼진 시각 ${fmt(dS)} · 지연 ${ALERT - dS}분 · 서버실 경고</span>` +
+          (S.ack == null ? `<button class="btn" id="lvAck" type="button">확인하기</button>` : `<span class="muted" style="margin-left:auto">내가 확인 ${fmt(S.ack)}</span>`)];
+      },
+      card() {
+        if (S.ack == null) return { sub: "", html: '<p class="muted lv-empty">알림을 확인하면 짝 장비의 상태가 표시됩니다.</p>' };
+        const m = cur(), st = (ok, t1, t2) => `<span class="tag ${ok ? "ok" : "bad"}">${ok ? t1 : t2}</span>`;
+        return {
+          sub: `고객 회선 ${lu.length}개 · 고객사 ${custOn.length}곳 · 합계 ${sumG}G`,
+          html: `<table class="kv2"><tr><th>${D1} (${DEV[D1].rack})</th><td>${st(!off(m), "정상", "꺼짐")} 전원</td></tr><tr><th>${D2} (${DEV[D2].rack})</th><td>${st(true, "정상", "")} 고객 회선 ${lu.length}개를 받고 있음${off(m) ? " (한 대로 버티는 중)" : ""}</td></tr><tr><th>짝 연결(PAIR1)</th><td>${st(!off(m), "Up", "Down")} ${off(m) ? "꺼진 장비와 이어진 연결만 Down" : ""}</td></tr></table><p class="muted" style="margin:6px 0 0;font-size:12.5px">두 장비는 서로 다른 랙에 있어, 한쪽 전기가 나가도 반대쪽이 받습니다.</p>`
+        };
+      },
+      rows() {
+        const can = S.ack != null, rec = cur() >= dE, all = cur() >= dE + 3;
+        const b = (a, label, en) => `<button class="btn sm" data-a="${a}" ${can && en !== false ? "" : "disabled"}>${label}</button>`;
+        return [
+          ["ip", "꺼진 장비 확인", done("ip") ? `${D1} 터미널 접속 안 됨 (${fmt(S.done.ip)})` : "꺼진 장비는 터미널로 확인할 수 없습니다", done("ip") ? "" : b("ip", `${D1}에 접속 시도`)],
+          ["partner", "짝 장비 확인", done("partner") ? `${D2}의 고객 회선은 그대로 Up, 짝 연결만 Down (${fmt(S.done.partner)})` : "짝 장비로 가서 같은 명령을 칩니다", done("partner") ? "" : b("partner", `${D2} 회선 목록 확인`)],
+          ["tr", "트래픽 비교", done("tr") ? `꺼지기 5분 전 → 5분 뒤 거의 그대로 (${fmt(S.done.tr)})` : "그래프가 변했는지 봅니다", done("tr") ? "" : b("tr", "그래프 값 읽기")],
+          ["sms", "발생 문자 보내기", done("sms") ? `발송 ${fmt(S.done.sms)} (알림 후 ${Math.round(S.done.sms - ALERT)}분)` : `고객 영향이 없어도 장비가 꺼진 것은 알립니다 (${DEADLINE}분 안)`, ""],
+          ["report", "조장 보고 · 전원 모듈 교체 요청", done("report") ? `보고와 교체 요청 (${fmt(S.done.report)})` : "고객 안내는 필요 없지만 보고는 합니다", done("report") ? "" : b("report", "보고·교체 요청")],
+          ["watch", "짝 장비를 더 주의해서 확인", done("watch") ? `${D2} ping 정상 (${fmt(S.done.watch)})` : "지금은 한 대로 버티는 위험한 시간입니다", done("watch") ? "" : b("watch", `${D2} ping 확인`)],
+          ["rec", "전원 복구 · 이중화 복귀 확인", done("rec") ? `${D1} 회선 목록이 다시 Up (${fmt(S.done.rec)})` : rec ? "전원이 돌아왔습니다. 회선 목록으로 확인합니다" : "전원이 돌아오면 확인합니다", done("rec") ? "" : b("rec", `${D1} 회선 목록 다시 확인`, rec)],
+          ["all", "전체 상태 정상 확인", done("all") ? `전체 정상 확인 (${fmt(S.done.all)})` : all ? "두 장비와 짝 연결이 모두 정상인지 봅니다" : "복구 직후에는 '경과'로 알리고, 잠시 뒤 전체를 확인합니다", done("all") ? "" : b("all", "전체 상태 확인", all && done("rec"))],
+          ["fin", "완료 문자 보내기", done("fin") ? `완료 문자 ${fmt(S.done.fin)}` : "전체 정상을 확인한 뒤에만 완료로 보냅니다", ""]
+        ];
+      },
+      act(a) {
+        const m = cur();
+        if (a === "ip") { runShow(D1, CMDS.desc); addLog(`${D1} 접속 시도 → 응답 없음 (전원 꺼짐)`); mark("ip"); }
+        else if (a === "partner") { runShow(D2, CMDS.desc); addLog(`짝 장비 ${D2} 확인 → 고객 회선 그대로 Up, 짝 연결만 Down`, true); mark("partner"); }
+        else if (a === "tr") { addLog(`트래픽 비교 (꺼지기 5분 전 → 5분 뒤): ${traffic(dS - 5, dS + 5).replace(/\n/g, " / ")}`); mark("tr"); }
+        else if (a === "report") { addLog(`조장에게 보고, ${D1} 전원 모듈 교체 요청(티켓)`, true); mark("report"); }
+        else if (a === "watch") { runShow(D2, CMDS.ping); addLog(`${D2} ping 정상 → 한 대로 버티는 중이라 더 주의`, true); mark("watch"); }
+        else if (a === "rec") { runShow(D1, CMDS.desc); addLog(`${D1} 전원 복구, 이중화 복귀 확인 (회선 목록 다시 Up)`, true); mark("rec"); }
+        else if (a === "all") { runShow(D1, CMDS.desc); runShow(D2, CMDS.desc); addLog("전체 상태 정상 확인 (두 장비·짝 연결)", true); mark("all"); }
+      },
+      draft(stage) {
+        const acts = S.log.filter(x => x.act).map(x => ({ t: fmt(x.m), txt: x.text }));
+        const base = { stage, center: TOPOLOGY.centers[D1.split("_")[1]].replace(" 센터", ""), title: `${D1} 장비 전원 꺼짐 (고객 영향 없음)`, target: `${D1}(${DEV[D1].rack})`, from: `${date} ${fmt(dS)}`, voc: "없음" };
+        if (stage === "발생") return smsNotice({ ...base, cause: `${why}으로 보임`, impact: `없음 (짝 장비 ${D2}에서 같은 고객 회선을 받고 있음)`, actions: [] });
+        if (stage === "경과") return smsNotice({ ...base, cause: `${why}으로 보임`, impact: `없음 (짝 장비 ${D2}에서 같은 고객 회선을 받음). 전원 모듈 교체 일정 협의 중`, actions: acts });
+        return smsNotice({ ...base, to: `${date} ${fmt(S.done.all != null ? S.done.all : S.t)}`, cause: `${why}, 이중화로 고객 영향 없이 복구`, impact: "없음 (이중화로 고객 회선 유지)", actions: acts });
+      },
+      stageOk: st => ({ 발생: true, 경과: done("sms"), 완료: done("all") })[st],
+      onSend(st) { if (st === "발생") mark("sms"); else if (st === "완료") { mark("fin"); finish(); } else todo(); },
+      run(c) {
+        const d = devNow();
+        if (c === "help" || c === "?") return `가상 장비 명령(Juniper 형식) 예: ${CMDS.desc} / ${CMDS.ping}  (위 장비 버튼으로 ${D1}·${D2} 전환)`;
+        return runLive(d, c, cur());
+      },
+      finishRows() {
+        const used = S.done.sms != null ? S.done.sms - ALERT : null, ackd = S.ack != null ? S.ack - ALERT : null, y = k => done(k) ? "함" : "안 함";
+        return [
+          ["알림 → 내가 확인", ackd == null ? "확인 안 함" : `${ackd.toFixed(1)}분`],
+          ["알림 → 발생 문자", used == null ? "안 보냄" : `${used.toFixed(1)}분 (${used <= DEADLINE ? "기한 8분 안" : "기한 초과"})`],
+          ["꺼진 장비 접속 시도 / 짝 장비 확인", `${y("ip")} / ${y("partner")}`],
+          ["트래픽 비교 (그래프 변화 없음 확인)", y("tr")],
+          ["조장 보고·교체 요청 / 짝 장비 주의 확인", `${y("report")} / ${y("watch")}`],
+          ["이중화 복귀·전체 정상 확인", `${y("rec")} / ${y("all")}`],
+          ["이중화가 없었다면 (가정)", `고객사 ${custOn.length}곳의 회선 ${lu.length}개(합계 ${sumG}G)가 ${dE - dS}분 끊겼을 것`],
+          ["문자 순서", S.sent.경과 != null ? "발생 → 경과 → 완료" : "발생 → 완료 (복구 직후에는 '경과'로 먼저 알립니다)"]
+        ];
+      },
+      note: "가상 데이터(사이트의 장비 꺼짐 구간)로 만든 결과입니다. 꺼진 원인과 교체 일정은 제가 만든 가정입니다."
+    };
+  })();
+
   /* ================= 공통 화면 ================= */
   root.innerHTML = `
 <div class="lv-bar"><h2><span id="lvTitle"></span> <span class="tag warn">시험판</span></h2>
@@ -432,12 +544,14 @@
   const addLog = (text, act) => { S.log.push({ m: S.t, text, act: !!act }); renderLog(); };
   function renderLog() { E("lvLog").innerHTML = S.log.length ? S.log.map(x => `<div><span class="mono muted">${fmt(x.m)}</span> ${esc(x.text)}</div>`).join("") : '<span class="muted">아직 없습니다. 하는 일이 시각과 함께 쌓입니다.</span>'; E("lvLog").scrollTop = 1e6; }
   function term(t) { S.term.push(...String(t).split("\n")); if (S.term.length > 80) S.term = S.term.slice(-80); const o = E("lvTermOut"); o.textContent = S.term.join("\n"); o.scrollTop = 1e6; }
+  function devNow() { return (S && S.dev) || SC.dev; }
+  function setDev(d) { S.dev = d; E("lvPrompt").textContent = `admin@${d}>`; E("lvTermH").innerHTML = `터미널 · admin@${esc(d)}&gt; <span class="muted">입력한 명령에 가상 시각의 값이 나옵니다</span>`; E("lvQ").querySelectorAll("[data-dev]").forEach(b => b.classList.toggle("primary", b.dataset.dev === d)); }
   function run(cmd) {
-    const c = cmd.replace(/\s+/g, " ").trim(); term(`admin@${SC.dev}> ${cmd}`); if (!c) return;
+    const c = cmd.replace(/\s+/g, " ").trim(); term(`admin@${devNow()}> ${cmd}`); if (!c) return;
     const out = SC.run(c); if (out) term(out);
   }
   E("lvTermIn").addEventListener("keydown", e => { if (e.key === "Enter") { const v = e.target.value; e.target.value = ""; run(v); } });
-  E("lvQ").addEventListener("click", e => { const b = e.target.closest("button"); if (b) run(b.dataset.c); });
+  E("lvQ").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; if (b.dataset.dev) { setDev(b.dataset.dev); term(`${b.dataset.dev}에 접속합니다 (가상)`); } else run(b.dataset.c); });
 
   /* ----- 그리기 ----- */
   function paintChart() { const c = SC.chart(); E("lvChart").innerHTML = c.svg; E("lvNow").textContent = c.now; E("lvNow").className = "tag " + (c.bad ? "bad" : "ok"); }
@@ -506,9 +620,8 @@
     lastMin = -1; E("lvResult").hidden = true;
     E("lvTitle").textContent = SC.name;
     E("lvGraphH").innerHTML = `${esc(SC.linkTitle)} <span class="muted">${esc(SC.linkDesc)}</span><span class="tag" id="lvNow"></span>`;
-    E("lvTermH").innerHTML = `터미널 · admin@${SC.dev}&gt; <span class="muted">입력한 명령에 가상 시각의 값이 나옵니다</span>`;
-    E("lvPrompt").textContent = `admin@${SC.dev}>`;
-    E("lvQ").innerHTML = SC.termQuick.map(q => `<button class="btn sm" data-c="${esc(q[1])}">${esc(q[0])}</button>`).join("");
+    E("lvQ").innerHTML = (SC.devs || []).map(d => `<button class="btn sm" data-dev="${d}">${d}</button>`).join("") + SC.termQuick.map(q => `<button class="btn sm" data-c="${esc(q[1])}">${esc(q[0])}</button>`).join("");
+    setDev(devNow());
     E("lvCardTitle").textContent = SC.cardTitle; E("lvSave").hidden = !SC.cardSave; E("lvSaved").hidden = true; E("lvSave").textContent = "기록에 저장";
     E("lvStage").innerHTML = SC.stages.map((s, i) => `<button class="btn${i === 0 ? " primary" : ""}" data-st="${s}" type="button">${s}</button>`).join("");
     E("lvTermOut").textContent = ""; E("lvSendMsg").textContent = ""; E("lvPlay").textContent = "▶ 시작";
