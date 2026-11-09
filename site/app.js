@@ -63,6 +63,20 @@ function makeZip(files) {
 }
 
 /* ---------- 가상 고객사·센터 ---------- */
+// 자료를 정기적으로 보내는 고객사(사용자가 정한 값, 전부 가상). 고객사가 30곳이어도 예민한 곳에만 보낸다.
+const SEND_PLAN = [
+  { id: "start", title: "월초 발송", note: "매달 초에 지난달 자료를 보냅니다.", names: ["예시미디어", "샘플게임즈"] },
+  { id: "end", title: "월말 발송", note: "매달 말에 이번 달 자료를 보냅니다.", names: ["가상은행", "예시금융"] },
+  { id: "weekly", title: "매주 발송 (월요일)", note: "매주 월요일에 지난주 자료를 보냅니다. 칸은 이번 달 월요일입니다.", names: ["데모스트리밍"] }
+];
+function monthMondays() {   // 가상 현재가 속한 달의 월요일들 [날짜 문자열]
+  const [y, m] = ymdhm(msOf(NOW_IDX)).slice(0, 7).split("-").map(Number), out = [];
+  for (let d = 1; d <= 31; d++) { const dt = new Date(Date.UTC(y, m - 1, d)); if (dt.getUTCMonth() !== m - 1) break; if (dt.getUTCDay() === 1) out.push(`${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`); }
+  return out;
+}
+const sendKeys = g => g.names.flatMap(n => g.id === "weekly" ? monthMondays().filter(d => d <= ymdhm(msOf(NOW_IDX)).slice(0, 10)).map(d => `${n}:w:${d}`) : [`${n}:${g.id}`]);   // 지금까지 보냈어야 하는 칸
+const sendProgress = () => { const keys = SEND_PLAN.flatMap(sendKeys); return { done: keys.filter(k => store.get("sent:" + k, false)).length, total: keys.length }; };
+const COMPANY = "TEP IDC";   // 우리 회사 이름(가상). 메일·문자 제목에 [TEP IDC]를 붙여서 받는 쪽이 어디서 온 것인지 바로 알게 한다
 const CUSTOMERS = TOPOLOGY.customers;   // 전부 가상 고객사. 설계도(topology.js)에서 읽는다 (회선 배정은 제가 임의로 정한 것)
 const CENTER_NAME = TOPOLOGY.centers;   // 이름의 센터 코드: IDC_<코드>_... (센터 목록은 설계도에서)
 const CENTER = id => /_(IX|INTL)\d/.test(id) ? "연동" : (CENTER_NAME[id.split("_")[1]] || "연동");
@@ -214,10 +228,6 @@ const fileStamp = ms => ymdhm(ms).replace(/[- :]/g, "").slice(0, 12);
   et.addEventListener("change", () => { if (et.value) { state.end = idxOf(parseT(et.value)); renderAll(); } });
   $("#prev").onclick = () => { state.end -= state.win; renderAll(); };
   $("#next").onclick = () => { state.end += state.win; renderAll(); };
-  $("#win").onchange = e => { state.win = +e.target.value; renderAll(); };
-  $("#cust").innerHTML = '<option value="all">전체</option>' + CUSTOMERS.map(c => `<option>${c.name}</option>`).join("") + '<option value="none">공용 (고객사 없음)</option>';
-  $("#cust").onchange = e => { state.cust = e.target.value; renderAll(); };
-  $("#ymode").onchange = e => { state.ymode = e.target.value; renderAll(); };
   $("#goNow").onclick = () => { stopScn(); goNow(); };
   $("#csvAll").onclick = () => { const [s, e] = viewRange(); downloadCsv(`traffic_all_${fileStamp(msOf(s))}_${fileStamp(msOf(e))}.csv`, csvOf(LINKS.filter(l => $("#p-" + l.id).style.display !== "none").map(l => l.id), s, e)); };
   $("#grid").addEventListener("click", ev => {
@@ -228,13 +238,13 @@ const fileStamp = ms => ymdhm(ms).replace(/[- :]/g, "").slice(0, 12);
 })();
 
 function renderTasksTable() {
-  const sent = CUSTOMERS.filter(c => store.get("sent:" + c.name, false)).length;
+  const sp = sendProgress();
   const checks = DATA.events.map(ev => (store.get("chk:" + ev.id, []) || []).length);
   const visits = store.get("visits", []).length;
   const spikes = ALERTS.filter(a => a.kind === "in 급증 의심" && !a.evName).length;
   const drops = ALERTS.filter(a => a.kind.includes("급감") && !a.evName).length;
   const rows = [
-    ["월말 자료 발송", `${sent}/${CUSTOMERS.length} 고객사 완료`, sent === CUSTOMERS.length ? "ok" : "warn", "monthly"],
+    ["월간·주간 자료 발송", `${sp.done}/${sp.total} 완료 (월초·월말·매주)`, sp.done === sp.total ? "ok" : "warn", "monthly"],
     ["이벤트 대비", `월드컵 ${checks.filter(c => c === CHECK_ITEMS.length).length}/${DATA.events.length}경기 체크 완료`, "warn", "event"],
     ["방문 신청 등록", `등록 ${visits}건`, "ok", "visit"],
     ["트래픽 급증·급감 확인", `경기와 겹치지 않는 급증 ${spikes}건 · 급감 ${drops}건 (경고 이력 참고)`, spikes + drops ? "warn" : "ok", "monitor"],
@@ -351,7 +361,7 @@ function renderMonthly() {
     !m.bad && m.clamped ? `※ 데이터는 ${MAX_DAY}까지만 있어서 거기까지 보냅니다.` : ""].filter(Boolean).join(" ");
   $("#mNote2").textContent = !m.bad && (m.to - m.from) > 60 * DAY ? "긴 기간은 파일이 큽니다 (6개월이면 회선당 약 3MB, 압축하지 않고 묶습니다)." : "";
   $("#mMail").value =
-`제목: [${m.c.name}] ${m.fromStr} ~ ${m.toStr} 회선별 5분 단위 트래픽 자료 송부
+`제목: [${COMPANY}] ${m.c.name} ${m.fromStr} ~ ${m.toStr} 회선별 5분 단위 트래픽 자료 송부
 
 ${m.c.name} 담당자님, 안녕하세요.
 요청하신 회선별 5분 단위 트래픽 자료를 보내드립니다.
@@ -389,8 +399,19 @@ ${m.c.name} 담당자님, 안녕하세요.
   };
   $("#mSumCsv").onclick = () => { const m = mState(); if (m.bad || !m.ids.length) return; downloadCsv(`summary_${m.c.key}_${m.fromStr}_${m.toStr}.csv`, summaryCsv(mCompute(m), m)); };
   $("#mCopy").onclick = () => copyText($("#mMail").value, $("#mCopy"));
-  $("#sendTbl").innerHTML = CUSTOMERS.map(c => `<tr><td>${c.name}</td><td class="muted">${c.links.join(", ")}</td><td><label class="chk"><input type="checkbox" data-sent="${c.name}" ${store.get("sent:" + c.name, false) ? "checked" : ""}> 발송 완료</label></td></tr>`).join("");
-  $("#sendTbl").addEventListener("change", e => { if (e.target.dataset.sent) { store.set("sent:" + e.target.dataset.sent, e.target.checked); renderTasks(); } });
+  function renderSendPlan() {
+    const open = new Set($$("#sendPlan details[open]").map(d => d.dataset.plan)), now = ymdhm(msOf(NOW_IDX)).slice(0, 10), mons = monthMondays();
+    $("#sendPlan").innerHTML = SEND_PLAN.map(g => {
+      const keys = sendKeys(g), done = keys.filter(k => store.get("sent:" + k, false)).length;
+      const rows = g.names.map(n => { const c = CUSTOMERS.find(x => x.name === n);
+        const cells = g.id === "weekly" ? mons.map(d => `<label class="chk" title="${d <= now ? "" : "아직 오지 않은 월요일"}"><input type="checkbox" data-sent="${n}:w:${d}" ${store.get("sent:" + n + ":w:" + d, false) ? "checked" : ""}> ${d.slice(5)}${d > now ? " (예정)" : ""}</label>`).join(" ")
+          : `<label class="chk"><input type="checkbox" data-sent="${n}:${g.id}" ${store.get("sent:" + n + ":" + g.id, false) ? "checked" : ""}> 발송 완료</label>`;
+        return `<tr><td>${n}</td><td class="muted">${c.links.join(", ")}</td><td>${cells}</td></tr>`; }).join("");
+      return `<details class="fold sub" data-plan="${g.id}" ${open.has(g.id) ? "open" : ""}><summary><b>${g.title}</b> <span class="muted">${g.names.length}곳 · 완료 ${done}/${keys.length}</span></summary><p class="note">${g.note}</p><table>${rows}</table></details>`;
+    }).join("");
+  }
+  renderSendPlan();
+  $("#sendPlan").addEventListener("change", e => { if (e.target.dataset.sent) { store.set("sent:" + e.target.dataset.sent, e.target.checked); renderTasks(); renderSendPlan(); } });
   drawLinks();
 })();
 function copyText(text, btn) {
@@ -448,7 +469,7 @@ function evNoticeText(ev, calc) {
       const to = m.best ? `${m.best.c.l.id}${CENTER(m.best.c.l.id) !== CENTER(m.r.l.id) ? " (" + CENTER(m.best.c.l.id) + ", 협의 후 진행)" : ""}` : "(여유 회선 없음, 별도 협의)";
       return `- ${m.r.l.id}: 예상 최대 ${m.r.exp.toFixed(0)}Gbps (용량 대비 ${(m.r.util * 100).toFixed(0)}%)\n  조치: 해당 시간대 일부(약 ${Math.max(1, Math.ceil(m.need))}Gbps)를 ${to}로 보내겠습니다.`;
     }).join("\n");
-    return `제목: [사전 안내] ${when} ${ev.name} 대비 트래픽 분산 안내\n\n${c.name} 담당자님, 안녕하세요.\n${when} ${ev.name}로 트래픽 증가가 예상되어 미리 안내드립니다.\n\n${lines}\n\n서비스 중단 없이 진행할 예정이며, 종료 후 원복하고 결과를 안내드리겠습니다.\n문의는 관제 담당에게 연락 주세요. (가상 고객사 · 가상 센터)`;
+    return `제목: [${COMPANY}] ${when} ${ev.name} 대비 트래픽 분산 안내\n\n${c.name} 담당자님, 안녕하세요.\n${when} ${ev.name}로 트래픽 증가가 예상되어 미리 안내드립니다.\n\n${lines}\n\n서비스 중단 없이 진행할 예정이며, 종료 후 원복하고 결과를 안내드리겠습니다.\n문의는 관제 담당에게 연락 주세요. (가상 고객사 · 가상 센터)`;
   }).filter(Boolean);
   return blocks.join("\n\n--------------------------------\n\n");
 }
@@ -487,7 +508,7 @@ function renderEvent() {
   $("#evList").addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { $("#evSel").selectedIndex = +tr.dataset.i; renderEvent(); } });
   $("#evSel").onchange = renderEvent;
   $("#evCopy").onclick = () => copyText($("#evNotice").value, $("#evCopy"));
-  $("#evGo").onclick = () => { const ev = DATA.events[$("#evSel").selectedIndex]; state.win = 36; $("#win").value = "36"; state.end = idxOf(parseT(ev.start)) + 25; showTab("monitor"); };
+  $("#evGo").onclick = () => { const ev = DATA.events[$("#evSel").selectedIndex]; state.win = 36; state.end = idxOf(parseT(ev.start)) + 25; showTab("monitor"); };
   $("#evCheck").addEventListener("change", e => {
     const ev = DATA.events[$("#evSel").selectedIndex];
     const set = new Set(store.get("chk:" + ev.id, [])); e.target.checked ? set.add(+e.target.dataset.i) : set.delete(+e.target.dataset.i);
@@ -524,7 +545,7 @@ function vWho() {
   return known;
 }
 function replyText(r) {
-  return `제목: [회신] 방문 등록 완료 - ${r.name}님 ${r.when.slice(0, 10)}\n\n${r.org} ${r.name}님, 안녕하세요.\n요청하신 방문이 아래와 같이 등록되었습니다.\n\n- 방문예정일시: ${r.when.replace("T", " ")}\n- 방문센터: ${r.center}\n- 방문장소: ${r.place}\n- 방문목적: ${r.purpose}\n- 주차: ${r.park ? "등록 완료" : "해당 없음"}\n- 서버실 출입키: ${r.key ? "사전 준비 완료 (방문 시 수령)" : "해당 없음"}\n\n방문 당일 신분증을 지참해 주세요.\n감사합니다. (가상 메일)`;
+  return `제목: [${COMPANY}] 방문 등록 완료 - ${r.name}님 ${r.when.slice(0, 10)}\n\n${r.org} ${r.name}님, 안녕하세요.\n요청하신 방문이 아래와 같이 등록되었습니다.\n\n- 방문예정일시: ${r.when.replace("T", " ")}\n- 방문센터: ${r.center}\n- 방문장소: ${r.place}\n- 방문목적: ${r.purpose}\n- 주차: ${r.park ? "등록 완료" : "해당 없음"}\n- 서버실 출입키: ${r.key ? "사전 준비 완료 (방문 시 수령)" : "해당 없음"}\n\n방문 당일 신분증을 지참해 주세요.\n감사합니다. (가상 메일)`;
 }
 function renderVisits() {
   const v = store.get("visits", []);
@@ -705,7 +726,7 @@ const CMD_GROUPS = [
 ];
 const CMD_INFO = [   // [명령에 들어 있는 말, 묶음 번호, 한 줄 설명, 무엇을 위해, 읽는 법]
   [/descriptions?$|interfaces? brief$|interface description$/i, 0, "Up/Down과 고객사를 한눈에", "전체 인터페이스의 상태와 설명(어느 회선·어느 고객사인지)을 한 번에 봅니다.", "Admin = 관리자가 켜 둔 상태, Link = 실제 연결 상태입니다. Admin up + Link down = 일부러 내린 게 아니라 끊긴 것(선·상대 장비 문제). Admin down = 누가 일부러 내린 것(아직 안 쓰는 회선일 수 있음). 장비에 따라 descriptions로 up/down이 안 보이면 brief로 봅니다."],
-  [/optics|transceiver/i, 1, "빛이 들어오는지(수신 광값)", "광 모듈이 보내고 받는 빛의 세기를 봅니다. 케이블 접촉 불량이나 SFP 불량이 의심될 때 칩니다.", "수신 광값이 대략 -10dBm보다 낮으면 약한 것이고, -40dBm이면 빛이 전혀 안 들어오는 것(끊김이나 상대 장비 꺼짐)입니다."],
+  [/optics|transceiver/i, 1, "빛이 들어오는지(수신 광값)", "광 모듈이 보내고 받는 빛의 세기를 봅니다. 케이블 접촉 불량이나 SFP 불량이 의심될 때 칩니다.", "10G LR 기준 수신 광값이 약 -14.4 ~ +0.5 dBm 안이면 정상 범위이고 이 사이트의 평소값은 -3 dBm 안팎입니다. -9 dBm 아래는 약한 것(이 사이트의 경고선), -14.4 아래는 수신 한계 아래, -40은 빛이 전혀 안 들어오는 것(끊김이나 상대 장비 꺼짐)입니다."],
   [/CRC\|physical interface|CRC\|xe/i, 1, "전 회선 CRC를 회선 이름과 함께", "모든 회선의 CRC 오류를 한 번에 훑어서 어느 회선에 오류가 있는지 찾습니다.", "숫자가 0이 아닌 회선이 의심 대상입니다. 같은 명령을 시간을 두고 다시 쳐서 숫자가 계속 늘어나는지도 봅니다."],
   [/CRC/i, 1, "이 회선의 CRC 오류 수", "선로에서 깨진 패킷이 들어오는지 봅니다. 광 케이블 접촉 불량이나 SFP 불량이면 늘어납니다.", "0이면 정상입니다. 0이 아니고 계속 늘어나면 케이블·SFP를 의심합니다. 광값(수신)과 같이 봅니다."],
   [/log/i, 2, "언제 무슨 일이 있었는지", "포트가 내려가거나 올라간 시각, 광 경고 같은 기록을 시간순으로 봅니다.", "Down 기록의 시각이 장애 시작 시각입니다. 같은 포트가 반복해서 내려갔다 올라가면 접촉 불량을 의심합니다."],
@@ -951,7 +972,6 @@ renderCenterBar();
 // 현재(가상 10/22 21:00)로 돌아가기: 1시간 창, 전체 고객사, 서버실도 같은 시각
 function goNow() {
   state.end = NOW_IDX; state.win = 12; state.ymode = "cap"; state.cust = "all";
-  $("#win").value = "12"; $("#ymode").value = "cap"; $("#cust").value = "all";
   HL.clear(); sr.end = NOW_IDX; setCenter("ALL");
 }
 const SCN_TICK = 450;   // 가상 5분이 0.45초. 단계가 나오면 팝업이 뜨고, '다음 단계'를 누를 때까지 멈춘다
@@ -970,6 +990,8 @@ const runOn = (devId, cmd, down, atIso) => {   // down: 이 시나리오에서 D
 
 // 숫자는 전부 데이터에서 읽어 문장을 만든다 (고정 문구 아님)
 const addExplain = (def, texts, devs, lesson) => { def.steps.forEach((st, k) => { if (texts[k]) st.explain = texts[k]; if (devs && devs[k]) st.devs = devs[k]; }); if (lesson) def.lesson = lesson; };
+// 수신 광값 읽는 법: 10G LR(SFP+) 모듈 데이터시트의 수신 범위(약 -14.4 ~ +0.5 dBm)는 판매처 자료 기준이고 모듈마다 조금씩 다릅니다. -9 dBm 경고선과 평소값 -3 dBm 안팎은 이 사이트에서 제가 정한 값입니다.
+const OPTIC_GUIDE = "[수신 광값 읽는 법 - 10G LR(SFP+) 기준, 모듈마다 조금씩 다름]\n  +0.5 ~ -9 dBm   : 정상 (이 사이트의 평소값은 -3 dBm 안팎)\n  -9 ~ -14.4 dBm  : 약함 - 아직 동작하지만 케이블·SFP 점검 대상 (-9 dBm 경고선은 이 사이트가 정한 값)\n  -14.4 dBm 아래  : 수신 한계 아래 - 끊기거나 오류가 남\n  -40 dBm         : 빛이 전혀 안 들어옴 (끊김, 상대 장비 꺼짐)\n  +0.5 dBm 위     : 너무 강함 (과입력)\n  * 평소값보다 3 dBm 이상 떨어졌다면 범위 안이라도 변화가 있다는 신호입니다.";
 function buildScenarios() {
   const TD = Lib.TEMP_DEFAULTS;
   const OA = "IDC_B_FS1_UP1", OB = "IDC_B_FS1_UP2", IX = "IDC_B_FS2_IX1", INTL = "IDC_B_FS2_INTL1", EDGE = "IDC_B_FS2";   // 아래에서 새 이름으로 바뀐다
@@ -1000,20 +1022,21 @@ function buildScenarios() {
   const dt = m => isoLocal(msOf(dropA.s) + m * 60000);   // 급감이 시작된 시각 기준 분
   const pct = (outAt(IX, dt(0)) / outAt(IX, prevDay(dt(0))) * 100).toFixed(0);
   const ixCust = CUSTOMERS.find(c => c.links.includes(IX)).name;
-  const dropMail = `제목: [안내] 국내 연동(IX) 트래픽 감소 확인 중\n\n${ixCust} 담당자님, 안녕하세요.\n${hhmm(dropA.s)}부터 국내 연동(IX) 트래픽이 평소의 ${pct}% 수준으로 줄어든 것을 확인했습니다.\n현재 일부 트래픽은 해외 연동으로 우회되어 서비스는 유지되고 있습니다.\n상대 사업자에 확인을 요청했고, 진행 상황은 다시 안내드리겠습니다. (가상 메일)`;
+  const dropMail = `제목: [${COMPANY}] 국내 연동(IX) 트래픽 감소 확인 중\n\n${ixCust} 담당자님, 안녕하세요. ${COMPANY} 관제입니다.\n${hhmm(dropA.s)}부터 국내 연동(IX) 트래픽이 평소의 ${pct}% 수준으로 줄어든 것을 확인했습니다.\n현재 일부 트래픽은 해외 연동으로 우회되어 서비스는 유지되고 있습니다.\n상대 사업자에 확인을 요청했고, 진행 상황은 다시 안내드리겠습니다. (가상 메일)`;
+  const dropRecover = `제목: [${COMPANY}] 국내 연동(IX) 트래픽 감소 건 복구 완료 안내\n\n${ixCust} 담당자님, 안녕하세요. ${COMPANY} 관제입니다.\n앞서 안내드린 국내 연동(IX) 트래픽 감소 건이 복구되어 안내드립니다.\n\n- 발생: ${hhmm(dropA.s)}\n- 복구: ${hhmm(dropA.e + 1)} (약 ${(dropA.e - dropA.s + 1) * 5}분)\n- 현재: 국내 연동(IX) 트래픽이 평소 수준(전날 같은 시각 ${g1(outAt(IX, prevDay(dt(50))))}G, 현재 ${g1(outAt(IX, dt(50)))}G)으로 돌아왔고, 우회되던 해외 연동 트래픽도 평소로 돌아왔습니다.\n- 원인: 연동 상대 구간 이슈로 확인했습니다. (가상)\n\n서비스 이용에 불편을 드려 죄송합니다. 이후에도 이상이 있으면 관제(${COMPANY})로 연락 주세요. 감사합니다. (가상 메일)`;
   const drop = { name: "트래픽 급감", tab: "monitor", win: 12, from: dt(-20), to: dt(60), steps: [
     { at: dt(0), kind: "감지", title: `${IX}(국내 연동) out이 전날 같은 시각 ${g1(outAt(IX, prevDay(dt(0))))}G에서 ${g1(outAt(IX, dt(0)))}G로 급감 (평소의 ${pct}%). 종 알림에 '확인 필요'로 등록`, focus: [IX] },
     { at: dt(5), kind: "확인", title: `같은 시각 ${INTL}(해외 연동) out ${g1(outAt(INTL, dt(-5)))}G → ${g1(outAt(INTL, dt(5)))}G로 증가: 빠진 트래픽 일부가 해외 회선으로 우회 중으로 보임`, focus: [IX, INTL] },
-    { at: dt(10), kind: "조치", title: `${EDGE}에서 ${IX} 포트(xe-0/0/2) 광값 확인`, detail: runOn(EDGE, "show interfaces diagnostics optics xe-0/0/2") + "\n\n→ 광 수신값이 정상 범위. 우리 쪽 광 문제는 아님", sum: `광 수신 ${DEV[EDGE].ifs.find(x => x[0] === "xe-0/0/2")[3].toFixed(2)} dBm, 알람 없음 → 정상. 우리 쪽 광 문제는 아님`, detailLabel: "터미널 출력 보기", focus: [IX] },
+    { at: dt(10), kind: "조치", title: `${EDGE}에서 ${IX} 포트(xe-0/0/2) 광값 확인`, detail: runOn(EDGE, "show interfaces diagnostics optics xe-0/0/2") + `\n\n→ 광 수신값 ${DEV[EDGE].ifs.find(x => x[0] === "xe-0/0/2")[3].toFixed(2)} dBm: 정상 범위입니다. 우리 쪽 광 문제는 아님\n\n` + OPTIC_GUIDE, sum: `광 수신 ${DEV[EDGE].ifs.find(x => x[0] === "xe-0/0/2")[3].toFixed(2)} dBm: 정상 범위(10G LR 기준 약 -14.4 ~ +0.5 dBm, 평소값 -3 dBm 안팎), 알람 없음 → 우리 쪽 광 문제는 아님`, detailLabel: "터미널 출력 보기", focus: [IX] },
     { at: dt(15), kind: "조치", title: `상대 IX 사업자에 확인 요청, 영향 고객사(${ixCust})에 상황 안내`, detail: dropMail + INQUIRY, detailLabel: "고객사 안내 메일·연동망 문의 항목 보기" },
     { at: dt(50), kind: "결과", title: `${IX} 회복: out ${g1(outAt(IX, dt(50)))}G (전날 같은 시각 ${g1(outAt(IX, prevDay(dt(50))))}G). 급감 구간 ${hhmm(dropA.s)}~${hhmm(dropA.e)} (${(dropA.e - dropA.s + 1) * 5}분)`, focus: [IX, INTL] },
-    { at: dt(55), kind: "결과", title: "복구 안내 메일 발송, 경고 이력에 기록하고 마무리", focus: [IX] }
+    { at: dt(55), kind: "결과", title: "복구 안내 메일 발송, 경고 이력에 기록하고 마무리", detail: dropRecover, detailLabel: "복구 안내 메일 보기", focus: [IX] }
   ] };
 
   addExplain(drop, [
     `국내 연동(IX) 회선 ${IX}의 out 트래픽이 전날 같은 시각의 약 ${pct}% 수준으로 갑자기 떨어졌습니다. 같은 시각의 다른 회선은 그대로라서, 센터 전체가 아니라 이 연동 회선 쪽 문제로 좁혀집니다. 종 알림에는 '확인 필요'로 등록됩니다.`,
     `IX에서 빠진 트래픽이 해외 연동(${INTL})으로 돌아서 들어오고 있습니다. 한쪽이 빠지면 다른 쪽이 오르는 모양이라 서비스는 끊기지 않았지만, 해외 회선의 사용률이 평소보다 높아졌는지 같이 봐야 합니다.`,
-    "우리 쪽 문제인지 확인하는 단계입니다. 광 수신값이 정상 범위이고 CRC 오류도 없으니 우리 쪽 케이블·SFP 문제는 아닙니다. 그래서 상대 구간(연동 상대)을 의심합니다.",
+    "우리 쪽 문제인지 확인하는 단계입니다. 광 수신값이 정상 범위(10G LR 기준 약 -14.4 ~ +0.5 dBm 안, 이 사이트의 평소값은 -3 dBm 안팎)이고 CRC 오류도 없으니 우리 쪽 케이블·SFP 문제는 아닙니다. 그래서 상대 구간(연동 상대)을 의심합니다. 아래 출력 끝에 수신 광값을 읽는 기준표가 있습니다.",
     "원인이 우리 쪽이 아니므로 상대 IX 사업자에 확인을 요청하고, 영향이 있는 고객사에는 상황을 알립니다. 연동망에 문의할 때는 NOC 작업, 연동 구간 이슈, 보안 이슈 세 가지를 꼭 묻고 통화한 분의 성함을 기록합니다.",
     "트래픽이 돌아왔습니다. 회복 시각을 기록하고, 다운 구간의 길이와 전날 값과의 차이를 확인합니다.",
     "복구 안내 메일을 보내고 경고 이력에 기록해 마무리합니다."
@@ -1024,16 +1047,17 @@ function buildScenarios() {
   const dlk = TOPOLOGY.links.find(l => l.link === DN), dDev = dlk.a, dPort = dlk.ap, dPeerIp = DEV[dDev].ifs.find(x => x[0] === dPort)[8];
   const dnBefore = outAt(DN, dn(-5)), dnAfter = outAt(DN, dn(5)), dnCust = custOf(DN);
   const dnWin = (dnA.e - dnA.s + 1) * 5;
-  const dnSms = `[장애] ${dnCust.join(", ")} 담당자님, ${hhmm(dnA.s)}부터 안산 ↔ 중앙 백본 업링크(${DN})가 끊겨 확인 중입니다. 우회 경로로 서비스는 유지되고 있으며 경과는 다시 안내드리겠습니다. (가상 문자)`;
+  const dnSms = `[${COMPANY}] 장애 안내 - ${dnCust.join(", ")} 담당자님, ${hhmm(dnA.s)}부터 안산 ↔ 중앙 백본 업링크(${DN})가 끊겨 확인 중입니다. 우회 경로로 서비스는 유지되고 있으며 경과는 다시 안내드리겠습니다. (가상 문자)`;
+  const dnRecover = `[${COMPANY}] 복구 완료 - ${dnCust.join(", ")} 담당자님, ${hhmm(dnA.s)}부터 발생한 안산 ↔ 중앙 백본 업링크(${DN}) 장애가 ${hhmm(dnA.e + 1)}에 복구되었습니다(약 ${dnWin}분). 현재 트래픽은 평소 수준(${g1(outAt(DN, dn(dnWin)))}Gbps)입니다. 불편을 드려 죄송합니다. 원인은 확인되는 대로 다시 안내드리겠습니다. (가상 문자)`;
   const linkDown = { name: "업링크 회선 다운", tab: "monitor", win: 12, from: dn(-20), to: dn(dnWin + 15), steps: [
     { at: dn(0), kind: "감지", title: `${DN} in·out이 거의 0으로 떨어짐 (전날 같은 시각 out ${g1(outAt(DN, prevDay(dn(0))))}G → ${g1(outAt(DN, dn(0)))}G). 종 알림에 '확인 필요'로 등록`, focus: [DN] },
     { at: dn(3), kind: "확인", title: `정확한 장비·회선명 확인: ${dDev} ${dPort}. descriptions로 보면 Admin up / Link down`, detail: runOn(dDev, "show interfaces descriptions", [dPort]) + "\n\n→ Admin = 관리자가 켜 둔 상태, Link = 실제 연결 상태.\n   Admin up + Link down: 누가 일부러 내린 게 아니라 선이나 상대 쪽 문제로 끊긴 것.\n   (Admin down이면 누군가 포트를 일부러 내려 둔 것)\n고객 회선은 줄마다 '장비 고객사 속도'가 같이 보인다.", sum: "Admin up, Link down → 실제 연결이 끊긴 것. 고객사도 확인", detailLabel: "터미널 출력 보기", focus: [DN] },
     { at: dn(5), kind: "확인", title: `트래픽(전/후) 확인: Down이면 5분 전 값만 보고 이후는 0 (OUT 기준)`, detail: `■ 트래픽(전/후)\n${DN} : ${g1(dnBefore)}Gbps / ${dnAfter < 0.5 ? "0" : g1(dnAfter) + "Gbps"}\n\n* 경과 문자가 나가기 전에 트래픽을 먼저 전달해야 하므로 빠르게 확인한다.`, detailLabel: "경과 문자에 넣을 트래픽 보기", focus: [DN] },
     { at: dn(7), kind: "조치", title: `발생 문자 전송, 영향 고객사(${dnCust.join(", ")})에 안내`, detail: dnSms, detailLabel: "발생 문자 보기", focus: [DN] },
-    { at: dn(10), kind: "조치", title: "광값·CRC 확인: 빛이 안 들어옴 (광 케이블 접촉 불량이나 SFP 불량이 많음)", detail: runOn(dDev, `show interfaces diagnostics optics ${dPort}`, [dPort]) + "\n\n" + runOn(dDev, `show interfaces extensive ${dPort} | match CRC`, [dPort]) + "\n\n→ 수신 광값이 -40 dBm이면 빛이 안 들어오는 것. 케이블·SFP·상대 장비 쪽을 의심한다.", sum: `광 수신 -40 dBm → 빛이 안 들어옴 (케이블·SFP 의심)`, detailLabel: "터미널 출력 보기", focus: [DN] },
+    { at: dn(10), kind: "조치", title: "광값·CRC 확인: 빛이 안 들어옴 (광 케이블 접촉 불량이나 SFP 불량이 많음)", detail: runOn(dDev, `show interfaces diagnostics optics ${dPort}`, [dPort]) + "\n\n" + runOn(dDev, `show interfaces extensive ${dPort} | match CRC`, [dPort]) + "\n\n→ 수신 광값이 -40 dBm이면 빛이 안 들어오는 것. 케이블·SFP·상대 장비 쪽을 의심한다.\n\n" + OPTIC_GUIDE, sum: `광 수신 -40 dBm → 빛이 안 들어옴 (케이블·SFP 의심)`, detailLabel: "터미널 출력 보기", focus: [DN] },
     { at: dn(13), kind: "조치", title: "IP 확인과 ping: ARP가 없고 ping 100% 손실", detail: runOn(dDev, `show arp | match ${dPort}`, [dPort]) + "(출력 없음: 링크가 Down이면 ARP 항목이 없다)\n\n" + runOn(dDev, `ping ${dPeerIp} rapid count 100`, [dPort]) + "\n\n* L2 장비는 IP가 안 나오므로 MAC 주소로 찾는다.", sum: "ARP 없음, ping 100% 손실 → 상대 쪽까지 안 닿음", detailLabel: "터미널 출력 보기", focus: [DN] },
     { at: dn(16), kind: "조치", title: "연동망(상대 센터)에 문의 후 조장에게 전달", detail: "[연동망에 문의할 때 확인할 3가지]\n가. NOC 작업 유/무\n나. 연동 구간(타 부서·타 ISP) 작업 및 이슈 유/무\n다. 보안 관련 이슈 유/무\n\n* 통화한 분의 성함을 확인해서 기록하고, 경과나 원인을 알게 되면 바로바로 전달한다.\n* 확인한 내용(트래픽 전/후, 광값, CRC, ping 결과)은 조장에게 함께 전달한다.", detailLabel: "문의 항목 보기", focus: [DN] },
-    { at: dn(dnWin), kind: "결과", title: `${DN} 회복: out ${g1(outAt(DN, dn(dnWin)))}G (다운 구간 ${hhmm(dnA.s)}~${hhmm(dnA.e)}, ${dnWin}분). 경과 문자 발송, 조장에게 결과 전달`, focus: [DN] }
+    { at: dn(dnWin), kind: "결과", title: `${DN} 회복: out ${g1(outAt(DN, dn(dnWin)))}G (다운 구간 ${hhmm(dnA.s)}~${hhmm(dnA.e)}, ${dnWin}분). 경과 문자 발송, 조장에게 결과 전달`, detail: dnRecover, detailLabel: "복구 안내 문자 보기", focus: [DN] }
   ] };
 
   addExplain(linkDown, [
@@ -1130,8 +1154,9 @@ function buildScenarios() {
 const SCN_LIST = [["calm", "평일 오후 7시", "저녁 피크 전 평소 점검 (이상 없음)"], ["drop", "트래픽 급감", "국내 연동(IX)이 갑자기 빠짐: 원인 확인과 조치"], ["linkDown", "업링크 회선 다운", "안산 업링크 Down: 회선·트래픽·광값·ping·연동망 문의 순서"], ["surge", "트래픽 폭주", "월드컵 8강: 사전 연락·분산·모니터링"], ["redundancy", "이중화로 무사히 넘기기", "장비 한 대가 꺼져도 짝 장비가 고객 회선을 받아 큰 장애 없이 넘김"], ["temp", "서버실 온도 변화", "분당 IDC_B_R08 냉각 이상: 육안점검·터미널 확인·복구"]];
 let scn = null;
 function stopScn() { if (scn && scn.timer) clearInterval(scn.timer); scn = null; HL.clear(); const p = $("#scnPop"); if (p) p.hidden = true; }
-function scnSetView() {
-  if (scn.def.tab === "monitor") { state.end = scn.idx; renderAll(); } else { sr.end = scn.idx; renderServerRoom(); }
+function scnSetView(at) {   // at: 보여 줄 시각(기본은 지금 진행 시각). 이전 단계를 볼 때는 그 단계의 시각으로 보여 준다
+  const t = at == null ? scn.idx : at;
+  if (scn.def.tab === "monitor") { state.end = t; renderAll(); } else { sr.end = t; renderServerRoom(); }
   if (scn.reveal) {   // 강조된 그래프가 막대에 가리거나 화면 밖이면 보이는 곳으로 스크롤
     scn.reveal = false;
     const el = $(scn.def.tab === "monitor" ? ".panel.hl" : ".rack.hl");
@@ -1141,7 +1166,7 @@ function scnSetView() {
 function scnShowDue() {
   const due = scn.steps.filter(st => !st.shown && st.i <= scn.idx);
   due.forEach(st => { st.shown = true; scn.done.push(st); if (st.focus) { HL.clear(); st.focus.forEach(f => HL.add(f)); scn.reveal = true; } });
-  if (due.length) { scnRenderSteps(); if (!scn.skip) { scn.queue.push(...due); if (!scn.modal) scnPopNext(); } }
+  if (due.length) { scnRenderSteps(); if (!scn.skip && !scn.modal) scnOpenPop(scn.seen + 1); }
 }
 /* ---------- 단계 팝업: 어떤 장비·회선이 어떻게 되고 있는지 자세히 ---------- */
 function scnDevText(id, i) {   // 그 시각의 장비 상태 한 줄
@@ -1163,8 +1188,9 @@ function scnRelatedHtml(st) {
   if (devs.length) h += `<h4>관련 장비</h4><table class="kv2"><tr><th>장비</th><th>종류·역할</th><th>랙</th><th>이중화 짝</th><th>이 시각 상태</th></tr>` + devs.map(id => { const d = DEV[id]; return `<tr><td class="mono">${id}</td><td>${{ juniper: "Juniper", cisco: "Cisco Nexus 7710(추정)", huawei: "Huawei" }[d.vendor]} · ${esc(d.role)}</td><td>${d.rack}</td><td class="mono">${d.partner}</td><td>${scnDevText(id, i)}</td></tr>`; }).join("") + "</table>";
   return h;
 }
-function scnPopupShow(st) {
-  const k = scn.steps.indexOf(st), lesson = !!st.lesson;
+function scnPopupShow(st, k) {
+  const lesson = !!st.lesson;
+  scn.popK = k;
   $("#scnPopKind").className = "tag " + (KIND_CLS[st.kind] || ""); $("#scnPopKind").textContent = st.kind;
   $("#scnPopTime").textContent = lesson ? "" : ymdhm(msOf(st.i));
   $("#scnPopNo").textContent = lesson ? "정리" : `단계 ${k + 1} / ${scn.steps.length}`;
@@ -1172,22 +1198,29 @@ function scnPopupShow(st) {
   const ex = st.explain ? `<div class="explain">${String(st.explain).split("\n").map(x => `<p>${esc(x)}</p>`).join("")}</div>` : "";
   $("#scnPopBody").innerHTML = ex + (lesson ? "" : scnRelatedHtml(st)) + (st.sum ? `<p class="sumline">정리: ${esc(st.sum)}</p>` : "") + (st.detail ? `<h4>${esc(st.detailLabel || "자세한 내용")}</h4><pre>${esc(st.detail)}</pre>` : "");
   $("#scnPopBody").scrollTop = 0;
-  $("#scnPopNext").textContent = scn.queue.length ? "다음 ▶" : (scn.finished || scn.idx >= scn.i1 || lesson) ? "닫기" : "계속 진행 ▶";
+  const last = k >= scn.done.length - 1;
+  $("#scnPopPrev").disabled = k <= 0;
+  $("#scnPopNext").textContent = !last ? "다음 ▶" : (scn.finished || scn.idx >= scn.i1 || lesson) ? "닫기" : "계속 진행 ▶";
   $("#scnPop").hidden = false; scn.modal = true;
 }
-function scnPopNext() {
+function scnOpenPop(k) {   // k번째 단계의 팝업. 지난 단계도 다시 볼 수 있고, 그 단계 시각의 화면을 보여 준다
+  const st = scn.done[k]; if (!st) return;
+  scn.seen = Math.max(scn.seen, k); scnPopupShow(st, k); scnSetView(st.i);
+}
+function scnPopNext() { if (!scn) return; if (scn.popK < scn.done.length - 1) { scnOpenPop(scn.popK + 1); return; } scnPopClose(); }
+function scnPopPrev() { if (scn && scn.popK > 0) scnOpenPop(scn.popK - 1); }
+function scnPopClose() {   // 팝업을 닫고 진행 시각의 화면으로 돌아와 계속 진행
   if (!scn) return;
-  const st = scn.queue.shift();
-  if (st) { scnPopupShow(st); return; }
-  $("#scnPop").hidden = true; scn.modal = false;
+  $("#scnPop").hidden = true; scn.modal = false; scnSetView();
   if (!scn.finished && scn.idx >= scn.i1) scnFinish();
 }
-function scnLessonPop() { if (scn && scn.def.lesson) { scn.queue.unshift({ kind: "결과", title: "이 시나리오에서 배울 점", explain: scn.def.lesson, i: scn.i1, lesson: true }); scnPopNext(); } }
+function scnLessonPop() { if (scn && scn.def.lesson) { scnPopupShow({ kind: "결과", title: "이 시나리오에서 배울 점", explain: scn.def.lesson, i: scn.i1, lesson: true }, scn.done.length); } }
 function scnProgress() {
   $("#scnTime").textContent = ymdhm(msOf(scn.idx));
   $("#scnProg").style.width = (scn.finished ? 100 : (scn.idx - scn.i0) / Math.max(1, scn.i1 - scn.i0) * 100) + "%";
   $("#scnTitle").textContent = `시나리오 · ${scn.def.name}${scn.finished ? " (끝)" : ""}`;
   $("#scnPause").textContent = scn.paused ? "계속" : "일시정지"; $("#scnPause").disabled = scn.finished;
+  $("#scnPrevStep").disabled = !scn.done.length; $("#scnNextStep").disabled = scn.finished;
 }
 function scnRenderSteps() {
   const last = scn.done.length - 1;
@@ -1206,10 +1239,10 @@ function startScn(id) {
   stopScn();
   const def = buildScenarios()[id];
   const steps = def.steps.map(st => Object.assign({ i: isoIdx(st.at), shown: false }, st)).sort((a, b) => a.i - b.i);
-  scn = { def, steps, i0: isoIdx(def.from), i1: isoIdx(def.to), idx: isoIdx(def.from), done: [], queue: [], modal: false, skip: false, lessonShown: false, paused: false, finished: false, timer: null };
-  state.cust = "all"; $("#cust").value = "all"; state.ymode = "cap"; $("#ymode").value = "cap";
+  scn = { def, steps, i0: isoIdx(def.from), i1: isoIdx(def.to), idx: isoIdx(def.from), done: [], seen: -1, popK: -1, modal: false, skip: false, lessonShown: false, paused: false, finished: false, timer: null };
+  state.cust = "all"; state.ymode = "cap";
   setCenter(def.center || "ALL", false);   // 시나리오가 보여 줄 센터 (선택값은 저장하지 않음)
-  if (def.win) { state.win = def.win; $("#win").value = String(def.win); }
+  state.win = def.win || 12;
   showTab(def.tab);
   $("#scnBar").hidden = false; $("#scnSteps").innerHTML = "";
   scnShowDue(); scnSetView(); scnProgress();
@@ -1224,12 +1257,14 @@ function startScn(id) {
   document.addEventListener("click", e => { if (!menu.hidden && !menu.contains(e.target) && e.target !== btn) closeMenu(); });
   document.addEventListener("keydown", e => { if (e.key === "Escape") closeMenu(); });
   $("#scnPause").onclick = () => { if (scn && !scn.finished) { scn.paused = !scn.paused; scnProgress(); } };
-  const skipAll = () => { if (!scn || scn.finished) return; scn.skip = true; scn.queue = []; scn.modal = false; $("#scnPop").hidden = true; scn.idx = scn.i1; scnShowDue(); scnSetView(); scnFinish(); };
+  const skipAll = () => { if (!scn || scn.finished) return; scn.skip = true; scn.modal = false; $("#scnPop").hidden = true; scn.idx = scn.i1; scnShowDue(); scnSetView(); scnFinish(); };
   $("#scnSkip").onclick = skipAll; $("#scnPopSkip").onclick = skipAll;
-  $("#scnPopNext").onclick = scnPopNext; $("#scnPopX").onclick = scnPopNext;
+  $("#scnPopNext").onclick = scnPopNext; $("#scnPopPrev").onclick = scnPopPrev; $("#scnPopX").onclick = scnPopClose;
+  $("#scnPrevStep").onclick = () => { if (scn && !scn.modal && scn.done.length) scnOpenPop(scn.done.length - 1); };   // 가장 최근 단계의 팝업을 다시 열고, 거기서 더 이전으로 갈 수 있다
+  $("#scnNextStep").onclick = () => { if (!scn || scn.modal || scn.finished) return; const nx = scn.steps.find(s => !s.shown); if (!nx) { scn.idx = scn.i1; scnShowDue(); scnSetView(); scnFinish(); return; } scn.idx = Math.max(scn.idx, nx.i); scnShowDue(); scnSetView(); scnProgress(); };   // 다음 단계 시각으로 바로 건너뜀
   $("#scnLesson").onclick = scnLessonPop;
-  $("#scnSteps").addEventListener("click", e => { const b = e.target.closest("[data-scnpop]"); if (b && scn) { scn.queue.unshift(scn.done[+b.dataset.scnpop]); scnPopNext(); } });
-  document.addEventListener("keydown", e => { if (e.key === "Escape" && scn && scn.modal) scnPopNext(); });
+  $("#scnSteps").addEventListener("click", e => { const b = e.target.closest("[data-scnpop]"); if (b && scn) scnOpenPop(+b.dataset.scnpop); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && scn && scn.modal) scnPopClose(); });
   $("#scnClose").onclick = () => { stopScn(); $("#scnBar").hidden = true; showTab("monitor"); goNow(); window.scrollTo({ top: 0, behavior: "smooth" }); };
   syncHdr(); window.addEventListener("resize", syncHdr);
 })();

@@ -16,7 +16,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   await page.goto(url, { waitUntil: 'load' });
-  const goTo = async (iso, win) => { if (win) await page.selectOption('#win', String(win)); await page.fill('#endTime', iso); await page.press('#endTime', 'Tab'); await page.waitForTimeout(150); };
+  const goTo = async (iso, win) => { if (win) await page.evaluate(w => { state.win = w; }, win); await page.fill('#endTime', iso); await page.press('#endTime', 'Tab'); await page.waitForTimeout(150); };
   await page.waitForTimeout(400);
 
   check('그래프 패널 15개', (await page.locator('.panel').count()) === 15);
@@ -33,9 +33,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const text = require('fs').readFileSync(csvPath, 'utf8').replace(/^﻿/, '');
   check('전체 CSV 헤더와 180행(15회선 x 12점)', text.startsWith('time,link,in_gbps,out_gbps,out_util_pct') && text.trim().split('\n').length === 181);
 
-  await page.selectOption('#cust', '샘플게임즈');
-  check('고객사 선택 시 해당 그래프만 보임', (await page.locator('.panel:visible').count()) === 2);
-  await page.selectOption('#cust', 'all');
+  check('관제 탭에서 고객사·창·Y축 선택은 없앴고, 시나리오·전체 CSV 버튼은 오른쪽에 그대로 있음', (await page.locator('#cust, #win, #ymode').count()) === 0 && (await page.locator('#scnBtn').isVisible()) && (await page.locator('#csvAll').isVisible()) && (await page.evaluate(() => { const t = document.querySelector('#tab-monitor .toolbar'), b = document.getElementById('scnBtn').getBoundingClientRect(), c = document.getElementById('csvAll').getBoundingClientRect(), e = document.getElementById('endTime').getBoundingClientRect(); return b.left > e.left + 400 && c.left > b.left; })));
   check('관제 첫 화면에는 경고 이력·내 업무 칸이 없고 모니터만 있음', (await page.locator('#tab-monitor #alertTbl').count()) === 0 && (await page.locator('#tab-monitor #taskTbl').count()) === 0 && !(await page.locator('#alertTbl').isVisible()));
   check('종 아이콘이 있고 확인 필요 건수가 4로 뜸 (경고 3 + 온도 1)', (await page.locator('#bell').isVisible()) && (await page.locator('#bellN').innerText()) === '4');
   await page.click('#bell');
@@ -45,7 +43,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('"경기와 겹치는 알림도 보기"를 켜면 월드컵 알림이 나타남', (await page.locator('#alertTbl').innerText()).includes('월드컵'));
   await page.uncheck('#showAllAlerts');
   await page.click('[data-np=tasks]');
-  check('내 업무 탭에 업무 목록이 있음', (await page.locator('#taskTbl').innerText()).includes('월말 자료 발송'));
+  check('내 업무 탭에 업무 목록이 있음', (await page.locator('#taskTbl').innerText()).includes('월간·주간 자료 발송'));
   await page.keyboard.press('Escape');
   check('Esc로 알림이 닫힘', !(await page.locator('#notif').isVisible()));
   await page.click('[data-tab=room]');
@@ -65,7 +63,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   // 빠른 이동 버튼은 없고, "현재로" 버튼 하나로 돌아온다
   check('빠른 이동 버튼과 경기 보기 선택이 없다', (await page.locator('[data-jump]').count()) === 0 && (await page.locator('#jumpEv').count()) === 0 && !(await page.locator('#tab-monitor .toolbar').innerText()).includes('빠른 이동'));
   await page.click('#goNow');
-  check('현재로 버튼: 가상 현재(10/22 21:00), 1시간 창으로 돌아옴', (await page.locator('#endTime').inputValue()) === '2026-10-22T21:00' && (await page.locator('#win').inputValue()) === '12');
+  check('현재로 버튼: 가상 현재(10/22 21:00), 1시간 창으로 돌아옴', (await page.locator('#endTime').inputValue()) === '2026-10-22T21:00' && (await page.evaluate(() => state.win)) === 12);
   for (const w of [1366, 1280]) {   // 폭이 좁아져도 위쪽 도구줄이 한 줄을 유지하는가
     await page.setViewportSize({ width: w, height: 900 }); await page.waitForTimeout(150);
     const spread = await page.evaluate(() => { const ys = [...document.querySelectorAll('#tab-monitor .toolbar > *')].filter(e => e.offsetParent).map(e => { const r = e.getBoundingClientRect(); return r.top + r.height / 2; }); return Math.max(...ys) - Math.min(...ys); });
@@ -247,8 +245,41 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('전체를 고르면 그래프 15개가 모두 보임', (await page.locator('.panel:visible').count()) === 15);
 
   // 시나리오 4가지: 시간이 흘러가고, 단계(감지·확인·조치·결과)가 나오고, 닫으면 현재로 돌아온다
+  // 시나리오 이전/다음: 팝업과 위쪽 막대 모두
+  await page.click('[data-tab=monitor]');
+  await page.click('#scnBtn'); await page.click('#scnMenu [data-scn=calm]');
+  await page.waitForSelector('#scnPop:not([hidden])');
+  check('시나리오 팝업: 1단계에서는 "이전"이 막혀 있음', await page.locator('#scnPopPrev').isDisabled());
+  await page.click('#scnPopNext');
+  await page.waitForFunction(() => !document.getElementById('scnPop').hidden && document.getElementById('scnPopNo').innerText.startsWith('단계 2 /'), null, { timeout: 20000 });
+  const n2 = await page.locator('#scnPopTitle').innerText(), t2 = await page.locator('#scnTime').innerText();
+  await page.click('#scnPopPrev');
+  check('"이전"을 누르면 1단계 팝업이 다시 뜨고 화면도 그 단계 시각으로 돌아감', (await page.locator('#scnPopNo').innerText()).startsWith('단계 1 /') && (await page.locator('#scnPopPrev').isDisabled()) && (await page.locator('#endTime').inputValue()) === '2026-10-22T18:30', await page.locator('#endTime').inputValue());
+  await page.click('#scnPopNext');
+  check('"다음"을 누르면 2단계 팝업으로 돌아오고 화면도 2단계 시각', (await page.locator('#scnPopTitle').innerText()) === n2 && (await page.locator('#endTime').inputValue()) === '2026-10-22T18:45');
+  await page.click('#scnPopNext');   // 마지막 단계에서 다음 = 닫고 진행
+  check('마지막으로 본 단계에서 "계속 진행"을 누르면 팝업이 닫히고 진행 시각 화면으로 돌아옴', !(await page.locator('#scnPop').isVisible()));
+  await page.click('#scnPrevStep');
+  check('위쪽 막대의 "이전 단계"는 가장 최근 단계 팝업을 다시 열고, 거기서 더 이전으로 갈 수 있음', (await page.locator('#scnPop').isVisible()) && (await page.locator('#scnPopNo').innerText()).startsWith('단계 2 /') && !(await page.locator('#scnPopPrev').isDisabled()));
+  await page.click('#scnPopX');
+  await page.click('#scnNextStep');
+  check('위쪽 막대의 "다음 단계"는 다음 단계 시각으로 바로 건너뛰어 그 단계 팝업을 띄움', (await page.locator('#scnPop').isVisible()) && (await page.locator('#scnPopNo').innerText()).startsWith('단계 3 /'));
+  await page.click('#scnPopSkip'); await page.click('#scnClose');
+  // 급감 시나리오 내용: 광값 기준표, [TEP IDC] 메일 제목, 복구 메일
+  await page.click('#scnBtn'); await page.click('#scnMenu [data-scn=drop]');
+  await page.waitForSelector('#scnPop:not([hidden])'); await page.click('#scnPopSkip');
+  const dropPop = async k => { await page.click(`#scnSteps li >> nth=${k} >> [data-scnpop]`); const t = await page.locator('#scnPop').innerText(); await page.click('#scnPopX'); return t; };
+  const pop3 = await dropPop(2);
+  check('급감 시나리오 광값 단계: 정상 범위(약 -14.4 ~ +0.5 dBm)와 수신 광값 읽는 법 표가 나옴', /정상 범위/.test(pop3) && /-14\.4/.test(pop3) && /\+0\.5/.test(pop3) && /읽는 법/.test(pop3) && /-40 dBm/.test(pop3));
+  const p4 = await dropPop(3);
+  check('급감 시나리오 안내 메일 제목에 회사 이름: "[TEP IDC] 국내 연동(IX) 트래픽 감소 확인 중" ("[안내]"만 있지 않음)', p4.includes('제목: [TEP IDC] 국내 연동(IX) 트래픽 감소 확인 중') && !p4.includes('[안내]') && p4.includes('TEP IDC 관제입니다'));
+  const p6 = await dropPop(5);
+  check('급감 시나리오 마지막 단계에 복구 안내 메일 예시: "[TEP IDC] ... 복구 완료 안내", 발생·복구 시각과 원인', /제목: \[TEP IDC\].*복구 완료 안내/.test(p6) && /발생:/.test(p6) && /복구:/.test(p6) && /원인:/.test(p6));
+  await page.click('#scnClose');
+  const mails = await page.evaluate(() => [(ev => evNoticeText(ev, evCalc(ev)))(DATA.events.find(e => e.name.includes('8강'))), replyText(parseMail(SAMPLE_MAIL))].map(x => x.split('\n')[0]));
+  check('다른 메일 제목에도 [TEP IDC]가 붙음 (경기 사전 안내, 방문 회신)', mails.every(x => x.includes('[TEP IDC]')), mails.join(' | '));
   const scenarios = [['calm', '평일 오후 7시', 4, ['그래프 15개 확인', '서버실 확인', '이상 없음']], ['drop', '트래픽 급감', 6, ['급감', 'IDC_B_FS2_INTL1', '광값', '예시미디어', '회복']],
-    ['redundancy', '이중화로 무사히 넘기기', 8, ['이중화', '전원 꺼짐', '트래픽은 거의 그대로', '고객 영향 없음']], ['linkDown', '업링크 회선 다운', 8, ['Admin', '트래픽(전/후)', '광값', 'ping', '연동망', '회복']], ['surge', '트래픽 폭주', 7, ['사전 연락', '분산', '하이드레이션', '경고선 80%', '사후 정리', '[사전 안내]']], ['temp', '서버실 온도 변화', 7, ['온도 경고', '빨강 깜박임', '터미널', '냉각 복구', '-40.00 dBm']]];
+    ['redundancy', '이중화로 무사히 넘기기', 8, ['이중화', '전원 꺼짐', '트래픽은 거의 그대로', '고객 영향 없음']], ['linkDown', '업링크 회선 다운', 8, ['Admin', '트래픽(전/후)', '광값', 'ping', '연동망', '회복']], ['surge', '트래픽 폭주', 7, ['사전 연락', '분산', '하이드레이션', '경고선 80%', '사후 정리', '[TEP IDC]']], ['temp', '서버실 온도 변화', 7, ['온도 경고', '빨강 깜박임', '터미널', '냉각 복구', '-40.00 dBm']]];
   for (const [id, name, n, words] of scenarios) {
     await page.click('[data-tab=monitor]');
     await page.click('#scnBtn'); await page.click(`#scnMenu [data-scn=${id}]`);
@@ -267,9 +298,10 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
     const cnt = await page.locator('#scnSteps li').count();
     check(`시나리오 "${name}": 단계 ${n}개와 핵심 내용이 나옴`, cnt === n && words.every(w => txt.includes(w)), `단계 ${cnt}/${n}, 빠진 말: ${words.filter(w => !txt.includes(w)).join(',') || '없음'}`);
     await page.click('#scnSteps li >> nth=0 >> [data-scnpop]');
+    check(`시나리오 "${name}": 지난 단계 팝업에서는 '이전'이 막혀 있고(1단계), '다음'으로 다음 단계로 감`, (await page.locator('#scnPopPrev').isDisabled()) && (await page.locator('#scnPopNo').innerText()).startsWith('단계 1 /'));
     const popTxt = await page.locator('#scnPop').innerText();
     check(`시나리오 "${name}": '자세히 팝업'에 설명과 관련 장비·회선·랙 정보가 나옴`, (await page.locator('#scnPopBody .explain').count()) === 1 && /관련 (회선|랙|장비)/.test(popTxt), popTxt.slice(0, 80).replace(/\n/g, ' '));
-    await page.click('#scnPopNext');
+    await page.click('#scnPopX');
     check(`시나리오 "${name}": 팝업을 닫으면 사라짐`, !(await page.locator('#scnPop').isVisible()));
     if (['linkDown', 'redundancy', 'temp', 'surge', 'calm', 'drop'].includes(id)) check(`시나리오 "${name}": 끝나면 '배울 점' 버튼이 생김`, await page.locator('#scnLesson').isVisible());
     if (id === 'drop') {
@@ -284,6 +316,14 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
     check(`시나리오 "${name}": 닫으면 관제 현재(10/22 21:00)로 돌아옴`, !(await page.locator('#scnBar').isVisible()) && (await page.locator('#tab-monitor').isVisible()) && (await page.locator('#endTime').inputValue()) === '2026-10-22T21:00');
   }
 
+  // 월간 자료: 정기 발송 고객사를 월초·월말·매주로 나눠 접어 둔다
+  await page.click('[data-tab=monthly]');
+  const plan = await page.evaluate(() => [...document.querySelectorAll('#sendPlan details')].map(d => ({ open: d.open, sum: d.querySelector('summary').innerText, names: [...d.querySelectorAll('tr > td:first-child')].map(x => x.textContent.trim()), boxes: d.querySelectorAll('input[type=checkbox]').length })));
+  check('이번 달 발송 현황: 월초·월말·매주 3묶음이 모두 접혀 있고, 정해 준 고객사만 나옴(월초 예시미디어·샘플게임즈 / 월말 가상은행·예시금융 / 매주 데모스트리밍)', plan.length === 3 && plan.every(g => !g.open) && JSON.stringify(plan.map(g => g.names)) === JSON.stringify([['예시미디어', '샘플게임즈'], ['가상은행', '예시금융'], ['데모스트리밍']]) && /월초 발송/.test(plan[0].sum) && /월말 발송/.test(plan[1].sum) && /매주 발송/.test(plan[2].sum), JSON.stringify(plan.map(g => g.sum)));
+  check('매주 묶음은 이번 달 월요일 칸(10/5·12·19·26)이 있고 아직 안 온 날은 예정으로 표시', plan[2].boxes === 4 && (await page.evaluate(() => document.querySelector('#sendPlan details[data-plan=weekly]').textContent)).includes('10-26 (예정)'));
+  await page.click('#sendPlan details[data-plan=start] > summary');
+  await page.click('#sendPlan details[data-plan=start] input >> nth=0');
+  check('묶음을 펼쳐 발송 완료를 체크하면 완료 수가 올라가고 묶음은 열린 채로 남음', (await page.locator('#sendPlan details[data-plan=start] > summary').innerText()).includes('완료 1/2') && (await page.evaluate(() => document.querySelector('#sendPlan details[data-plan=start]').open)));
   await page.click('[data-tab=event]');
   const planText = await page.locator('#evPlan').innerText();
   check('센터 이름이 지명(분당·안산·구로·서초)으로 나옴', ['분당 → 중앙 백본 (A)', '안산 → 중앙 백본 (Juniper)', '구로 → 중앙 백본', '서초 센터 백본 (Cisco)'].every(w => planText.includes(w)) && !/우리 센터|센터B|센터C|센터D/.test(planText), planText.split('\n').slice(0, 3).join(' | '));

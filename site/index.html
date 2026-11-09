@@ -47,6 +47,8 @@
     <b id="scnTitle"></b>
     <span class="muted">가상 시각 <span id="scnTime" class="mono"></span></span>
     <div class="scn-prog"><div id="scnProg"></div></div>
+    <button class="btn sm" id="scnPrevStep" title="가장 최근 단계의 설명을 다시 봅니다">◀ 이전 단계</button>
+    <button class="btn sm" id="scnNextStep" title="다음 단계 시각으로 바로 이동합니다">다음 단계 ▶</button>
     <button class="btn sm" id="scnPause">일시정지</button>
     <button class="btn sm" id="scnSkip">끝까지</button>
     <button class="btn sm" id="scnLesson" hidden>배울 점</button>
@@ -59,7 +61,7 @@
     <div class="scnpop-head"><span class="tag" id="scnPopKind"></span><b class="mono" id="scnPopTime"></b><span class="muted" id="scnPopNo"></span><span class="sp"></span><button class="btn sm" id="scnPopX" aria-label="닫기">닫기</button></div>
     <h3 id="scnPopTitle"></h3>
     <div class="scnpop-body" id="scnPopBody"></div>
-    <div class="scnpop-foot"><button class="btn" id="scnPopSkip">끝까지 건너뛰기</button><span class="sp"></span><button class="btn pri" id="scnPopNext">다음 ▶</button></div>
+    <div class="scnpop-foot"><button class="btn" id="scnPopPrev">◀ 이전</button><button class="btn" id="scnPopSkip">끝까지 건너뛰기</button><span class="sp"></span><button class="btn pri" id="scnPopNext">다음 ▶</button></div>
   </div>
 </div>
 <!-- 1. 관제 -->
@@ -69,9 +71,6 @@
     <button class="btn" id="prev" title="한 창 뒤로">&lsaquo; 이전</button>
     <button class="btn" id="next" title="한 창 앞으로">다음 &rsaquo;</button>
     <button class="btn" id="goNow" title="가상 현재 시각(10/22 21:00)으로 돌아가기">현재로</button>
-    <label>고객사 <select id="cust"></select></label>
-    <label>창 <select id="win"><option value="12">1시간</option><option value="36">3시간</option><option value="72">6시간</option><option value="288">24시간</option></select></label>
-    <label>Y축 <select id="ymode"><option value="cap">회선 용량</option><option value="auto">자동 확대</option></select></label>
     <span class="sp"></span>
     <span class="scn-wrap"><button class="btn" id="scnBtn" aria-expanded="false" title="몇 초 안에 상황과 조치가 흘러가는 안내 재생">시나리오</button><div class="menu" id="scnMenu" hidden></div></span>
     <button class="btn primary" id="csvAll">전체 CSV 내려받기</button>
@@ -98,7 +97,8 @@
     </div>
     <div class="card">
       <h3>이번 달 발송 현황</h3>
-      <table id="sendTbl"></table>
+      <p class="note" style="margin:0 0 8px">정기적으로 자료를 보내는 고객사만 나옵니다. 눌러서 펼치세요.</p>
+      <div id="sendPlan"></div>
     </div>
   </div>
   <h2>2. 요약 <small>최대·최소·평균·95%값 (Gbps)</small></h2>
