@@ -267,7 +267,7 @@ function renderTasksTable() {
   const drops = ALERTS.filter(a => a.kind.includes("급감") && !a.evName).length;
   const rows = [
     ["월간·주간 자료 발송", `${sp.done}/${sp.total} 완료 (월초·월말·매주)`, sp.done === sp.total ? "ok" : "warn", "monthly"],
-    ["이벤트 대비", `아시안게임 ${checks.filter(c => c === CHECK_ITEMS.length).length}/${DATA.events.length}이벤트 체크 완료`, "warn", "event"],
+    ["이벤트 대비 기록", `아시안게임 ${checks.filter(c => c === CHECK_ITEMS.length).length}/${DATA.events.length}이벤트 체크 완료`, "warn", "event"],
     ["방문 신청 등록", `등록 ${visits}건`, "ok", "visit"],
     ["트래픽 급증·급감 확인", `경기와 겹치지 않는 급증 ${spikes}건 · 급감 ${drops}건 (경고 이력 참고)`, spikes + drops ? "warn" : "ok", "monitor"],
     ["서버실 온도·육안점검", `온도 경고 ${ROOM_ALERTS.length}건 · 점검 기록 ${store.get("inspections", []).length}건`, ROOM_ALERTS.length ? "warn" : "ok", "room"],

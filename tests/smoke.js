@@ -73,7 +73,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.setViewportSize({ width: 1600, height: 900 });
 
   // 탭 순서와 센터 선택: 센터 선택은 관제·서버실에서만 보이고, 두 화면이 같은 센터로 동기화된다
-  check('위 메뉴: 관제 / 서버실▾ / 장비 터미널 / 대응▾ / 이벤트 대비 / 고객 지원▾ (하위 메뉴: 서버실·서버실 3D / 실시간 대응·자동 대응 / 문자 전파·방문 신청·장비 반출입·월간 자료)', JSON.stringify(await page.locator('#tabs > button, #tabs > .tabgrp > .grpbtn').allTextContents()) === JSON.stringify(['관제', '서버실', '장비 터미널', '대응 시험판', '이벤트 대비', '고객 지원']) && JSON.stringify(await page.locator('#tabs .tabgrp:nth-of-type(1) .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D']) && JSON.stringify(await page.locator('#tabs .tabgrp .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D', '실시간 대응', '자동 대응', '문자 전파', '방문 신청', '장비 반출입', '월간 자료']));
+  check('위 메뉴: 관제 / 서버실▾ / 장비 터미널 / 대응▾ / 이벤트 대비 기록 / 고객 지원▾ (하위 메뉴: 서버실·서버실 3D / 실시간 대응·자동 대응 / 문자 전파·방문 신청·장비 반출입·월간 자료)', JSON.stringify(await page.locator('#tabs > button, #tabs > .tabgrp > .grpbtn').allTextContents()) === JSON.stringify(['관제', '서버실', '장비 터미널', '대응 시험판', '이벤트 대비 기록', '고객 지원']) && JSON.stringify(await page.locator('#tabs .tabgrp:nth-of-type(1) .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D']) && JSON.stringify(await page.locator('#tabs .tabgrp .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D', '실시간 대응', '자동 대응', '문자 전파', '방문 신청', '장비 반출입', '월간 자료']));
   const sub0 = await page.locator('#tabs .tabgrp >> nth=2 >> .submenu').isVisible();
   await page.hover('#tabs .tabgrp >> nth=2 >> .grpbtn');
   const sub1 = await page.locator('#tabs .tabgrp >> nth=2 >> .submenu').isVisible();
