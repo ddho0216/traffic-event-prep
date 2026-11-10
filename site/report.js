@@ -4,7 +4,7 @@
    고객사별 트래픽은 데이터에 따로 없어서, 회선 트래픽을 고객사 용량 비율로 나눠 붙인 가상 배분입니다(제가 정한 방식).
    app.js보다 먼저 불러오고, 계산은 호출될 때(app.js가 만든 값이 준비된 뒤) 한다. */
 const REPORT = (() => {
-  const ORDER = ["S", "A", "B", "G"], HOUR = 3600000, DAYMS = 24 * HOUR, WEEK = 7 * DAYMS;
+  const ORDER = ["S", "A", "B", "G"], NM = { S: "서초", A: "안산", B: "분당", G: "구로" }, HOUR = 3600000, DAYMS = 24 * HOUR, WEEK = 7 * DAYMS;
   const cOf = id => id.split("_")[1];
   const idx = ms => Math.floor((ms - T0) / STEP);
   const pad = n => String(n).padStart(2, "0");
@@ -31,7 +31,7 @@ const REPORT = (() => {
     const val = f => W.map(w => w ? fT(f(w[0], w[1])) : "-").join(" / ");
     const L = ["[" + COMPANY + "]", "[Web발신]", "[주요고객 트래픽]", "", `■ 일시 : ${mdhm(endMs - DAYMS)} ~ ${mdhm(endMs)}`, "■ 최대트래픽 - 고객명 : 전주 / 전일 / 현재", ""];
     ORDER.forEach(c => {
-      L.push(`[${c}]`, `- 센터 업링크(${upCap(c)}G): ${val((a, b) => maxUp(c, a, b))}`);
+      L.push(`[${NM[c]}]`, `- 센터 업링크(${upCap(c)}G): ${val((a, b) => maxUp(c, a, b))}`);
       CUSTOMERS.filter(cu => homeOf(cu) === c).map(cu => ({ cu, now: W[2] ? custMax(cu, W[2][0], W[2][1]) : 0 })).sort((x, y) => y.now - x.now).slice(0, 7)
         .forEach(x => L.push(`- ${x.cu.name}(${capOf(x.cu)}G): ${val((a, b) => custMax(x.cu, a, b))}`));
       L.push("");
@@ -44,11 +44,11 @@ const REPORT = (() => {
     const centers = ORDER.filter(c => c === "S" || c === "B" || ev.links.some(l => cOf(l) === c));
     const dlt = (now, prev) => hasPrev ? `전주 MAX 대비 ${fT(Math.abs(now - prev))} ${now >= prev ? "증가" : "감소"}` : "전주 데이터 없음";
     const d = new Date(s), L = ["[" + COMPANY + "]", "[Web발신]", `[2026 아이치·나고야 아시안게임] ${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일 ${ev.name} 중 최대 트래픽`, "", "", "■ 백본 트래픽", ""];
-    centers.forEach(c => { const now = maxUp(c, a, b), prev = hasPrev ? maxUp(c, a0, b0) : 0, cap = upCap(c); L.push(`- ${c} : ${fT(now)} / ${cap}G (사용률 ${(now / cap * 100).toFixed(1)}% ${dlt(now, prev)})`, ""); });
+    centers.forEach(c => { const now = maxUp(c, a, b), prev = hasPrev ? maxUp(c, a0, b0) : 0, cap = upCap(c); L.push(`- ${NM[c]} : ${fT(now)} / ${cap}G (사용률 ${(now / cap * 100).toFixed(1)}% ${dlt(now, prev)})`, ""); });
     L.push("■ 고객 트래픽", "");
     centers.forEach(c => {
       const top = CUSTOMERS.filter(cu => homeOf(cu) === c).map(cu => ({ cu, now: custMax(cu, a, b) })).sort((x, y) => y.now - x.now)[0];
-      if (top) L.push(`- ${top.cu.name}(${c}) : ${fT(top.now)} (${dlt(top.now, hasPrev ? custMax(top.cu, a0, b0) : 0)})`, "");
+      if (top) L.push(`- ${top.cu.name}(${NM[c]}) : ${fT(top.now)} (${dlt(top.now, hasPrev ? custMax(top.cu, a0, b0) : 0)})`, "");
     });
     const hit = typeof ALERTS !== "undefined" ? ALERTS.filter(x => x.e >= a && x.s <= b && !x.evName) : [];
     L.push(`■ 서비스 영향 : ${hit.length ? hit.map(x => `${x.link} ${x.kind}`).join(", ") + " 확인됨" : "서비스 및 DDoS 특이사항 없음"}`, "", "■ VOC : 없음");

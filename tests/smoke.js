@@ -325,8 +325,8 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('#smKind [data-k=daily]');
   const rd = await page.inputValue('#smDraft');
   check('주요고객 트래픽(일일): [TEP IDC]·[Web발신]·[주요고객 트래픽], ■ 일시(24시간), ■ 최대트래픽 - 고객명 : 전주 / 전일 / 현재', /^\[TEP IDC\]\n\[Web발신\]\n\[주요고객 트래픽\]\n\n■ 일시 : 10\/21 08:00 ~ 10\/22 08:00\n■ 최대트래픽 - 고객명 : 전주 \/ 전일 \/ 현재\n/.test(rd));
-  const heads = (rd.match(/^\[[SABG]\]$/gm) || []).join('');
-  check('센터는 [S] [A] [B] [G] 순서로 나오고, 각 줄은 "- 이름(용량G): 전주 / 전일 / 현재"(G·M·K 단위)이며 전주 값도 있음(-가 아님)', heads === '[S][A][B][G]' && rd.split('\n').filter(l => l.startsWith('- ')).every(l => /^- .+\(\d+G\): [\d.]+[GMK] \/ [\d.]+[GMK] \/ [\d.]+[GMK]$/.test(l)) && !rd.includes(': -'));
+  const heads = (rd.match(/^\[(서초|안산|분당|구로)\]$/gm) || []).join('');
+  check('센터는 [서초] [안산] [분당] [구로] 순서로 나오고, 각 줄은 "- 이름(용량G): 전주 / 전일 / 현재"(G·M·K 단위)이며 전주 값도 있음(-가 아님)', heads === '[서초][안산][분당][구로]' && rd.split('\n').filter(l => l.startsWith('- ')).every(l => /^- .+\(\d+G\): [\d.]+[GMK] \/ [\d.]+[GMK] \/ [\d.]+[GMK]$/.test(l)) && !rd.includes(': -'));
   const calcUp = await page.evaluate(() => { const up = LINKS.filter(l => l.id.split('_')[1] === 'S' && /_UP\d$/.test(l.id)), idx = ms => Math.floor((ms - T0) / STEP), e = parseT('2026-10-22T08:00'), mx = (shift) => { let m = 0; for (let i = idx(e - shift - 86400000) + 1; i <= idx(e - shift); i++) { let v = 0; up.forEach(l => { v += l.out[i]; }); m = Math.max(m, v); } return m; }; return [7 * 86400000, 86400000, 0].map(sh => mx(sh).toFixed(1) + 'G').join(' / '); });
   check('서초 센터 업링크 최대값(전주 / 전일 / 현재)이 데이터에서 따로 계산한 값과 같음', rd.includes(`- 센터 업링크(400G): ${calcUp}`), calcUp);
   await page.fill('#rdEnd', '2026-09-12T08:00'); await page.dispatchEvent('#rdEnd', 'change');
@@ -334,7 +334,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('#smKind [data-k=event]');
   const re = await page.inputValue('#smDraft');
   check('이벤트 최대 트래픽 보고: 제목 "[2026 아이치·나고야 아시안게임] 9월 27일 축구 8강 중 최대 트래픽", ■ 백본 트래픽·■ 고객 트래픽·■ 서비스 영향·■ VOC', /\[2026 아이치·나고야 아시안게임\] 9월 27일 축구 8강 중 최대 트래픽/.test(re) && ['■ 백본 트래픽', '■ 고객 트래픽', '■ 서비스 영향 : 서비스 및 DDoS 특이사항 없음', '■ VOC : 없음'].every(w => re.includes(w)));
-  const calcEv = await page.evaluate(() => { const ev = DATA.events.find(e => e.name === '축구 8강'), up = LINKS.filter(l => l.id.split('_')[1] === 'S' && /_UP\d$/.test(l.id)), idx = ms => Math.floor((ms - T0) / STEP), s0 = parseT(ev.start), e0 = parseT(ev.end), mx = sh => { let m = 0; for (let i = idx(s0 - sh); i <= idx(e0 - sh); i++) { let v = 0; up.forEach(l => { v += l.out[i]; }); m = Math.max(m, v); } return m; }, now = mx(0), prev = mx(7 * 86400000); return `- S : ${now.toFixed(1)}G / 400G (사용률 ${(now / 400 * 100).toFixed(1)}% 전주 MAX 대비 ${Math.abs(now - prev).toFixed(1)}G ${now >= prev ? '증가' : '감소'})`; });
+  const calcEv = await page.evaluate(() => { const ev = DATA.events.find(e => e.name === '축구 8강'), up = LINKS.filter(l => l.id.split('_')[1] === 'S' && /_UP\d$/.test(l.id)), idx = ms => Math.floor((ms - T0) / STEP), s0 = parseT(ev.start), e0 = parseT(ev.end), mx = sh => { let m = 0; for (let i = idx(s0 - sh); i <= idx(e0 - sh); i++) { let v = 0; up.forEach(l => { v += l.out[i]; }); m = Math.max(m, v); } return m; }, now = mx(0), prev = mx(7 * 86400000); return `- 서초 : ${now.toFixed(1)}G / 400G (사용률 ${(now / 400 * 100).toFixed(1)}% 전주 MAX 대비 ${Math.abs(now - prev).toFixed(1)}G ${now >= prev ? '증가' : '감소'})`; });
   check('서초 백본 줄(최대·용량·사용률%·전주 MAX 대비 증감)이 데이터에서 따로 계산한 값과 같음', re.includes(calcEv), calcEv);
   await page.click('#smPhone');
   check('보고 문자도 "휴대폰에서 보기"로 받는 사람 화면에 보임', await page.evaluate(() => !document.getElementById('phone').hidden && document.getElementById('phBody').innerText.includes('중 최대 트래픽')));
