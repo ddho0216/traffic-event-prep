@@ -36,11 +36,20 @@
     stage = s;
     document.querySelectorAll("#smStage button").forEach(b => b.classList.toggle("primary", b.dataset.st === s));
     sv("smToRow").hidden = s !== "완료"; sv("smActsRow").hidden = s === "발생";
-    if (fill) fillForm(s);
+    if (fill) { fillForm(s); sv("smClock").value = { 발생: "03:21", 경과: "03:35", 완료: "03:42" }[s]; }   // 단계마다 문자가 도착하는 시각 예시(조치·끝 일시보다 뒤)
     sv("smDraft").value = makeDraft(); count();
   }
   const bytes = t => { let n = 0; for (const ch of t) n += ch.charCodeAt(0) > 127 ? 2 : 1; return n; };
-  function count() { const t = sv("smDraft").value; sv("smCount").textContent = `${[...t].length}자 · 약 ${bytes(t)}바이트 (한글 2바이트 기준)`; }
+  const phoneText = t => esc(t).replace(/\n/g, "<br>");
+  let sent = false;   // 방금 전송한 내용이 그대로인지 (초안을 고치면 다시 "전송 전"으로 돌아간다)
+  function inline() {   // 같은 화면 오른쪽 휴대폰: 초안과 도착 시각을 바로 보여 준다
+    const t = sv("smDraft").value.trim(), ck = sv("smClock").value || "03:21", first = t.split("\n")[0] || COMPANY;
+    sv("iphBody").innerHTML = t ? `<div class="ph-date">오늘 ${esc(ck)}</div><div class="ph-bubble">${phoneText(t)}</div><div class="ph-time">${esc(ck)}</div>` : `<div class="ph-date">초안이 비어 있습니다</div>`;
+    sv("iphClock").textContent = ck; sv("iphName").textContent = first.replace(/^\[|\]$/g, "");
+    sv("iphSent").hidden = !sent; sv("iphSent").textContent = `✓ 전송됨 ${ck}`;
+    sv("iphWarn").textContent = bytes(t) > 90 ? `약 ${bytes(t)}바이트라서 일반 문자(SMS)가 아니라 장문(LMS)으로 가는 길이입니다 (기준은 현장 시스템에 따라 다를 수 있음)` : "짧은 문자 길이입니다";
+  }
+  function count() { const t = sv("smDraft").value; sv("smCount").textContent = `${[...t].length}자 · 약 ${bytes(t)}바이트 (한글 2바이트 기준)`; sent = false; inline(); }
   sv("smStage").addEventListener("click", e => { const b = e.target.closest("button"); if (b) setStage(b.dataset.st, true); });
   sv("smKind").addEventListener("click", e => { const b = e.target.closest("button"); if (b) setKind(b.dataset.k); });
   sv("rdEnd").addEventListener("change", regen); sv("rdEv").addEventListener("change", regen);
@@ -48,7 +57,6 @@
   sv("smDraft").addEventListener("input", count);
   sv("smReset").onclick = () => { if (kind === "incident") setStage(stage, true); else regen(); };
   sv("smCopy").onclick = async () => { try { await navigator.clipboard.writeText(sv("smDraft").value); sv("smMsg").textContent = "복사했습니다"; } catch (e) { sv("smDraft").select(); sv("smMsg").textContent = "선택했습니다. Ctrl+C로 복사하세요"; } };
-  const phoneText = t => esc(t).replace(/\n/g, "<br>");
   window.openPhone = (text, clock) => {   // 다른 화면(실시간 대응)에서도 같은 휴대폰 미리보기를 쓴다
     const t = String(text).trim(), lines = t.split("\n"), first = lines[0] || COMPANY, ck = clock || "03:21";
     sv("phBody").innerHTML = `<div class="ph-date">오늘 ${esc(ck)}</div><div class="ph-bubble">${phoneText(t)}</div><div class="ph-time">${esc(ck)}</div>`;
@@ -56,11 +64,43 @@
     sv("phWarn").textContent = bytes(t) > 90 ? `약 ${bytes(t)}바이트라서 일반 문자(SMS)가 아니라 장문(LMS)으로 가는 길이입니다 (기준은 현장 시스템에 따라 다를 수 있음)` : "짧은 문자 길이입니다";
     sv("phone").hidden = false; sv("phoneClose").focus();
   };
-  function showPhone() {
+  /* 보내기 전에 시각 오타를 찾아 제안한다: 일시·조치 시각이 도착 시각보다 뒤이거나, 순서가 거꾸로이거나, 8분 규칙을 넘긴 경우 */
+  window.smsCheck = (text, clock) => {
+    const out = [], toMin = s => { const m = String(s).match(/^(\d{1,2}):(\d{2})$/); return m ? +m[1] * 60 + +m[2] : null; }, ck = toMin(clock);
+    const p2 = n => String(n).padStart(2, "0"), fmt = m => `${p2(Math.floor(m / 60) % 24)}:${p2(m % 60)}`;
+    const diff = t => { let d = t - ck; if (d > 720) d -= 1440; if (d <= -720) d += 1440; return d; };   // +면 도착 시각보다 뒤, -면 앞
+    const lines = String(text).split("\n"), dl = lines.find(l => l.startsWith("■ 일시"));
+    const times = dl ? [...dl.matchAll(/(\d{1,2}):(\d{2})/g)].map(m => ({ s: p2(m[1]) + ":" + m[2], m: +m[1] * 60 + +m[2] })) : [];
+    const future = (label, t) => {
+      if (ck == null || diff(t.m) <= 0) return;
+      const sameHour = Math.floor(t.m / 60) === Math.floor(ck / 60);
+      out.push(sameHour ? `${label}의 "${t.s}"가 도착 시각 ${clock}보다 뒤입니다. ${p2(t.m % 60)}분이 아니라 ${p2(ck % 60)}분 아닌가요?` : `${label}의 "${t.s}"가 도착 시각 ${clock}보다 뒤입니다. ${fmt(ck)} 아닌가요?`);
+    };
+    const [st, en] = times;
+    if (st) {
+      future("시작 일시", st);
+      if (ck != null && /_발생\]/.test(text) && diff(st.m) < -8) out.push(`발생 문자는 8분 안에 보내야 합니다. 시작 일시 ${st.s}, 도착 ${clock}으로 ${-diff(st.m)}분이 지났습니다.`);
+    }
+    if (en) { future("끝 일시", en); if (st) { const d = en.m - st.m; if (d < 0 && d > -720) out.push(`끝 일시 "${en.s}"가 시작 일시 "${st.s}"보다 앞입니다. 끝 일시를 확인하세요.`); } }
+    const acts = lines.map(l => l.match(/^(\d{1,2}):(\d{2})\s/)).filter(Boolean).map(m => ({ s: p2(m[1]) + ":" + m[2], m: +m[1] * 60 + +m[2] }));
+    acts.forEach((a, i) => {
+      future("조치 시각", a);
+      if (st && a.m < st.m && st.m - a.m < 720) out.push(`조치 시각 "${a.s}"가 시작 일시 "${st.s}"보다 앞입니다.`);
+      if (i && a.m < acts[i - 1].m && acts[i - 1].m - a.m < 720) out.push(`조치 시각 순서가 거꾸로입니다 ("${acts[i - 1].s}" 다음에 "${a.s}").`);
+    });
+    if (/\((제목|대상|원인|시작 일시)\)|undefined|NaN/.test(text)) out.push("비어 있거나 계산이 안 된 칸이 있습니다 ((제목), (대상), (원인), undefined, NaN 등).");
+    return out;
+  };
+  sv("smSend").onclick = () => {
     const t = sv("smDraft").value.trim(); if (!t) { sv("smMsg").textContent = "초안이 비어 있습니다"; return; }
-    openPhone(t, sv("smClock").value);
-  }
-  sv("smPhone").onclick = showPhone;
+    const iss = smsCheck(t, sv("smClock").value);
+    sv("smcIssues").innerHTML = iss.length ? iss.map(x => `<div class="smc-iss">⚠ ${esc(x)}</div>`).join("") : `<div class="smc-iss ok">시각 오타·순서·빈 칸은 찾지 못했습니다. 그래도 내용을 한 번 더 읽어 보세요.</div>`;
+    sv("smcText").textContent = t; sv("smConfirm").hidden = false; sv("smcOk").focus();
+  };
+  sv("smcBack").onclick = () => { sv("smConfirm").hidden = true; sv("smDraft").focus(); };
+  sv("smcOk").onclick = () => { sv("smConfirm").hidden = true; sent = true; inline(); sv("smMsg").textContent = `${sv("smClock").value}에 전송했습니다 (가상 · 실제로 발송되지 않습니다)`; };
+  sv("smClock").addEventListener("input", () => { sent = false; inline(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !sv("smConfirm").hidden) sv("smConfirm").hidden = true; });
   sv("phoneClose").onclick = () => { sv("phone").hidden = true; };
   sv("phone").addEventListener("click", e => { if (e.target === sv("phone")) sv("phone").hidden = true; });
   document.addEventListener("keydown", e => { if (e.key === "Escape" && !sv("phone").hidden) sv("phone").hidden = true; });

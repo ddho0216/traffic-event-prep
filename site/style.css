@@ -404,3 +404,13 @@ nav.tabs .beta{font-size:10px;color:var(--warn);border:1px solid #54421d;border-
 .so-btns{display:flex;gap:6px;margin-top:6px}
 .so-two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:10px;margin-top:10px}@media(max-width:900px){.so-two{grid-template-columns:1fr}}
 .so-log{max-height:260px;overflow:auto;font-size:12.5px;line-height:1.7}.so-chk{padding:3px 0}
+
+/* 문자 전파: 종류·내용 / 초안 / 휴대폰을 한 화면에 */
+.cols3{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr) 330px;gap:16px;align-items:start}
+@media(max-width:1280px){.cols3{grid-template-columns:minmax(0,1fr) 330px}.cols3>.card:nth-child(1){grid-column:1/-1}}
+@media(max-width:760px){.cols3{grid-template-columns:1fr}}
+.smph{position:sticky;top:8px;display:flex;flex-direction:column;align-items:center}.smph h3{align-self:flex-start}
+.phone.phone-in{width:290px;height:540px;border-width:8px;border-radius:34px;box-shadow:0 0 0 2px #3a444d}
+.ph-sent{color:#1c8c4a;font-weight:700;font-size:12px}
+.smc-text{max-height:260px;overflow:auto;white-space:pre-wrap;background:#05080b;border:1px solid var(--line);border-radius:3px;padding:10px 12px;font-family:var(--mono);font-size:12.5px;margin:8px 0}
+.smc-iss{padding:8px 10px;border-left:3px solid var(--warn);background:#2a2412;margin:6px 0;font-size:13px}.smc-iss.ok{border-color:var(--ok);background:#0f1a14}

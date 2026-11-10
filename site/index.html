@@ -19,8 +19,7 @@
     <button data-tab="term">장비 터미널</button>
     <div class="tabgrp"><button data-tab="live" class="grpbtn">대응 <small class="beta">시험판</small></button><div class="submenu"><button data-tab="live">실시간 대응</button><button data-tab="soar">자동 대응</button></div></div>
     <button data-tab="event">이벤트 대비</button>
-    <button data-tab="monthly">월간 자료</button>
-    <div class="tabgrp"><button data-tab="sms" class="grpbtn">고객 지원</button><div class="submenu"><button data-tab="sms">문자 전파</button><button data-tab="visit">방문 신청</button><button data-tab="gear">장비 반출입</button></div></div>
+    <div class="tabgrp"><button data-tab="sms" class="grpbtn">고객 지원</button><div class="submenu"><button data-tab="sms">문자 전파</button><button data-tab="visit">방문 신청</button><button data-tab="gear">장비 반출입</button><button data-tab="monthly">월간 자료</button></div></div>
   </nav>
   <button class="bell" id="bell" aria-label="알림" aria-expanded="false" title="알림 (경고 이력 · 내 업무)">
     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>
@@ -95,7 +94,7 @@
 
 <!-- 2. 월간 자료 -->
 <section class="tab" id="tab-monthly">
-  <p class="note">월초·월말에 자료를 요청한 고객사에 5분 단위 회선별 트래픽을 보내는 일. 고객사·회선은 모두 가상입니다.</p>
+  <p class="note">월초·월말·매주에 자료를 보내는 고객사에 5분 단위 회선별 트래픽을 보내는 일. 정기 발송하는 고객사만 고를 수 있습니다. 고객사·회선은 모두 가상입니다.</p>
   <div class="cols">
     <div class="card">
       <h3>1. 요청 조건</h3>
@@ -307,8 +306,8 @@
 
 <!-- 6. 문자 전파 -->
 <section class="tab" id="tab-sms">
-  <p class="note">전파·보고 문자를 쓰는 곳입니다. 문자 종류를 고르면 양식이 채워지고(보고 문자의 숫자는 데이터에서 자동 계산), 초안을 고친 뒤 "휴대폰에서 보기"를 누르면 받는 사람 화면으로 보입니다. 내용은 모두 가상이며 실제로 발송되지 않습니다.</p>
-  <div class="cols">
+  <p class="note">전파·보고 문자를 쓰는 곳입니다. 문자 종류를 고르면 양식이 채워지고(보고 문자의 숫자는 데이터에서 자동 계산), 초안을 고치면 오른쪽 휴대폰에 받는 사람 화면이 바로 보입니다. "전송"을 누르면 한 번 더 내용을 확인합니다. 내용은 모두 가상이며 실제로 발송되지 않습니다.</p>
+  <div class="cols3">
     <div class="card">
       <h3>1. 문자 종류와 내용</h3>
       <div class="toolbar" id="smKind"><button class="btn primary" data-k="incident">장애 전파</button><button class="btn" data-k="daily">주요고객 트래픽 (일일)</button><button class="btn" data-k="event">이벤트 최대 트래픽 보고</button></div>
@@ -340,14 +339,28 @@
       <h3>2. 초안 <span class="muted" id="smCount"></span></h3>
       <textarea id="smDraft" rows="17" spellcheck="false"></textarea>
       <div class="toolbar" style="margin-top:8px">
-        <button class="btn primary" id="smPhone">휴대폰에서 보기</button>
+        <button class="btn primary" id="smSend">전송</button>
         <button class="btn" id="smCopy">복사</button>
         <button class="btn" id="smReset">양식으로 되돌리기</button>
         <label class="chk" style="margin-left:auto">도착 시각 <input type="text" id="smClock" value="03:21" size="5"></label>
       </div>
       <p class="note" id="smMsg" style="font-size:12.5px"></p>
     </div>
+    <div class="card smph">
+      <h3>3. 휴대폰으로 보기</h3>
+      <div class="phone phone-in">
+        <div class="ph-notch"></div>
+        <div class="ph-status"><span id="iphClock">03:21</span><span id="iphSent" class="ph-sent" hidden>전송됨</span></div>
+        <div class="ph-head"><span class="ph-back">‹</span><div><b id="iphName">TEP IDC</b><small>문자 메시지</small></div></div>
+        <div class="ph-body" id="iphBody"></div>
+        <div class="ph-input">문자 메시지</div>
+      </div>
+      <p class="note" id="iphWarn" style="font-size:12.5px"></p>
+    </div>
   </div>
+  <div class="scnpop" id="smConfirm" hidden><div class="scnpop-box" role="dialog" aria-modal="true" style="width:min(620px,100%)"><h3>이 내용이 맞습니까?</h3>
+    <div id="smcIssues"></div><pre class="smc-text" id="smcText"></pre>
+    <div class="scnpop-foot"><button class="btn" id="smcBack" type="button">수정하기</button><button class="btn primary" id="smcOk" type="button">맞습니다, 전송</button></div></div></div>
 </section>
 
 <!-- 7. 장비 반출입 -->

@@ -73,7 +73,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.setViewportSize({ width: 1600, height: 900 });
 
   // 탭 순서와 센터 선택: 센터 선택은 관제·서버실에서만 보이고, 두 화면이 같은 센터로 동기화된다
-  check('위 메뉴: 관제 / 서버실▾ / 장비 터미널 / 대응▾ / 이벤트 대비 / 월간 자료 / 고객 지원▾ (하위 메뉴: 서버실·서버실 3D / 실시간 대응·자동 대응 / 문자 전파·방문 신청·장비 반출입)', JSON.stringify(await page.locator('#tabs > button, #tabs > .tabgrp > .grpbtn').allTextContents()) === JSON.stringify(['관제', '서버실', '장비 터미널', '대응 시험판', '이벤트 대비', '월간 자료', '고객 지원']) && JSON.stringify(await page.locator('#tabs .tabgrp:nth-of-type(1) .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D']) && JSON.stringify(await page.locator('#tabs .tabgrp .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D', '실시간 대응', '자동 대응', '문자 전파', '방문 신청', '장비 반출입']));
+  check('위 메뉴: 관제 / 서버실▾ / 장비 터미널 / 대응▾ / 이벤트 대비 / 고객 지원▾ (하위 메뉴: 서버실·서버실 3D / 실시간 대응·자동 대응 / 문자 전파·방문 신청·장비 반출입·월간 자료)', JSON.stringify(await page.locator('#tabs > button, #tabs > .tabgrp > .grpbtn').allTextContents()) === JSON.stringify(['관제', '서버실', '장비 터미널', '대응 시험판', '이벤트 대비', '고객 지원']) && JSON.stringify(await page.locator('#tabs .tabgrp:nth-of-type(1) .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D']) && JSON.stringify(await page.locator('#tabs .tabgrp .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D', '실시간 대응', '자동 대응', '문자 전파', '방문 신청', '장비 반출입', '월간 자료']));
   const sub0 = await page.locator('#tabs .tabgrp >> nth=2 >> .submenu').isVisible();
   await page.hover('#tabs .tabgrp >> nth=2 >> .grpbtn');
   const sub1 = await page.locator('#tabs .tabgrp >> nth=2 >> .submenu').isVisible();
@@ -94,15 +94,37 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.fill('#smTitle', '회선 3개 다운');
   check('입력칸을 고치면 초안이 바로 바뀜', (await page.inputValue('#smDraft')).includes('회선 3개 다운'));
   await page.fill('#smDraft', (await page.inputValue('#smDraft')) + '\n(직접 고쳐 쓴 줄)');
-  await page.click('#smPhone');
-  const ph = await page.evaluate(() => ({ vis: !document.getElementById('phone').hidden, txt: document.getElementById('phBody').innerText, br: document.querySelectorAll('#phBody .ph-bubble br').length }));
-  check('"휴대폰에서 보기": 휴대폰 화면에 초안(직접 고친 줄 포함)이 줄바꿈 그대로 말풍선으로 보임', ph.vis && ph.txt.includes('회선 3개 다운') && ph.txt.includes('(직접 고쳐 쓴 줄)') && ph.br >= 8, String(ph.br));
-  check('휴대폰 그림 안(맨 위 상태 줄)에 닫기 버튼이 있고 LTE 글자는 없음', await page.evaluate(() => { const b = document.getElementById('phoneClose'), ph = document.querySelector('#phone .phone').getBoundingClientRect(), r = b.getBoundingClientRect(); return b.closest('.ph-status') && r.top >= ph.top && r.bottom <= ph.top + 60 && r.right <= ph.right && !document.querySelector('#phone .phone').innerText.includes('LTE') && !document.querySelector('#phone > .phone-wrap > #phoneClose'); }));
-  await page.click('#phoneClose');
-  check('휴대폰 안의 닫기 버튼을 누르면 미리보기가 닫힘', await page.evaluate(() => document.getElementById('phone').hidden));
-  await page.click('#smPhone');
-  await page.keyboard.press('Escape');
-  check('Esc로 휴대폰 화면이 닫힘', await page.evaluate(() => document.getElementById('phone').hidden));
+  const ph = await page.evaluate(() => ({ vis: document.getElementById('iphBody').offsetParent !== null, txt: document.getElementById('iphBody').innerText, br: document.querySelectorAll('#iphBody .ph-bubble br').length, modalHidden: document.getElementById('phone').hidden }));
+  check('휴대폰은 같은 화면 오른쪽에 붙어 있고(따로 창이 안 뜸), 초안(직접 고친 줄 포함)이 줄바꿈 그대로 말풍선으로 보임', ph.vis && ph.modalHidden && ph.txt.includes('회선 3개 다운') && ph.txt.includes('(직접 고쳐 쓴 줄)') && ph.br >= 8, String(ph.br));
+  check('문자 종류·내용 / 초안 / 휴대폰이 한 화면(가로로 나란히)에 보임', await page.evaluate(() => { const r = ['#tab-sms .cols3 > .card:nth-child(1)', '#tab-sms .cols3 > .card:nth-child(2)', '#tab-sms .smph'].map(s => document.querySelector(s).getBoundingClientRect()); return r[0].right <= r[1].left + 20 && r[1].right <= r[2].left + 20 && Math.abs(r[0].top - r[2].top) < 40 && r.every(x => x.right <= innerWidth); }));
+  await page.fill('#smClock', '03:25');
+  check('도착 시각을 바꾸면 휴대폰에 그 시각이 보임', (await page.locator('#iphClock').innerText()) === '03:25' && (await page.locator('#iphBody').innerText()).includes('03:25'));
+  await page.fill('#smClock', '03:21');
+  // 전송: 한 번 더 확인 + 시각 오타 제안
+  await page.click('#smSend');
+  check('"전송"을 누르면 "이 내용이 맞습니까?" 확인 창이 뜨고 문자 내용이 그대로 보임', (await page.locator('#smConfirm').isVisible()) && (await page.locator('#smConfirm h3').innerText()).includes('이 내용이 맞습니까?') && (await page.locator('#smcText').innerText()).includes('(직접 고쳐 쓴 줄)'));
+  await page.click('#smcBack');
+  check('"수정하기"를 누르면 전송하지 않고 닫힘', !(await page.locator('#smConfirm').isVisible()) && !(await page.locator('#iphSent').isVisible()));
+  const chk = await page.evaluate(() => ({
+    wrong: smsCheck('[TEP IDC]\n[Web발신]\n[주의_분당_발생] 테스트\n\n■ 대상 : A\n■ 일시 : 10/29 03:40 ~\n■ 원인 : x', '03:20'),
+    ok: smsCheck('[TEP IDC]\n[Web발신]\n[주의_분당_발생] 테스트\n\n■ 대상 : A\n■ 일시 : 10/29 03:20 ~\n■ 원인 : x', '03:21'),
+    late: smsCheck('[TEP IDC]\n[Web발신]\n[주의_분당_발생] 테스트\n\n■ 대상 : A\n■ 일시 : 10/29 03:00 ~\n■ 원인 : x', '03:21'),
+    order: smsCheck('[주의_분당_경과] t\n■ 일시 : 10/29 03:20 ~\n■ 조치 :\n03:31 a\n03:30 b', '03:40'),
+    end: smsCheck('[주의_분당_완료] t\n■ 일시 : 10/29 03:20 ~ 03:10\n', '03:40'),
+    blank: smsCheck('[주의_분당_발생] (제목)\n■ 일시 : 10/29 03:20 ~', '03:21')
+  }));
+  check('오타 제안: 03:20에 보내는데 일시가 03:40이면 "40분이 아니라 20분 아닌가요?"라고 알려 줌', chk.wrong.some(x => x.includes('03:40') && x.includes('40분이 아니라 20분 아닌가요?')), JSON.stringify(chk.wrong));
+  check('오타 제안: 정상 시각이면 경고가 없고, 발생 문자가 8분을 넘겨 늦으면 8분 규칙을 알려 줌', chk.ok.length === 0 && chk.late.some(x => x.includes('8분') && x.includes('21분')), JSON.stringify([chk.ok, chk.late]));
+  check('오타 제안: 조치 시각 순서가 거꾸로이거나 끝 일시가 시작보다 앞이거나 빈 칸이 있으면 알려 줌', chk.order.some(x => x.includes('순서가 거꾸로')) && chk.end.some(x => x.includes('앞입니다')) && chk.blank.some(x => x.includes('비어 있')), JSON.stringify([chk.order, chk.end, chk.blank]));
+  await page.fill('#smFrom', '10/29 03:40');
+  await page.click('#smSend');
+  check('초안의 일시를 03:40으로 잘못 쓰고 03:21에 전송을 누르면 확인 창에 제안이 함께 보임', (await page.locator('#smcIssues').innerText()).includes('40분이 아니라 21분 아닌가요?'), await page.locator('#smcIssues').innerText());
+  await page.click('#smcBack');
+  await page.click('#smStage [data-st=발생]');
+  await page.click('#smSend');
+  check('오타가 없으면 "찾지 못했습니다"로 나옴', (await page.locator('#smcIssues').innerText()).includes('찾지 못했습니다'));
+  await page.click('#smcOk');
+  check('"맞습니다, 전송"을 누르면 확인 창이 닫히고 휴대폰에 "전송됨"이 보임', !(await page.locator('#smConfirm').isVisible()) && (await page.locator('#iphSent').isVisible()) && (await page.locator('#iphSent').innerText()).includes('전송됨'));
   // 장비 반출입: 필수 항목 확인, 저장, 합계, 구분 필터, 삭제
   await goTab('gear');
   const g0 = await page.locator('#gTbl tr.click, #gTbl tr').count();
@@ -336,9 +358,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('이벤트 최대 트래픽 보고: 제목 "[2026 아이치·나고야 아시안게임] 9월 27일 축구 8강 중 최대 트래픽", ■ 백본 트래픽·■ 고객 트래픽·■ 서비스 영향·■ VOC', /\[2026 아이치·나고야 아시안게임\] 9월 27일 축구 8강 중 최대 트래픽/.test(re) && ['■ 백본 트래픽', '■ 고객 트래픽', '■ 서비스 영향 : 서비스 및 DDoS 특이사항 없음', '■ VOC : 없음'].every(w => re.includes(w)));
   const calcEv = await page.evaluate(() => { const ev = DATA.events.find(e => e.name === '축구 8강'), up = LINKS.filter(l => l.id.split('_')[1] === 'S' && /_UP\d$/.test(l.id)), idx = ms => Math.floor((ms - T0) / STEP), s0 = parseT(ev.start), e0 = parseT(ev.end), mx = sh => { let m = 0; for (let i = idx(s0 - sh); i <= idx(e0 - sh); i++) { let v = 0; up.forEach(l => { v += l.out[i]; }); m = Math.max(m, v); } return m; }, now = mx(0), prev = mx(7 * 86400000); return `- 서초 : ${now.toFixed(1)}G / 400G (사용률 ${(now / 400 * 100).toFixed(1)}% 전주 MAX 대비 ${Math.abs(now - prev).toFixed(1)}G ${now >= prev ? '증가' : '감소'})`; });
   check('서초 백본 줄(최대·용량·사용률%·전주 MAX 대비 증감)이 데이터에서 따로 계산한 값과 같음', re.includes(calcEv), calcEv);
-  await page.click('#smPhone');
-  check('보고 문자도 "휴대폰에서 보기"로 받는 사람 화면에 보임', await page.evaluate(() => !document.getElementById('phone').hidden && document.getElementById('phBody').innerText.includes('중 최대 트래픽')));
-  await page.click('#phoneClose');
+  check('보고 문자도 오른쪽 휴대폰에 받는 사람 화면으로 바로 보임', (await page.locator('#iphBody').innerText()).includes('중 최대 트래픽'));
   await page.click('#smKind [data-k=incident]');
   check('"장애 전파"로 돌아가면 장애 전파 양식([주의_센터_단계])이 그대로 나오고 보고 문자는 사라짐', /\[주의_.+_(발생|경과|완료)\]/.test(await page.inputValue('#smDraft')) && !(await page.inputValue('#smDraft')).includes('최대 트래픽'));
   await goTab('event');
@@ -720,8 +740,12 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await goTab('monthly');
   const [zip] = await Promise.all([page.waitForEvent('download'), page.click('#mZip')]);
   const zbuf = require('fs').readFileSync(await zip.path());
-  check('월간 자료 zip 시그니처(PK)와 영문 파일 이름', zbuf[0] === 0x50 && zbuf[1] === 0x4b && /^traffic_gasang_.*\.zip$/.test(zip.suggestedFilename()), zip.suggestedFilename());
+  check('월간 자료 zip 시그니처(PK)와 영문 파일 이름', zbuf[0] === 0x50 && zbuf[1] === 0x4b && /^traffic_yesi-media_.*\.zip$/.test(zip.suggestedFilename()), zip.suggestedFilename());
 
+  const mm = await page.evaluate(() => ({ opts: [...document.querySelectorAll('#mCust option')].map(o => o.textContent), mail: document.getElementById('mMail').value }));
+  check('월간 자료 요청 조건의 고객사는 정기 발송하는 5곳(예시미디어·샘플게임즈·가상은행·예시금융·데모스트리밍)만 있음', JSON.stringify(mm.opts) === JSON.stringify(['예시미디어', '샘플게임즈', '가상은행', '예시금융', '데모스트리밍']), mm.opts.join());
+  check('메일 본문: 맨 위 "제목:" 줄이 없고 "안녕하십니까 TEP IDC 담당자 ㅇㅇㅇ입니다."로 시작, 끝은 "회신 부탁드립니다." 다음 "감사합니다."', !mm.mail.includes('제목:') && mm.mail.startsWith('안녕하십니까 TEP IDC 담당자 ㅇㅇㅇ입니다.\n요청하신 회선별 5분 단위 트래픽 자료를 보내드립니다.\n\n- 대상 회선: ') && mm.mail.endsWith('추가로 필요한 자료가 있을시 회신 부탁드립니다.\n감사합니다.') && !mm.mail.includes('담당자님'), mm.mail);
+  check('월간 자료는 위 메뉴의 "고객 지원" 아래에 있고 위 메뉴에는 따로 없음', (await page.locator('#tabs > button[data-tab=monthly]').count()) === 0 && (await page.locator('#tabs .tabgrp .submenu button[data-tab=monthly]').count()) === 1);
   const monthlyText = await page.locator('#tab-monthly').innerText();
   check('월간 자료 기본값: 지난달 1일~말일 한 달치', (await page.locator('#mMonth').inputValue()) === '2026-10' && (await page.locator('#mFrom').inputValue()) === '2026-10-01' && (await page.locator('#mTo').inputValue()) === '2026-10-31');
   check('기간 단위 선택은 없다 (기본 한 달, 다른 기간은 시작일·끝나는 날)', (await page.locator('#mUnits').count()) === 0);

@@ -311,6 +311,7 @@ function closeNotif() { $("#notif").hidden = true; $("#bell").setAttribute("aria
 })();
 
 /* ---------- 2. 월간 자료 ---------- */
+const MONTHLY_CUSTS = SEND_PLAN.flatMap(g => g.names).map(n => CUSTOMERS.find(c => c.name === n)).filter(Boolean);   // 월간 자료를 보내는 고객사: 정기 발송하는 곳만
 const MIN_DAY = ymd(T0), MAX_DAY = ymd(msOf(N - 1));
 const REF = {};   // refPeak 계산 결과 보관 (월간 자료가 시작할 때 쓰므로 앞쪽에 선언)
 const DAY = 86400000, HIST_DAYS = 190;       // 9/10 이전은 이 일수까지 즉석에서 만들어 준다 (가상)
@@ -352,7 +353,7 @@ const monthStart = ym => { const [y, m] = ym.split("-").map(Number); return Date
 const monthEnd = ms => { const d = new Date(ms); return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1) - STEP; };   // 그 달 말일 23:55
 // 기간은 하나다: 기본은 대상 월의 1일~말일, 다른 기간이 필요하면 시작일·끝나는 날을 직접 고른다.
 function mState() {
-  const c = CUSTOMERS[$("#mCust").selectedIndex];
+  const c = MONTHLY_CUSTS[$("#mCust").selectedIndex];
   const ids = $$("#mLinks input:checked").map(i => i.value);
   const fromStr = $("#mFrom").value, toStr = $("#mTo").value;
   const fromDay = parseT(fromStr + "T00:00"), toDay = parseT(toStr + "T00:00");
@@ -383,9 +384,7 @@ function renderMonthly() {
     !m.bad && m.clamped ? `※ 데이터는 ${MAX_DAY}까지만 있어서 거기까지 보냅니다.` : ""].filter(Boolean).join(" ");
   $("#mNote2").textContent = !m.bad && (m.to - m.from) > 60 * DAY ? "긴 기간은 파일이 큽니다 (6개월이면 회선당 약 3MB, 압축하지 않고 묶습니다)." : "";
   $("#mMail").value =
-`제목: [${COMPANY}] ${m.c.name} ${m.fromStr} ~ ${m.toStr} 회선별 5분 단위 트래픽 자료 송부
-
-${m.c.name} 담당자님, 안녕하세요.
+`안녕하십니까 ${COMPANY} 담당자 ㅇㅇㅇ입니다.
 요청하신 회선별 5분 단위 트래픽 자료를 보내드립니다.
 
 - 대상 회선: ${m.ids.join(", ") || "(선택 없음)"}
@@ -393,18 +392,18 @@ ${m.c.name} 담당자님, 안녕하세요.
 - 첨부: 회선별 5분 단위 CSV, 요약 CSV(최대·최소·평균·95%값, 사용률, 총 전송량)
 - 단위: Gbps (IN = 센터로 들어온 트래픽, OUT = 센터에서 나간 트래픽)
 
-추가로 필요한 자료가 있으면 말씀해 주세요.
+추가로 필요한 자료가 있을시 회신 부탁드립니다.
 감사합니다.`;
 }
 (function initMonthly() {
-  $("#mCust").innerHTML = CUSTOMERS.map(c => `<option>${c.name}</option>`).join("");
+  $("#mCust").innerHTML = MONTHLY_CUSTS.map(c => `<option>${c.name}</option>`).join("");
   $("#mMonth").min = MIN_PICK.slice(0, 7); $("#mMonth").max = MAX_DAY.slice(0, 7);
   ["mFrom", "mTo"].forEach(id => { const el = $("#" + id); el.min = MIN_PICK; el.max = MAX_DAY; });
   const syncDates = () => { const ms = monthStart($("#mMonth").value); $("#mFrom").value = ymd(ms); $("#mTo").value = ymd(Math.min(monthEnd(ms), DATA_END)); };
   { const d = new Date(DATA_END); $("#mMonth").value = ymd(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1)).slice(0, 7); }   // 기본: 지난달 (월초에 지난달 자료를 보낸다)
   syncDates();
   const drawLinks = () => {
-    const c = CUSTOMERS[$("#mCust").selectedIndex];
+    const c = MONTHLY_CUSTS[$("#mCust").selectedIndex];
     $("#mLinks").innerHTML = c.links.map(id => `<label class="chk"><input type="checkbox" value="${id}" checked> ${id}</label>`).join("");
     renderMonthly();
   };
