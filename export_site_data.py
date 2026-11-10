@@ -19,8 +19,9 @@ out = {
         {"id": r.event_id, "name": r.name, "start": r.start.replace(" ", "T"),
          "end": r.end.replace(" ", "T"), "links": r.links.split(","),
          "expected": float(r.expected_factor),
+         "kind": r.kind,
          "marks": [{"k": m.split(":")[0], "a": int(m.split(":")[1].split("-")[0]), "b": int(m.split(":")[1].split("-")[1])}
-                   for m in r.marks.split(";")]}
+                   for m in (str(r.marks).split(";") if isinstance(r.marks, str) else [])]}
         for r in events.itertuples()
     ],
 }

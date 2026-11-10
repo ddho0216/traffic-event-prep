@@ -88,7 +88,7 @@
     <span class="scn-wrap"><button class="btn" id="scnBtn" aria-expanded="false" title="몇 초 안에 상황과 조치가 흘러가는 안내 재생">시나리오</button><div class="menu" id="scnMenu" hidden></div></span>
     <button class="btn primary" id="csvAll">전체 CSV 내려받기</button>
   </div>
-  <p class="note">파란 띠 = 경기 시간(킥오프~종료, 점선), 밝은 띠 = 하이드레이션 타임, 회색 띠 = 하프타임. 모든 일정·수치는 가상입니다.</p>
+  <p class="note">파란 띠 = 이벤트 시간(시작~종료, 점선), 밝은 띠 = 하이드레이션 타임(축구), 회색 띠 = 하프타임(축구). 모든 일정·수치는 가상입니다.</p>
   <p class="note" id="monSum" style="margin-top:-4px"></p>
   <div class="grid" id="grid"></div>
 </section>
@@ -132,7 +132,7 @@
     <label>경기 <select id="evSel"></select></label>
     <span class="muted" id="evInfo"></span>
   </div>
-  <h2>월드컵 일정 <small>가상 일정 · 한 경기는 킥오프부터 115분 이내 · 행을 누르면 아래에서 자세히</small></h2>
+  <h2>아시안게임 일정 <small>제20회 아이치·나고야 아시안게임(9/19~10/4)에 맞춘 가상 트래픽 이벤트 · 대회 기간, 개회식 시작(9/19 18:00), 야구 시작일(9/21)만 검색으로 확인했고 나머지 경기 날짜·시각과 폐회식 시각은 제가 정한 가정입니다 · 축구는 킥오프부터 115분 이내 · 행을 누르면 아래에서 자세히</small></h2>
   <div class="card" style="padding:0;margin-bottom:14px"><table id="evList"></table></div>
   <div class="steps"><span>1 사전 계획</span><span>2 분산 제안</span><span>3 고객사 통보</span><span>4 당일 모니터링</span><span>5 사후 정리</span></div>
 
@@ -152,6 +152,10 @@
   <h2>5. 사후 정리 <small>예상 vs 실제 (분산 조치 전 가상 데이터 기준)</small></h2>
   <div class="card" style="padding:0"><table id="evPost"></table></div>
   <p id="evSummary" class="note" style="font-size:13px;color:var(--text)"></p>
+
+  <h2>6. 이벤트 최대 트래픽 보고 문자 <small>이벤트가 끝난 뒤 보내는 보고 · 전주 같은 시간대 최대와 비교 (숫자는 데이터에서 자동 계산)</small></h2>
+  <textarea id="evReport" rows="16" spellcheck="false"></textarea>
+  <div class="toolbar" style="margin-top:8px"><button class="btn primary" id="evReportPhone">휴대폰에서 보기</button><button class="btn" id="evReportCopy">복사</button><span class="muted" id="evReportMsg"></span></div>
 
   <h2>체크리스트</h2>
   <div class="card" id="evCheck"></div>
@@ -302,10 +306,20 @@
 
 <!-- 6. 문자 전파 -->
 <section class="tab" id="tab-sms">
-  <p class="note">장애 전파 문자를 쓰는 곳입니다. 단계(발생·경과·완료)를 고르면 양식이 채워지고, 초안을 고친 뒤 "휴대폰에서 보기"를 누르면 받는 사람 화면으로 보입니다. 내용은 모두 가상이며 실제로 발송되지 않습니다.</p>
+  <p class="note">전파·보고 문자를 쓰는 곳입니다. 문자 종류를 고르면 양식이 채워지고(보고 문자의 숫자는 데이터에서 자동 계산), 초안을 고친 뒤 "휴대폰에서 보기"를 누르면 받는 사람 화면으로 보입니다. 내용은 모두 가상이며 실제로 발송되지 않습니다.</p>
   <div class="cols">
     <div class="card">
-      <h3>1. 단계와 내용</h3>
+      <h3>1. 문자 종류와 내용</h3>
+      <div class="toolbar" id="smKind"><button class="btn primary" data-k="incident">장애 전파</button><button class="btn" data-k="daily">주요고객 트래픽 (일일)</button><button class="btn" data-k="event">이벤트 최대 트래픽 보고</button></div>
+      <div id="smDaily" hidden>
+        <div class="form"><span>끝 시각</span><input type="datetime-local" id="rdEnd"></div>
+        <p class="note" style="font-size:12.5px">끝 시각까지 24시간의 센터 업링크·주요 고객사 최대 트래픽을 전주 / 전일 / 현재로 비교합니다 (전주 = 7일 전 같은 24시간, 전일 = 1일 전). 고객사별 값은 회선 트래픽을 고객사 용량 비율로 나눈 가상 배분입니다.</p>
+      </div>
+      <div id="smEvt" hidden>
+        <div class="form"><span>이벤트</span><select id="rdEv"></select></div>
+        <p class="note" style="font-size:12.5px">이벤트 시간(시작~종료) 중 최대 트래픽을 센터 백본과 고객사별로 보여 주고, 전주 같은 시간대 최대와 비교합니다. 서비스 영향은 그 시간대 알림이 있는지로 정합니다.</p>
+      </div>
+      <div id="smInc">
       <div class="toolbar" id="smStage"><button class="btn primary" data-st="발생">발생</button><button class="btn" data-st="경과">경과</button><button class="btn" data-st="완료">완료</button></div>
       <div class="form">
         <span>센터</span><select id="smCenter"></select>
@@ -319,6 +333,7 @@
         <span>VOC</span><input type="text" id="smVoc">
       </div>
       <p class="note" style="font-size:12.5px">완료 전에는 항상 "경과"로 보내고, "완료"는 정말 다 끝났을 때만 씁니다. 끝 일시는 완료 문자에만 들어갑니다.</p>
+      </div>
     </div>
     <div class="card">
       <h3>2. 초안 <span class="muted" id="smCount"></span></h3>
@@ -427,6 +442,7 @@
 <script src="data.js"></script>
 <script src="topology.js"></script>
 <script src="lib.js"></script>
+<script src="report.js"></script>
 <script src="app.js"></script>
 <script src="room3d.js"></script>
 <script src="design.js"></script>

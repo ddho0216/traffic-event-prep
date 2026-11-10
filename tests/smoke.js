@@ -41,7 +41,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const alertText = await page.locator('#alertTbl').innerText();
   check('종을 누르면 알림이 열리고, 기본은 확인 필요만 보임 (급감·온도 경고 포함, 경기 겹침은 숨김)', (await page.locator('#notif').isVisible()) && alertText.includes('급감') && alertText.includes('온도 경고') && !alertText.includes('월드컵'));
   await page.check('#showAllAlerts');
-  check('"경기와 겹치는 알림도 보기"를 켜면 월드컵 알림이 나타남', (await page.locator('#alertTbl').innerText()).includes('월드컵'));
+  check('"경기와 겹치는 알림도 보기"를 켜면 아시안게임 이벤트(개회식·축구·야구 등)와 겹친 알림이 나타남', /개회식|축구|야구|e스포츠|폐회식/.test(await page.locator('#alertTbl').innerText()));
   await page.uncheck('#showAllAlerts');
   await page.click('[data-np=tasks]');
   check('내 업무 탭에 업무 목록이 있음', (await page.locator('#taskTbl').innerText()).includes('월간·주간 자료 발송'));
@@ -56,7 +56,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await goTo('2026-10-21T14:35');
   check('회선 다운 구간에서 IDC_A_FS1_UP1 패널에 급감 표시', (await page.locator('#p-IDC_A_FS1_UP1 .chip').innerText()) === '급감');
 
-  await goTo('2026-10-30T22:05', 36);
+  await goTo('2026-10-02T22:05', 36);
   const marks = await page.locator('#p-IDC_B_FS1_UP1 svg text', { hasText: '하프타임' }).count()
     + await page.locator('#p-IDC_B_FS1_UP1 svg text', { hasText: '하이드레이션' }).count();
   check('경기 시간대에서 하이드레이션·하프타임 표시', marks >= 2, String(marks));
@@ -314,6 +314,36 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('서버실-3D 범례: 짧게 정상/주의/경고/위험과 기준 온도(27·30·33°C)가 보이고, 설명은 접혀 있음', await page.evaluate(() => { const t = document.querySelector('.r3legend').innerText; return ['정상', '주의', '경고', '위험', '27°C', '30°C', '33°C'].every(w => t.includes(w)) && document.getElementById('glLegTip').hidden; }));
   await page.click('#glLegQ');
   check('"? 색 설명"을 누르면 풀어쓴 설명(가장 나쁜 것 기준, 팬 경고·장비 꺼짐, 온도 보기 색)이 펼쳐지고 다시 누르면 접힘', (await page.evaluate(() => { const tip = document.getElementById('glLegTip'); return !tip.hidden && ['가장 나쁜 것', '팬 경고', '장비 꺼짐', '온도" 보기', '파랑(20°C 이하)'].every(w => tip.innerText.includes(w)); })) && (await page.evaluate(() => { document.getElementById('glLegQ').click(); return document.getElementById('glLegTip').hidden; })));
+  // 보고 문자 두 가지: 주요고객 트래픽(일일), 이벤트 최대 트래픽. 숫자는 데이터에서 따로 다시 계산해서 맞춰 본다
+  await goTab('sms');
+  await page.click('#smKind [data-k=daily]');
+  const rd = await page.inputValue('#smDraft');
+  check('주요고객 트래픽(일일): [TEP IDC]·[Web발신]·[주요고객 트래픽], ■ 일시(24시간), ■ 최대트래픽 - 고객명 : 전주 / 전일 / 현재', /^\[TEP IDC\]\n\[Web발신\]\n\[주요고객 트래픽\]\n\n■ 일시 : 10\/21 08:00 ~ 10\/22 08:00\n■ 최대트래픽 - 고객명 : 전주 \/ 전일 \/ 현재\n/.test(rd));
+  const heads = (rd.match(/^\[[SABG]\]$/gm) || []).join('');
+  check('센터는 [S] [A] [B] [G] 순서로 나오고, 각 줄은 "- 이름(용량G): 전주 / 전일 / 현재"(G·M·K 단위)이며 전주 값도 있음(-가 아님)', heads === '[S][A][B][G]' && rd.split('\n').filter(l => l.startsWith('- ')).every(l => /^- .+\(\d+G\): [\d.]+[GMK] \/ [\d.]+[GMK] \/ [\d.]+[GMK]$/.test(l)) && !rd.includes(': -'));
+  const calcUp = await page.evaluate(() => { const up = LINKS.filter(l => l.id.split('_')[1] === 'S' && /_UP\d$/.test(l.id)), idx = ms => Math.floor((ms - T0) / STEP), e = parseT('2026-10-22T08:00'), mx = (shift) => { let m = 0; for (let i = idx(e - shift - 86400000) + 1; i <= idx(e - shift); i++) { let v = 0; up.forEach(l => { v += l.out[i]; }); m = Math.max(m, v); } return m; }; return [7 * 86400000, 86400000, 0].map(sh => mx(sh).toFixed(1) + 'G').join(' / '); });
+  check('서초 센터 업링크 최대값(전주 / 전일 / 현재)이 데이터에서 따로 계산한 값과 같음', rd.includes(`- 센터 업링크(400G): ${calcUp}`), calcUp);
+  await page.fill('#rdEnd', '2026-09-12T08:00'); await page.dispatchEvent('#rdEnd', 'change');
+  check('전주 데이터가 없는 구간(9/11 08:00 ~ 9/12 08:00)은 전주 값을 "-"로 표시', (await page.inputValue('#smDraft')).includes('- 센터 업링크(400G): -'));
+  await page.click('#smKind [data-k=event]');
+  const re = await page.inputValue('#smDraft');
+  check('이벤트 최대 트래픽 보고: 제목 "[2026 아이치·나고야 아시안게임] 9월 27일 축구 8강 중 최대 트래픽", ■ 백본 트래픽·■ 고객 트래픽·■ 서비스 영향·■ VOC', /\[2026 아이치·나고야 아시안게임\] 9월 27일 축구 8강 중 최대 트래픽/.test(re) && ['■ 백본 트래픽', '■ 고객 트래픽', '■ 서비스 영향 : 서비스 및 DDoS 특이사항 없음', '■ VOC : 없음'].every(w => re.includes(w)));
+  const calcEv = await page.evaluate(() => { const ev = DATA.events.find(e => e.name === '축구 8강'), up = LINKS.filter(l => l.id.split('_')[1] === 'S' && /_UP\d$/.test(l.id)), idx = ms => Math.floor((ms - T0) / STEP), s0 = parseT(ev.start), e0 = parseT(ev.end), mx = sh => { let m = 0; for (let i = idx(s0 - sh); i <= idx(e0 - sh); i++) { let v = 0; up.forEach(l => { v += l.out[i]; }); m = Math.max(m, v); } return m; }, now = mx(0), prev = mx(7 * 86400000); return `- S : ${now.toFixed(1)}G / 400G (사용률 ${(now / 400 * 100).toFixed(1)}% 전주 MAX 대비 ${Math.abs(now - prev).toFixed(1)}G ${now >= prev ? '증가' : '감소'})`; });
+  check('서초 백본 줄(최대·용량·사용률%·전주 MAX 대비 증감)이 데이터에서 따로 계산한 값과 같음', re.includes(calcEv), calcEv);
+  await page.click('#smPhone');
+  check('보고 문자도 "휴대폰에서 보기"로 받는 사람 화면에 보임', await page.evaluate(() => !document.getElementById('phone').hidden && document.getElementById('phBody').innerText.includes('중 최대 트래픽')));
+  await page.click('#phoneClose');
+  await page.click('#smKind [data-k=incident]');
+  check('"장애 전파"로 돌아가면 장애 전파 양식([주의_센터_단계])이 그대로 나오고 보고 문자는 사라짐', /\[주의_.+_(발생|경과|완료)\]/.test(await page.inputValue('#smDraft')) && !(await page.inputValue('#smDraft')).includes('최대 트래픽'));
+  await goTab('event');
+  const er = await page.inputValue('#evReport');
+  check('이벤트 대비 탭 6번에 선택한 이벤트의 최대 트래픽 보고 문자가 자동으로 만들어져 있음', er.includes('중 최대 트래픽') && er.includes('■ 백본 트래픽'));
+  await page.selectOption('#evSel', { index: 0 });
+  const er0 = await page.inputValue('#evReport');
+  check('이벤트를 바꾸면(개회식) 보고 문자가 바뀌고, 통보문 문장에 "개회식으로"처럼 받침에 맞는 조사가 붙음', er0.includes('9월 19일 개회식 중 최대 트래픽') && (await page.inputValue('#evNotice')).includes('개회식으로 트래픽 증가가 예상되어'));
+  await page.click('#evReportPhone');
+  check('이벤트 대비 탭에서도 "휴대폰에서 보기"가 됨', await page.evaluate(() => !document.getElementById('phone').hidden));
+  await page.click('#phoneClose');
   const vis = {};
   for (const tab of ['monitor', 'room', 'room3d', 'term', 'event', 'monthly', 'visit', 'sms', 'gear', 'live']) { await goTab(tab); vis[tab] = await page.locator('#centerBar').isVisible(); }
   check('센터 선택은 관제·서버실에서만 보이고 나머지 탭에서는 숨겨짐', vis.monitor && vis.room && vis.room3d && !vis.term && !vis.event && !vis.monthly && !vis.visit && !vis.sms && !vis.gear && !vis.live, JSON.stringify(vis));
@@ -584,7 +614,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const icons = await page.evaluate(() => [...document.querySelectorAll('link[rel~=icon], link[rel=apple-touch-icon]')].map(l => l.getAttribute('href')));
   const fsx = require('fs'), siteDir = require('path').resolve(__dirname, '../site'), png = f => fsx.readFileSync(siteDir + '/' + f).subarray(0, 8).toString('hex') === '89504e470d0a1a0a';
   check('탭 아이콘(로고): svg·32px png·아이패드용 아이콘이 연결되어 있고 파일이 올바름', icons.includes('favicon.svg') && icons.includes('favicon-32.png') && icons.includes('apple-touch-icon.png') && fsx.readFileSync(siteDir + '/favicon.svg', 'utf8').includes('<svg') && png('favicon-32.png') && png('apple-touch-icon.png'), icons.join(','));
-  const mails = await page.evaluate(() => [(ev => evNoticeText(ev, evCalc(ev)))(DATA.events.find(e => e.name.includes('8강'))), replyText(parseMail(SAMPLE_MAIL))].map(x => x.split('\n')[0]));
+  const mails = await page.evaluate(() => [(ev => evNoticeText(ev, evCalc(ev)))(DATA.events.find(e => e.name === '축구 결승')), replyText(parseMail(SAMPLE_MAIL))].map(x => x.split('\n')[0]));
   check('다른 메일 제목에도 [TEP IDC]가 붙음 (경기 사전 안내, 방문 회신)', mails.every(x => x.includes('[TEP IDC]')), mails.join(' | '));
   const scenarios = [['calm', '평일 오후 7시', 4, ['그래프 15개 확인', '서버실 확인', '이상 없음']], ['drop', '트래픽 급감', 6, ['급감', 'IDC_B_FS2_INTL1', '광값', '예시미디어', '회복']],
     ['redundancy', '이중화로 무사히 넘기기', 8, ['이중화', '전원 꺼짐', '트래픽은 거의 그대로', '고객 영향 없음']], ['linkDown', '업링크 회선 다운', 9, ['Admin', '트래픽(전/후)', '광값', 'ping', '연동망', '원인 확인', '회복']], ['ddos', 'DDoS 공격 수신', 10, ['DDoS', '공격량', '클린존', '블랙홀', '정상화', '해제']], ['surge', '트래픽 폭주', 7, ['사전 연락', '분산', '하이드레이션', '경고선 80%', '사후 정리', '[TEP IDC]']], ['temp', '서버실 온도 변화', 7, ['온도 경고', '빨강 깜박임', '터미널', '냉각 복구', '-40.00 dBm']]];
@@ -675,9 +705,9 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('긴 기간(5/1~10/31) zip: 크기가 크고(>3MB) 파일 이름에 기간이 들어감', z6buf.length > 3e6 && /2026-05-01_2026-10-31/.test(z6.suggestedFilename()), (z6buf.length / 1e6).toFixed(1) + 'MB ' + z6.suggestedFilename());
   const ratio = await page.evaluate(() => {
     const l = LINK['IDC_B_FS1_UP1'], f = d => Math.max(...seriesFor(l, parseT(d + 'T00:00'), parseT(d + 'T23:55')).out);
-    return f('2026-10-12') / f('2026-10-19');
+    return f('2026-09-03') / f('2026-09-10');
   });
-  check('10/19 이전 가상 구간이 이후 실제 구간과 비슷한 크기(±10%)', Math.abs(ratio - 1) < 0.10, ratio.toFixed(3));
+  check('9/10 이전 가상 구간이 이후 실제 구간과 비슷한 크기(±10%)', Math.abs(ratio - 1) < 0.10, ratio.toFixed(3));
   await page.fill('#mFrom', '2026-11-01'); await page.press('#mFrom', 'Tab');
   await page.fill('#mTo', '2026-10-05'); await page.press('#mTo', 'Tab');
   check('시작일이 끝나는 날보다 늦으면 안내가 뜸', (await page.locator('#mSum').innerText()).includes('늦습니다'));

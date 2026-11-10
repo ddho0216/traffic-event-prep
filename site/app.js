@@ -107,6 +107,7 @@ function showTab(name) {
     if ($("#centerBar").hidden) syncHdr(); else renderCenterBar();
   }
   if (name === "monitor") { renderAll(); renderTasks(); }
+  if (name === "event") renderEvReport();
   if (name !== "room" && typeof stopPlay === "function") stopPlay();
   if (name === "room") renderServerRoom();
   if (name === "room3d" && typeof render3d === "function") render3d();
@@ -266,7 +267,7 @@ function renderTasksTable() {
   const drops = ALERTS.filter(a => a.kind.includes("급감") && !a.evName).length;
   const rows = [
     ["월간·주간 자료 발송", `${sp.done}/${sp.total} 완료 (월초·월말·매주)`, sp.done === sp.total ? "ok" : "warn", "monthly"],
-    ["이벤트 대비", `월드컵 ${checks.filter(c => c === CHECK_ITEMS.length).length}/${DATA.events.length}경기 체크 완료`, "warn", "event"],
+    ["이벤트 대비", `아시안게임 ${checks.filter(c => c === CHECK_ITEMS.length).length}/${DATA.events.length}이벤트 체크 완료`, "warn", "event"],
     ["방문 신청 등록", `등록 ${visits}건`, "ok", "visit"],
     ["트래픽 급증·급감 확인", `경기와 겹치지 않는 급증 ${spikes}건 · 급감 ${drops}건 (경고 이력 참고)`, spikes + drops ? "warn" : "ok", "monitor"],
     ["서버실 온도·육안점검", `온도 경고 ${ROOM_ALERTS.length}건 · 점검 기록 ${store.get("inspections", []).length}건`, ROOM_ALERTS.length ? "warn" : "ok", "room"],
@@ -312,11 +313,11 @@ function closeNotif() { $("#notif").hidden = true; $("#bell").setAttribute("aria
 /* ---------- 2. 월간 자료 ---------- */
 const MIN_DAY = ymd(T0), MAX_DAY = ymd(msOf(N - 1));
 const REF = {};   // refPeak 계산 결과 보관 (월간 자료가 시작할 때 쓰므로 앞쪽에 선언)
-const DAY = 86400000, HIST_DAYS = 190;       // 10/19 이전은 이 일수까지 즉석에서 만들어 준다 (가상)
+const DAY = 86400000, HIST_DAYS = 190;       // 9/10 이전은 이 일수까지 즉석에서 만들어 준다 (가상)
 const MIN_PICK = ymd(T0 - HIST_DAYS * DAY);
 function p95(a) { const b = Float64Array.from(a).sort(); return b[Math.floor(0.95 * (b.length - 1))]; }
 
-/* 10/19 이전: 생성해 둔 데이터가 없으므로 같은 규칙(평소 하루 모양 + 작은 잡음)으로 그때그때 만든다.
+/* 9/10 이전: 생성해 둔 데이터가 없으므로 같은 규칙(평소 하루 모양 + 작은 잡음)으로 그때그때 만든다.
    같은 시각이면 항상 같은 값이 나온다. 경기·사고는 없는 "평소" 기록이다. */
 const SHAPE = (() => {
   const f = (x, we) => { let v = 0.25 + 0.15 * Math.sin((x - 9) / 24 * 2 * Math.PI) + 0.65 * Math.exp(-((x - 21) ** 2) / (2 * 2.2 ** 2)); if (we) v += 0.10 * Math.exp(-((x - 14) ** 2) / (2 * 3.0 ** 2)); return v; };
@@ -481,6 +482,10 @@ function evCalc(ev) {
   });
   return { s, e, rows, moves };
 }
+function renderEvReport() {   // 이벤트 보고 문자: 장비·고객 데이터가 준비된 뒤에만 만들 수 있어서, 준비 전(시작할 때)에는 건너뛰고 탭을 열 때 다시 만든다
+  try { $("#evReport").value = REPORT.event(DATA.events[$("#evSel").selectedIndex]); } catch (e) { /* 준비 전 */ }
+}
+const euro = w => { const c = w.charCodeAt(w.length - 1) - 0xAC00; if (c < 0 || c > 11171) return "로"; const f = c % 28; return f === 0 || f === 8 ? "로" : "으로"; };   // 받침이 있으면 "으로" (ㄹ 받침과 받침 없음은 "로")
 function evNoticeText(ev, calc) {
   const when = `${md(msOf(calc.s)).split(" ")[0]} ${hm(msOf(calc.s))}~${hm(msOf(calc.e))}`;
   if (!calc.moves.length) return `분산이 필요한 링크가 없습니다. (예상 사용률 ${Math.round(MOVE_LIMIT * 100)}% 미만)\n사전 통보는 필요 없고, 당일 모니터링만 진행합니다.`;
@@ -490,13 +495,13 @@ function evNoticeText(ev, calc) {
       const to = m.best ? `${m.best.c.l.id}${CENTER(m.best.c.l.id) !== CENTER(m.r.l.id) ? " (" + CENTER(m.best.c.l.id) + ", 협의 후 진행)" : ""}` : "(여유 회선 없음, 별도 협의)";
       return `- ${m.r.l.id}: 예상 최대 ${m.r.exp.toFixed(0)}Gbps (용량 대비 ${(m.r.util * 100).toFixed(0)}%)\n  조치: 해당 시간대 일부(약 ${Math.max(1, Math.ceil(m.need))}Gbps)를 ${to}로 보내겠습니다.`;
     }).join("\n");
-    return `제목: [${COMPANY}] ${when} ${ev.name} 대비 트래픽 분산 안내\n\n${c.name} 담당자님, 안녕하세요.\n${when} ${ev.name}로 트래픽 증가가 예상되어 미리 안내드립니다.\n\n${lines}\n\n서비스 중단 없이 진행할 예정이며, 종료 후 원복하고 결과를 안내드리겠습니다.\n문의는 관제 담당에게 연락 주세요. (가상 고객사 · 가상 센터)`;
+    return `제목: [${COMPANY}] ${when} ${ev.name} 대비 트래픽 분산 안내\n\n${c.name} 담당자님, 안녕하세요.\n${when} ${ev.name}${euro(ev.name)} 트래픽 증가가 예상되어 미리 안내드립니다.\n\n${lines}\n\n서비스 중단 없이 진행할 예정이며, 종료 후 원복하고 결과를 안내드리겠습니다.\n문의는 관제 담당에게 연락 주세요. (가상 고객사 · 가상 센터)`;
   }).filter(Boolean);
   return blocks.join("\n\n--------------------------------\n\n");
 }
 function renderEvList() {
   const sel = $("#evSel").selectedIndex;
-  $("#evList").innerHTML = `<tr><th>경기</th><th>킥오프</th><th>시간대</th><th class="n">예상 배율</th><th>분산 필요 링크</th><th class="n">실제 최대 사용률</th><th>사후 판정</th></tr>` +
+  $("#evList").innerHTML = `<tr><th>이벤트</th><th>시작</th><th>시간대</th><th class="n">예상 배율</th><th>분산 필요 링크</th><th class="n">실제 최대 사용률</th><th>사후 판정</th></tr>` +
     DATA.events.map((ev, i) => {
       const c = evCalc(ev), top = c.rows.filter(r => r.f !== 1).sort((a, b) => b.act / b.l.cap - a.act / a.l.cap)[0], u = top.act / top.l.cap * 100;
       const hr = +hm(msOf(c.s)).slice(0, 2), slot = hr < 6 ? "새벽" : "저녁";
@@ -513,6 +518,7 @@ function renderEvent() {
     (calc.moves.length ? calc.moves.map(m => `<p><b>${m.r.l.id}</b>: 예상 ${m.r.exp.toFixed(0)}G → 약 <b>${Math.max(1, Math.ceil(m.need))}G</b> 덜어내기. ` +
       (m.best ? `후보 <b>${m.best.c.l.id}</b> (${CENTER(m.best.c.l.id)}, 여유 약 ${m.best.spare.toFixed(0)}G) ${m.ok ? '<span class="tag ok">가능</span>' : '<span class="tag warn">여유 부족</span>'}${CENTER(m.best.c.l.id) !== CENTER(m.r.l.id) ? ' <span class="muted">다른 센터라 협의 필요</span>' : ""}` : '<span class="tag crit">후보 없음</span> 증설·서비스 협의 필요') + "</p>").join("") : "<p>분산이 필요한 링크가 없습니다.</p>");
   $("#evNotice").value = evNoticeText(ev, calc);
+  renderEvReport();
   $("#evPost").innerHTML = `<tr><th>링크</th><th class="n">예상 최대</th><th class="n">실제 최대</th><th class="n">차이</th><th class="n">실제 사용률</th><th>비고</th></tr>` +
     calc.rows.filter(r => r.f !== 1).map(r => {
       const diff = (r.act / r.exp - 1) * 100, u = r.act / r.l.cap * 100;
@@ -528,6 +534,8 @@ function renderEvent() {
   $("#evSel").innerHTML = DATA.events.map(e => `<option>${e.name} (${md(parseT(e.start))})</option>`).join("");
   $("#evList").addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { $("#evSel").selectedIndex = +tr.dataset.i; renderEvent(); } });
   $("#evSel").onchange = renderEvent;
+  $("#evReportPhone").onclick = () => { const ev = DATA.events[$("#evSel").selectedIndex]; openPhone($("#evReport").value, hm(parseT(ev.end) + 40 * 60000)); };
+  $("#evReportCopy").onclick = async () => { try { await navigator.clipboard.writeText($("#evReport").value); $("#evReportMsg").textContent = "복사했습니다"; } catch (e) { $("#evReport").select(); $("#evReportMsg").textContent = "선택했습니다. Ctrl+C로 복사하세요"; } };
   $("#evCopy").onclick = () => copyText($("#evNotice").value, $("#evCopy"));
   $("#evGo").onclick = () => { const ev = DATA.events[$("#evSel").selectedIndex]; state.win = 36; state.end = idxOf(parseT(ev.start)) + 25; showTab("monitor"); };
   $("#evCheck").addEventListener("change", e => {
@@ -1137,8 +1145,8 @@ function buildScenarios(opts) {   // opts.cause: 업링크 회선 다운의 복�
     "회선이 복구되었습니다. 복구 시각과 트래픽 회복 값을 확인하고, 모든 조치가 끝났으므로 '완료' 문자를 보냅니다. 완료는 정말 다 끝났을 때만 쓰고, 그 전에는 '경과'로 보냅니다. 완료 문자에는 시작과 끝 일시, 조치 시간표가 들어갑니다."
   ], [null, [dDev], null, null, [dDev], [dDev], null, [dDev, peerDev], [dDev]], "끊긴 회선은 descriptions의 Admin/Link로 먼저 찾고, 광값·CRC → ping → 상대 구간 문의 순서로 좁혀 갑니다. 복구되는 이유는 크게 셋입니다: 상대 구간 작업이 끝났거나, 일시 오류였거나, 광 케이블·SFP가 고장 나서 교체했거나. 원인에 따라 마무리가 다릅니다(재발 방지 요청, 재발 감시, 교체). 문자는 발생 → 경과 → 완료 순서로, 완료는 정말 끝났을 때만 보냅니다.");
 
-  // 3) 트래픽 폭주: 월드컵 8강
-  const ev = DATA.events.find(e => e.name.includes("8강")), cc = evCalc(ev);
+  // 3) 트래픽 폭주: 축구 결승
+  const ev = DATA.events.find(e => e.name === "축구 결승"), cc = evCalc(ev);
   const kt = m => isoLocal(parseT(ev.start) + m * 60000);   // 킥오프 기준 분
   const A = cc.rows.find(r => r.l.id === OA), mv = cc.moves.find(m => m.r.l.id === OA);
   let pk = cc.s; for (let i = cc.s; i <= cc.e; i++) if (LINK[OA].out[i] > LINK[OA].out[pk]) pk = i;
@@ -1153,7 +1161,7 @@ function buildScenarios(opts) {   // opts.cause: 업링크 회선 다운의 복�
   ] };
 
   addExplain(surge, [
-    "월드컵 8강 경기 30분 전입니다. 경기 전날 고객사에 '이 회선으로 보내 달라'고 미리 안내해 두었고, 오늘은 그 안내대로 트래픽이 들어오는지 지켜봅니다.",
+    "축구 결승 경기 30분 전입니다. 경기 전날 고객사에 '이 회선으로 보내 달라'고 미리 안내해 두었고, 오늘은 그 안내대로 트래픽이 들어오는지 지켜봅니다.",
     "예상 트래픽이 회선 용량을 넘을 것 같아서 일부를 여유 있는 다른 회선으로 돌립니다(분산). 다른 센터 회선으로 돌릴 때는 먼저 협의합니다.",
     "킥오프입니다. 트래픽이 평소 곡선이 아니라 경기 곡선을 따라 오르기 시작합니다.",
     "하프타임 하이드레이션 타임에 트래픽이 잠깐 줄었다가 다시 오릅니다. 급감 경고가 아니라 경기 일정으로 설명되는 하락입니다.",

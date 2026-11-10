@@ -10,7 +10,20 @@
     경과: { title: "DDoS 공격 수신", target: "IDC_B_FS1(10.0.0.1)", from: "10/29 03:20", cause: "국제망 DDoS 공격", impact: "대상 IP 접속 불가(블랙홀 중)", voc: "없음", acts: "03:30 블랙홀 차단 (198.51.100.77/32)\n03:31 상위 연동망에 블랙홀 요청" },
     완료: { title: "DDoS 공격 수신", target: "IDC_B_FS1(10.0.0.1)", from: "10/29 03:20", to: "10/29 03:41", cause: "국제망 DDoS 공격", impact: "블랙홀 구간(03:30~03:41) 대상 IP 접속 불가", voc: "없음", acts: "03:30 블랙홀 차단 (198.51.100.77/32)\n03:31 상위 연동망에 블랙홀 요청\n03:41 공격 종료 확인 · 블랙홀 해제" }
   };
-  let stage = "발생";
+  let stage = "발생", kind = "incident";   // kind: incident(장애 전파) / daily(주요고객 트래픽) / event(이벤트 최대 트래픽)
+  const RD_END = "2026-10-22T08:00";
+  sv("rdEnd").value = RD_END; sv("rdEnd").min = isoLocal(T0); sv("rdEnd").max = isoLocal(msOf(N - 1));
+  sv("rdEv").innerHTML = DATA.events.map((e, i) => `<option value="${i}">${esc(e.name)} (${e.start.slice(5, 10).replace("-", "/")} ${e.start.slice(11)})</option>`).join("");
+  sv("rdEv").value = String(Math.max(0, DATA.events.findIndex(e => e.name === "축구 8강")));
+  const reportDraft = () => kind === "daily" ? REPORT.daily(parseT(sv("rdEnd").value || RD_END)) : REPORT.event(DATA.events[+sv("rdEv").value]);
+  function regen() { sv("smDraft").value = kind === "incident" ? makeDraft() : reportDraft(); count(); }
+  function setKind(k) {
+    kind = k;
+    document.querySelectorAll("#smKind button").forEach(b => b.classList.toggle("primary", b.dataset.k === k));
+    sv("smInc").hidden = k !== "incident"; sv("smDaily").hidden = k !== "daily"; sv("smEvt").hidden = k !== "event";
+    sv("smReset").textContent = k === "incident" ? "양식으로 되돌리기" : "숫자 다시 계산";
+    regen();
+  }
   const fields = { title: "smTitle", target: "smTarget", from: "smFrom", to: "smTo", cause: "smCause", impact: "smImpact", voc: "smVoc", acts: "smActs" };
   function fillForm(s) { const d = SAMPLE[s]; sv("smCenter").value = "분당"; Object.entries(fields).forEach(([k, id]) => { sv(id).value = d[k] || ""; }); }
   function parseActs(t) { return t.split("\n").map(x => x.trim()).filter(Boolean).map(x => { const m = x.match(/^(\d{1,2}:\d{2})\s+(.*)$/); return m ? { t: m[1], txt: m[2] } : { t: "", txt: x }; }); }
@@ -29,9 +42,11 @@
   const bytes = t => { let n = 0; for (const ch of t) n += ch.charCodeAt(0) > 127 ? 2 : 1; return n; };
   function count() { const t = sv("smDraft").value; sv("smCount").textContent = `${[...t].length}자 · 약 ${bytes(t)}바이트 (한글 2바이트 기준)`; }
   sv("smStage").addEventListener("click", e => { const b = e.target.closest("button"); if (b) setStage(b.dataset.st, true); });
-  Object.values(fields).concat(["smCenter"]).forEach(id => sv(id).addEventListener("input", () => { sv("smDraft").value = makeDraft(); count(); }));
+  sv("smKind").addEventListener("click", e => { const b = e.target.closest("button"); if (b) setKind(b.dataset.k); });
+  sv("rdEnd").addEventListener("change", regen); sv("rdEv").addEventListener("change", regen);
+  Object.values(fields).concat(["smCenter"]).forEach(id => sv(id).addEventListener("input", () => { if (kind === "incident") { sv("smDraft").value = makeDraft(); count(); } }));
   sv("smDraft").addEventListener("input", count);
-  sv("smReset").onclick = () => setStage(stage, true);
+  sv("smReset").onclick = () => { if (kind === "incident") setStage(stage, true); else regen(); };
   sv("smCopy").onclick = async () => { try { await navigator.clipboard.writeText(sv("smDraft").value); sv("smMsg").textContent = "복사했습니다"; } catch (e) { sv("smDraft").select(); sv("smMsg").textContent = "선택했습니다. Ctrl+C로 복사하세요"; } };
   const phoneText = t => esc(t).replace(/\n/g, "<br>");
   window.openPhone = (text, clock) => {   // 다른 화면(실시간 대응)에서도 같은 휴대폰 미리보기를 쓴다

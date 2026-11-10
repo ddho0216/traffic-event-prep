@@ -34,7 +34,7 @@ def build() -> dict:
 
     noise = []
     for eid, name, kick, links, _exp, _act in g.MATCHES:
-        end = pd.Timestamp(kick) + pd.Timedelta(minutes=g.LEN_MIN)
+        end = pd.Timestamp(kick) + pd.Timedelta(minutes=g.EVENT_META[eid]["len"])
         noise.append({"id": eid, "name": name, "start": fmt(kick), "end": fmt(end), "links": links})
 
     info = {

@@ -2,12 +2,12 @@
 
 만드는 파일 (data/ 폴더):
   links.csv    - 링크 15개와 회선 용량(Gbps)
-  events.csv   - 가상 월드컵 경기 7개와 "예상 배율", 경기 중 표시 구간(marks)
+  events.csv   - 아시안게임 일정에 맞춘 가상 이벤트 8개와 "예상 배율", 경기 중 표시 구간(marks)
   temps.csv    - 서버실 랙 6개의 입구 온도(5분 간격), 냉각 이상 사례 1건
   servers.csv  - 서버 24대 (역할, 디스크 경고, 꺼짐 시간)
-  traffic.csv  - 5분 간격 in/out (Gbps), 14일치
+  traffic.csv  - 5분 간격 in/out (Gbps), 53일치 (9/10~11/01)
 
-실제 회사·센터·회선 수치와 실제 월드컵 일정·팀은 쓰지 않았다. 일정과 숫자는 모두 지어낸 것이다.
+실제 회사·센터·회선 수치는 쓰지 않았다. 이벤트 일정은 제20회 아이치·나고야 아시안게임(2026-09-19~10-04)을 참고했지만 트래픽 숫자는 모두 지어낸 것이다.
 같은 seed면 항상 같은 데이터가 나온다.
 """
 from pathlib import Path
@@ -17,8 +17,8 @@ import pandas as pd
 
 SEED = 42
 OUT = Path(__file__).parent / "data"
-START = "2026-10-19 00:00"   # 월요일
-DAYS = 14
+START = "2026-09-10 00:00"   # 목요일. 아시안게임 개회식(9/19) 전 주(9/12)가 "전주" 비교에 쓰이도록 9/10부터 시작
+DAYS = 53   # 9/10 ~ 11/01
 STEP = "5min"
 
 # 링크: 이름, 설명, 용량(Gbps), 평소 저녁 피크 사용률(out 기준)
@@ -42,22 +42,30 @@ LINKS = [
     ("IDC_A_FS1_BIG1", "안산 큰 고객사 전용 (모의OTT)", 100, 0.60),
 ]
 
-# 경기 한 번의 길이: 킥오프~종료 115분 (전반 47 + 하프타임 15 + 후반 약 53). 2시간을 넘지 않는다.
-LEN_MIN = 115
-# 경기 중 표시 구간: (종류, 킥오프 후 시작분, 끝분). 하이드레이션 타임은 전·후반 중간쯤 약 3분(가상).
+# 이벤트 한 번의 길이(분)와 종류. 축구 경기는 킥오프~종료 115분(전반 47 + 하프타임 15 + 후반 약 53)이라 2시간을 넘지 않는다.
+LEN_MIN = 115   # 축구 경기 길이 (이전 이름 호환)
+# 경기 중 표시 구간(축구만): (종류, 킥오프 후 시작분, 끝분). 하이드레이션 타임은 전·후반 중간쯤 약 3분(가상).
 MARKS = [("hydration", 25, 28), ("halftime", 47, 62), ("hydration", 87, 90)]
-
 A3 = ["IDC_B_FS1_UP1", "IDC_A_FS1_UP1", "IDC_B_FS2_IX1"]
-# id, 이름, 킥오프, 영향 링크, 예상 배율(고객사에 알린 값), 실제 배율(숨김값)
+# 이벤트: 제20회 아이치·나고야 아시안게임(2026-09-19~10-04)에 맞춘 가상 트래픽 이벤트. 트래픽 수치는 전부 가상이다.
+#  검색으로 확인한 것: 대회 기간(9/19~10/4), 개회식 9/19 저녁 6시 시작, 야구 조별리그 9/21 시작(한국-대만)
+#  확인하지 못한 것(제가 정한 가정): 개회식 길이, 폐회식 시각, 야구 경기 시각, 축구·e스포츠·야구 결승의 날짜와 시각
+# id, 이름, 시작, 영향 링크, 예상 배율(고객사에 알린 값), 실제 배율(숨김값)
 MATCHES = [
-    ("EV1", "월드컵 조별 1경기", "2026-10-24 22:00", A3, 1.5, 1.6),
-    ("EV2", "월드컵 조별 2경기", "2026-10-25 02:00", A3, 1.5, 1.6),     # 새벽 경기
-    ("EV3", "월드컵 조별 3경기", "2026-10-26 20:00", A3, 1.5, 1.75),
-    ("EV4", "월드컵 16강", "2026-10-28 22:00", A3, 1.6, 1.7),
-    ("EV5", "월드컵 8강", "2026-10-30 20:00", A3 + ["IDC_B_FS1_UP2"], 1.7, 2.0),
-    ("EV6", "월드컵 4강", "2026-10-31 02:00", A3 + ["IDC_B_FS1_UP2"], 1.7, 1.9),  # 새벽 경기
-    ("EV7", "월드컵 결승", "2026-11-01 20:00", A3 + ["IDC_B_FS1_UP2", "IDC_G_FS1_UP1"], 1.8, 1.95),
+    ("EV1", "개회식", "2026-09-19 18:00", A3, 1.6, 1.7),
+    ("EV2", "야구 한국-대만", "2026-09-21 18:00", A3, 1.4, 1.5),
+    ("EV3", "축구 8강", "2026-09-27 20:00", A3, 1.5, 1.65),
+    ("EV4", "축구 4강", "2026-09-30 20:00", A3 + ["IDC_B_FS1_UP2"], 1.6, 1.85),
+    ("EV5", "축구 결승", "2026-10-02 20:00", A3 + ["IDC_B_FS1_UP2", "IDC_G_FS1_UP1"], 1.8, 2.0),
+    ("EV6", "e스포츠 결승", "2026-10-03 15:00", A3 + ["IDC_B_FS1_UP2"], 1.5, 1.7),
+    ("EV7", "야구 결승", "2026-10-03 19:00", A3 + ["IDC_B_FS1_UP2"], 1.7, 1.9),
+    ("EV8", "폐회식", "2026-10-04 18:00", A3 + ["IDC_B_FS1_UP2"], 1.6, 1.75),
 ]
+EVENT_META = {   # 종류: ceremony(개·폐회식), match(축구: 하프타임 있음), game(야구·e스포츠: 하프타임 없음), 길이(분)
+    "EV1": {"kind": "ceremony", "len": 180}, "EV2": {"kind": "game", "len": 150}, "EV3": {"kind": "match", "len": 115},
+    "EV4": {"kind": "match", "len": 115}, "EV5": {"kind": "match", "len": 115}, "EV6": {"kind": "game", "len": 150},
+    "EV7": {"kind": "game", "len": 150}, "EV8": {"kind": "ceremony", "len": 150},
+}
 
 # 예고 없던 일: 새벽 in 트래픽 급증(DDoS 의심). 경기 없는 날 새벽.
 UNPLANNED = ("2026-10-29 03:10", "2026-10-29 03:35", "IDC_B_FS1_UP2", 6.0)
@@ -126,31 +134,53 @@ def daily_shape(hours: np.ndarray, weekend: bool) -> np.ndarray:
     return shape / shape.max()
 
 
-def match_profile(k: int):
-    """경기 하나의 시청 곡선(0~1). 1분 단위. m = 킥오프 기준 분."""
+def match_profile(k: int, kind: str = "match", length: int = LEN_MIN):
+    """이벤트 하나의 시청 곡선(0~1). 1분 단위. m = 시작 기준 분. kind: match(축구), game(야구·e스포츠), ceremony(개·폐회식)"""
     rng = np.random.default_rng(SEED + k)
-    m = np.arange(-60, LEN_MIN + 31)
+    m = np.arange(-60, length + 31)
     p = np.zeros(len(m))
     for i, x in enumerate(m):
-        if x < -30:
-            v = 0.0
-        elif x < 0:
-            v = 0.85 * (x + 30) / 30                    # 킥오프 30분 전부터 상승
-        elif x < 47:
-            v = 0.92 + 0.08 * max(0, 5 - x) / 5         # 전반: 초반이 가장 높음
-        elif x < 62:
-            v = 0.55                                    # 하프타임: 트래픽이 빠진다
-        elif x <= LEN_MIN:
-            v = 0.95 + 0.05 * (x - 62) / (LEN_MIN - 62)  # 후반: 종료 쪽으로 갈수록 높음
-        else:
-            v = 0.30 * np.exp(-(x - LEN_MIN) / 6)       # 종료 직후 급락, 짧은 꼬리
+        if kind == "match":
+            if x < -30:
+                v = 0.0
+            elif x < 0:
+                v = 0.85 * (x + 30) / 30                    # 킥오프 30분 전부터 상승
+            elif x < 47:
+                v = 0.92 + 0.08 * max(0, 5 - x) / 5         # 전반: 초반이 가장 높음
+            elif x < 62:
+                v = 0.55                                    # 하프타임: 트래픽이 빠진다
+            elif x <= length:
+                v = 0.95 + 0.05 * (x - 62) / (length - 62)  # 후반: 종료 쪽으로 갈수록 높음
+            else:
+                v = 0.30 * np.exp(-(x - length) / 6)        # 종료 직후 급락, 짧은 꼬리
+        elif kind == "ceremony":
+            if x < -45:
+                v = 0.0
+            elif x < 0:
+                v = 0.80 * (x + 45) / 45                    # 시작 45분 전부터 천천히 상승
+            elif x <= length:
+                v = 0.85 + 0.15 * np.sin(np.pi * x / length)   # 입장 행사·공연이 이어지며 중간이 가장 높음
+            else:
+                v = 0.30 * np.exp(-(x - length) / 8)        # 끝난 뒤 완만하게 빠진다
+        else:   # game: 야구·e스포츠. 하프타임은 없고 쉬는 시간(약 2분)이 가끔 있다
+            if x < -30:
+                v = 0.0
+            elif x < 0:
+                v = 0.80 * (x + 30) / 30
+            elif x <= length:
+                v = 0.90 + 0.06 * np.sin(x / 17.0)
+                if x % 25 in (23, 24):
+                    v *= 0.82
+            else:
+                v = 0.30 * np.exp(-(x - length) / 6)
         p[i] = v
-    for kind, a, b in MARKS:
-        if kind == "hydration":
-            p[(m >= a) & (m < b)] *= 0.65               # 쭉 빠졌다가 다시 들어온다
-    goal_pool = np.r_[np.arange(5, 22), np.arange(30, 45), np.arange(66, 84), np.arange(92, 108)]
-    for g in rng.choice(goal_pool, 2, replace=False):   # 골 장면: 잠깐 3분 +10%
-        p[(m >= g) & (m < g + 3)] *= 1.10
+    if kind == "match":
+        for mk, a, b in MARKS:
+            if mk == "hydration":
+                p[(m >= a) & (m < b)] *= 0.65               # 쭉 빠졌다가 다시 들어온다
+        goal_pool = np.r_[np.arange(5, 22), np.arange(30, 45), np.arange(66, 84), np.arange(92, 108)]
+        for gl in rng.choice(goal_pool, 2, replace=False):  # 골 장면: 잠깐 3분 +10%
+            p[(m >= gl) & (m < gl + 3)] *= 1.10
     return m, p
 
 
@@ -199,7 +229,7 @@ def main() -> None:
     # 경기별 5분 단위 시청 곡선 (1분 단위로 만든 뒤 5분 평균)
     prof5 = {}
     for k, (eid, _n, kick, _l, _e, _a) in enumerate(MATCHES):
-        m, p = match_profile(k)
+        m, p = match_profile(k, EVENT_META[eid]["kind"], EVENT_META[eid]["len"])
         minute = np.zeros(DAYS * 1440)
         kick_min = int((pd.Timestamp(kick) - t0).total_seconds() / 60)
         idx = kick_min + m
@@ -247,9 +277,10 @@ def main() -> None:
     marks = ";".join(f"{k}:{a}-{b}" for k, a, b in MARKS)
     ev = []
     for eid, n, kick, links, exp, _a in MATCHES:   # 실제 배율은 숨김값이라 파일에 없다
-        end = (pd.Timestamp(kick) + pd.Timedelta(minutes=LEN_MIN)).strftime("%Y-%m-%d %H:%M")
-        ev.append((eid, n, kick, end, ",".join(links), exp, marks))
-    pd.DataFrame(ev, columns=["event_id", "name", "start", "end", "links", "expected_factor", "marks"]
+        meta = EVENT_META[eid]
+        end = (pd.Timestamp(kick) + pd.Timedelta(minutes=meta["len"])).strftime("%Y-%m-%d %H:%M")
+        ev.append((eid, n, kick, end, ",".join(links), exp, marks if meta["kind"] == "match" else "", meta["kind"]))
+    pd.DataFrame(ev, columns=["event_id", "name", "start", "end", "links", "expected_factor", "marks", "kind"]
                  ).to_csv(OUT / "events.csv", index=False)
     write_server_room(times, hours)
     print("완료: traffic.csv", len(times) * len(LINKS), "행, 경기", len(MATCHES), "개")

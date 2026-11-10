@@ -50,9 +50,23 @@ class TrafficData(unittest.TestCase):
         self.assertLess(calm[big].util.max(), 0.80)
         self.assertGreater(calm[big].util.max(), 0.60)
 
-    def test_each_match_within_two_hours(self):
+    def test_each_event_length_by_kind(self):
+        """축구 경기는 2시간을 넘지 않는다. 야구·e스포츠는 2시간 40분, 개·폐회식은 3시간 이내."""
+        limit = {"match": 120, "game": 160, "ceremony": 180}
         for r in self.ev.itertuples():
-            self.assertLessEqual((r.end - r.start).total_seconds() / 60, 120, r.name)
+            self.assertLessEqual((r.end - r.start).total_seconds() / 60, limit[r.kind], r.name)
+
+    def test_asian_games_schedule(self):
+        """검색으로 확인한 날짜(개회식 9/19 18:00, 야구 시작 9/21, 폐회식 10/4)가 일정에 들어 있다."""
+        names = dict(zip(self.ev.name, self.ev.start))
+        self.assertEqual(names["개회식"], pd.Timestamp("2026-09-19 18:00"))
+        self.assertEqual(names["야구 한국-대만"].date(), pd.Timestamp("2026-09-21").date())
+        self.assertEqual(names["폐회식"].date(), pd.Timestamp("2026-10-04").date())
+
+    def test_data_starts_a_week_before_opening(self):
+        """개회식(9/19)의 '전주'(9/12) 값을 비교에 쓸 수 있도록 데이터가 9/10부터 있다."""
+        self.assertEqual(self.t.time.min(), pd.Timestamp("2026-09-10 00:00"))
+        self.assertEqual(self.t.time.max(), pd.Timestamp("2026-11-01 23:55"))
 
     def test_events_inside_data_range(self):
         lo, hi = self.t.time.min(), self.t.time.max()
@@ -66,7 +80,7 @@ class TrafficData(unittest.TestCase):
         self.assertTrue(hit)
 
     def test_hydration_break_dips_and_recovers(self):
-        r = self.ev.iloc[0]
+        r = self.ev[self.ev.kind == "match"].iloc[0]   # 하이드레이션 타임은 축구 경기에만 있다
         a = self.t[(self.t.link == "IDC_B_FS1_UP1")].set_index("time").out_gbps
         before = a[r.start + pd.Timedelta(minutes=20)]
         dip = a[r.start + pd.Timedelta(minutes=25)]
