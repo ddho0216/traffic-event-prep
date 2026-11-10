@@ -42,7 +42,7 @@
       term(`admin@${DEV}> delete routing-options static route ${VICTIM}/32\nadmin@${DEV}> commit\ncommit complete`); todo(); paint();
     }
     return {
-      id: "ddos", name: "DDoS 공격 수신", clock0: 180, date: "10/29", start: 15, end: 60, alertAt: ALERT, deadline: 8, stages: ["발생", "경과", "완료"], speedNote: true,
+      id: "ddos", name: "DDoS 공격 수신", clock0: 180, date: "10/29", start: ONSET - 2, end: 60, alertAt: ALERT, deadline: 8, stages: ["발생", "경과", "완료"], speedNote: true,
       linkTitle: `${UPL} · in`, linkDesc: "분당→서초 B · 100G · 점선=어제 같은 시각", dev: DEV, termQuick: [["속도 확인", 'show interfaces xe-0/0/1 extensive | match "bps|pps"'], ["경로 확인", `show route ${VICTIM}`]],
       cardTitle: "공격 트래픽 구성", cardSave: true,
       init: () => ({ bh: null, rel: null, upstream: null, choice: null, victim: false, event: false, pending: false, saved: null, early: false, wait: false }),
@@ -174,7 +174,7 @@
     const CMDS = { ip: "show interfaces descriptions", opt: `show interfaces diagnostics optics ${PORT}`, crc: `show interfaces extensive ${PORT} | match CRC`, arp: `show arp | match ${PORT}`, ping: `ping ${peerIp()} rapid count 100` };
     const runShow = cmd => { term(`admin@${DV}> ${cmd}`); term(runLive(cmd, cur())); };
     return {
-      id: "linkDown", name: "업링크 회선 다운", clock0: 14 * 60, date: "10/21", start: START, end: END, alertAt: ALERT, deadline: DEADLINE, stages: ["발생", "경과", "완료"],
+      id: "linkDown", name: "업링크 회선 다운", clock0: 14 * 60, date: "10/21", start: Math.max(0, dS - 2), end: END, alertAt: ALERT, deadline: DEADLINE, stages: ["발생", "경과", "완료"],
       linkTitle: `${ID} · out`, linkDesc: "안산 업링크 · 점선=전날 같은 시각", dev: DV,
       termQuick: [["회선 설명", CMDS.ip], ["광값", CMDS.opt], ["CRC", CMDS.crc], ["ARP", CMDS.arp], ["ping", CMDS.ping]],
       cardTitle: "영향 고객사 · 연동망 문의 결과", cardSave: false,
@@ -300,7 +300,7 @@
       return `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none"><polyline fill="none" stroke="${color}" stroke-width="1.8" points="${pts.join(" ")}"/></svg>`;
     };
     return {
-      id: "drop", name: "트래픽 급감", clock0: 19 * 60 + 50, date: "10/23", start: START, end: END, alertAt: ALERT, deadline: DEADLINE, stages: ["발생", "경과", "완료"],
+      id: "drop", name: "트래픽 급감", clock0: 19 * 60 + 50, date: "10/23", start: Math.max(0, dS - 2), end: END, alertAt: ALERT, deadline: DEADLINE, stages: ["발생", "경과", "완료"],
       linkTitle: `${ID} · out`, linkDesc: "분당 국내 연동(IX) · 점선=전날 같은 시각", dev: DV,
       termQuick: [["회선 설명", CMDS.ip], ["광값", CMDS.opt], ["CRC", CMDS.crc], ["BGP 요약", CMDS.bgp]],
       cardTitle: "우회 회선 · 영향 고객사 · 연동망 문의 결과", cardSave: false,
@@ -419,7 +419,7 @@
     const traffic = (a, b) => rLinks.map(id => `${id}: ${gb(outAtM(id, a))}G → ${gb(outAtM(id, b))}G (${((outAtM(id, b) / outAtM(id, a) - 1) * 100).toFixed(1)}%)`).join("\n");
     const why = OUT.why || "전원 이상";
     return {
-      id: "redundancy", name: "이중화로 무사히 넘기기", clock0, date, start: START, end: END, alertAt: ALERT, deadline: DEADLINE, stages: ["발생", "경과", "완료"],
+      id: "redundancy", name: "이중화로 무사히 넘기기", clock0, date, start: Math.max(0, dS - 2), end: END, alertAt: ALERT, deadline: DEADLINE, stages: ["발생", "경과", "완료"],
       linkTitle: `${MAIN} · out`, linkDesc: `${D1}에 꽂힌 고객 회선 · 점선=전날 같은 시각`, dev: D1, devs: [D1, D2],
       termQuick: [["회선 설명", CMDS.desc], ["ping", CMDS.ping]],
       cardTitle: `짝 장비 상태 · ${D1} ↔ ${D2}`, cardSave: false,

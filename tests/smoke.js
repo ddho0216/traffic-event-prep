@@ -260,7 +260,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.evaluate(() => LIVE.load('ddos'));
   // 실시간 대응: 트래픽 급감 (국내 연동 IX, 사이트의 실제 가상 데이터)
   await goTab('live'); await page.click('#scnBtn'); await page.click('#scnMenu [data-scn=liveDrop]');
-  check('트래픽 급감(직접 대응)을 고르면 실시간 대응 화면에서 바로 시작됨', (await page.evaluate(() => LIVE.scenario.id)) === 'drop' && (await page.locator('#lvTitle').innerText()) === '트래픽 급감' && (await page.evaluate(() => LIVE.state.t)) === 10);
+  check('트래픽 급감(직접 대응)을 고르면 실시간 대응 화면에서 바로 시작됨', (await page.evaluate(() => LIVE.scenario.id)) === 'drop' && (await page.locator('#lvTitle').innerText()) === '트래픽 급감' && (await page.evaluate(() => LIVE.state.t === LIVE.scenario.start && LIVE.scenario.alertAt - LIVE.scenario.start === 5)));   // 떨어지기 2분(가상) 전에 시작: 첫 변화까지 기다리는 시간이 짧다
   await page.evaluate(() => LIVE.jump(22));
   check('급감이 시작된 뒤에도(20:12) 알림은 아직 안 뜸 (지연 3분)', !(await page.locator('#lvAlert.hot').count()));
   await page.evaluate(() => LIVE.jump(23));
@@ -337,7 +337,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const menuIds = await page.evaluate(() => [...document.querySelectorAll('#scnMenu [data-scn]')].map(b => b.dataset.scn));
   check('실시간 대응 화면의 시나리오 목록: 직접 대응 4개(DDoS·회선 다운·급감·이중화)만 있음 (슬라이드 방식과 평일 오후 7시·폭주·서버실 온도는 뺌, 기록은 docs/removed-scenarios.md)', JSON.stringify(menuIds) === JSON.stringify(['live', 'liveLinkDown', 'liveDrop', 'liveRedundancy']), menuIds.join(','));
   await goTab('monitor'); await goTab('live'); await page.click('#scnBtn'); await page.click('#scnMenu [data-scn=live]');
-  check('목록에서 "직접 대응"을 고르면 실시간 대응이 처음 상태(03:15)로 시작함', (await page.locator('#tab-live').isVisible()) && (await page.evaluate(() => LIVE.state.t)) === 15);
+  check('목록에서 "직접 대응"을 고르면 실시간 대응이 처음 상태(03:18, 공격이 시작되기 2분 전)로 시작함', (await page.locator('#tab-live').isVisible()) && (await page.evaluate(() => LIVE.state.t)) === 18);
   await page.evaluate(() => document.querySelector('#tabs button[data-tab=room3d]').click());
   check('서버실-3D 범례: 짧게 정상/주의/경고/위험과 기준 온도(27·30·33°C)가 보이고, 설명은 접혀 있음', await page.evaluate(() => { const t = document.querySelector('.r3legend').innerText; return ['정상', '주의', '경고', '위험', '27°C', '30°C', '33°C'].every(w => t.includes(w)) && document.getElementById('glLegTip').hidden; }));
   await page.click('#glLegQ');
