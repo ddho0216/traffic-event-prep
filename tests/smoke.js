@@ -73,17 +73,17 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.setViewportSize({ width: 1600, height: 900 });
 
   // 탭 순서와 센터 선택: 센터 선택은 관제·서버실에서만 보이고, 두 화면이 같은 센터로 동기화된다
-  check('위 메뉴: 관제 / 서버실▾ / 장비 터미널 / 이벤트 대비 / 월간 자료 / 고객 지원▾ (하위 메뉴: 서버실·서버실 3D / 문자 전파·방문 신청·장비 반출입)', JSON.stringify(await page.locator('#tabs > button, #tabs > .tabgrp > .grpbtn').allTextContents()) === JSON.stringify(['관제', '서버실', '장비 터미널', '실시간 대응 시험판', '이벤트 대비', '월간 자료', '고객 지원']) && JSON.stringify(await page.locator('#tabs .tabgrp:nth-of-type(1) .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D']) && JSON.stringify(await page.locator('#tabs .tabgrp .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D', '문자 전파', '방문 신청', '장비 반출입']));
-  const sub0 = await page.locator('#tabs .tabgrp >> nth=1 >> .submenu').isVisible();
-  await page.hover('#tabs .tabgrp >> nth=1 >> .grpbtn');
-  const sub1 = await page.locator('#tabs .tabgrp >> nth=1 >> .submenu').isVisible();
+  check('위 메뉴: 관제 / 서버실▾ / 장비 터미널 / 대응▾ / 이벤트 대비 / 월간 자료 / 고객 지원▾ (하위 메뉴: 서버실·서버실 3D / 실시간 대응·자동 대응 / 문자 전파·방문 신청·장비 반출입)', JSON.stringify(await page.locator('#tabs > button, #tabs > .tabgrp > .grpbtn').allTextContents()) === JSON.stringify(['관제', '서버실', '장비 터미널', '대응 시험판', '이벤트 대비', '월간 자료', '고객 지원']) && JSON.stringify(await page.locator('#tabs .tabgrp:nth-of-type(1) .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D']) && JSON.stringify(await page.locator('#tabs .tabgrp .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D', '실시간 대응', '자동 대응', '문자 전파', '방문 신청', '장비 반출입']));
+  const sub0 = await page.locator('#tabs .tabgrp >> nth=2 >> .submenu').isVisible();
+  await page.hover('#tabs .tabgrp >> nth=2 >> .grpbtn');
+  const sub1 = await page.locator('#tabs .tabgrp >> nth=2 >> .submenu').isVisible();
   await page.hover('#tabs .tabgrp >> nth=0 >> .grpbtn');
   await page.waitForTimeout(350);   // 하위 메뉴가 부드럽게 사라지는 시간
-  const sub2 = [await page.locator('#tabs .tabgrp >> nth=0 >> .submenu').isVisible(), await page.locator('#tabs .tabgrp >> nth=1 >> .submenu').isVisible()];
+  const sub2 = [await page.locator('#tabs .tabgrp >> nth=0 >> .submenu').isVisible(), await page.locator('#tabs .tabgrp >> nth=2 >> .submenu').isVisible()];
   check('하위 메뉴는 평소에 숨겨져 있고, 마우스를 올리면 그 메뉴 아래에만 펼쳐짐', !sub0 && sub1 && sub2[0] && !sub2[1], JSON.stringify([sub0, sub1, sub2]));
-  await page.hover('#tabs .tabgrp >> nth=1 >> .grpbtn');
-  await page.click('#tabs .tabgrp >> nth=1 >> .submenu button[data-tab=gear]');
-  check('고객 지원 하위 메뉴에서 장비 반출입을 누르면 그 화면이 열리고 위 메뉴(고객 지원)가 강조됨', (await page.locator('#tab-gear').isVisible()) && (await page.evaluate(() => document.querySelectorAll('#tabs .tabgrp')[1].classList.contains('on'))));
+  await page.hover('#tabs .tabgrp >> nth=2 >> .grpbtn');
+  await page.click('#tabs .tabgrp >> nth=2 >> .submenu button[data-tab=gear]');
+  check('고객 지원 하위 메뉴에서 장비 반출입을 누르면 그 화면이 열리고 위 메뉴(고객 지원)가 강조됨', (await page.locator('#tab-gear').isVisible()) && (await page.evaluate(() => document.querySelectorAll('#tabs .tabgrp')[2].classList.contains('on'))));
   // 문자 전파: 단계별 양식 → 초안 수정 → 휴대폰 미리보기
   await goTab('sms');
   const sm0 = await page.inputValue('#smDraft');
@@ -366,6 +366,18 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('사전 계획의 "평소 최대"는 이벤트 전날까지의 데이터로만 계산됨 (개회식은 9/10~9/18 안의 날, 결승은 그 전날까지)', asof.every(x => Math.abs(x.want - x.got) < 1e-9) && asof[0].days >= 8, JSON.stringify(asof));
   await page.selectOption('#evSel', { index: 0 });
   check('이벤트 정보 줄에 "그때 가진 데이터: 09/10 ~ 09/18 (9일치, 이 이벤트 전날까지만 사용)"이 보임', (await page.locator('#evInfo').innerText()).includes('그때 가진 데이터: 09/10 ~ 09/18 (9일치, 이 이벤트 전날까지만 사용)'));
+  // 자동 대응(시험판): 규칙대로 경로가 나뉘고, 권한 없는 승인은 막히고, 한도·재시도가 동작함
+  await goTab('soar');
+  await page.click('#soRun');
+  const so1 = await page.evaluate(() => Object.fromEntries(SOAR.state.rows.map(r => [r.a.id, r.route + '/' + r.status])));
+  check('자동 대응: 중복은 건너뜀, 경기 중 증가는 오탐 종료, 클린존 가입은 우회(재시도 후 조치됨), 미가입은 승인 대기', so1['INC-102'] === '중복 건너뜀/종료' && so1['INC-103'] === '오탐 종료/종료' && so1['INC-104'] === '클린존 우회/조치됨' && ['INC-101', 'INC-105', 'INC-106'].every(k => so1[k] === '블랙홀 승인 필요/승인 대기'), JSON.stringify(so1));
+  await page.click('[data-d=승인][data-id=INC-101]');
+  check('자동 대응: 신입이 승인을 눌러도 실행되지 않고 "권한 없음" 기록만 남음', (await page.evaluate(() => SOAR.state.rows[0].status)) === '승인 대기' && (await page.evaluate(() => SOAR.state.log.some(l => l.text.includes('권한 없음')))));
+  await page.click('#soRole [data-r=조장]');
+  for (const id of ['INC-101', 'INC-105', 'INC-106']) await page.click(`[data-d=승인][data-id=${id}]`);
+  const so2 = await page.evaluate(() => Object.fromEntries(SOAR.state.rows.map(r => [r.a.id, r.status])));
+  check('자동 대응: 조장 승인 → 블랙홀은 동시 2건까지(3번째는 한도 초과), 연동망 요청은 2번 실패 후 성공(조치됨)·계속 실패하면 일부 실패', so2['INC-101'] === '조치됨' && so2['INC-105'] === '일부 실패' && so2['INC-106'] === '한도 초과', JSON.stringify(so2));
+  check('자동 대응: 담당자 확인이 필요한 건에 일부 실패·한도 초과 2건이 보임', (await page.locator('.so-chk').count()) === 2);
   const vis = {};
   for (const tab of ['monitor', 'room', 'room3d', 'term', 'event', 'monthly', 'visit', 'sms', 'gear', 'live']) { await goTab(tab); vis[tab] = await page.locator('#centerBar').isVisible(); }
   check('센터 선택은 관제·서버실에서만 보이고 나머지 탭에서는 숨겨짐', vis.monitor && vis.room && vis.room3d && !vis.term && !vis.event && !vis.monthly && !vis.visit && !vis.sms && !vis.gear && !vis.live, JSON.stringify(vis));
