@@ -143,6 +143,12 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.fill('#lvTermIn', 'show interfaces xe-0/0/1 extensive | match "bps|pps"'); await page.press('#lvTermIn', 'Enter');
   await page.fill('#lvTermIn', 'show route 198.51.100.77'); await page.press('#lvTermIn', 'Enter');
   await page.fill('#lvTermIn', '엉뚱한 명령'); await page.press('#lvTermIn', 'Enter');
+  const w0 = await page.evaluate(() => ['.lv-graph', '.lv-sms'].map(s => Math.round(document.querySelector(s).getBoundingClientRect().width)));
+  const keepT = await page.evaluate(() => { const o = document.getElementById('lvTermOut'), k = o.textContent; o.textContent = k + '\n' + '!'.repeat(400); return k; });
+  const w1 = await page.evaluate(() => ['.lv-graph', '.lv-sms'].map(s => Math.round(document.querySelector(s).getBoundingClientRect().width)));
+  check('터미널에 ping 느낌표처럼 아주 긴 줄이 나와도 그래프·문자 칸의 너비가 변하지 않음', w0[0] === w1[0] && w0[1] === w1[1], JSON.stringify([w0, w1]));
+  await page.evaluate(k => { document.getElementById('lvTermOut').textContent = k; }, keepT);
+  check('문자 칸 버튼: "보내기"에 (가상)이 붙지 않고, 자동 채우기 버튼은 "초안 다시 만들기"', (await page.locator('#lvSend').innerText()) === '보내기' && (await page.locator('#lvFill').innerText()) === '초안 다시 만들기');
   L = await lv();
   check('터미널: 속도 확인은 가상 시각의 bps/pps, 경로 확인은 BGP 경로, 모르는 명령은 거절', /Input rate +: \d{9,} bps \(\d{6,} pps\)/.test(L.term) && L.term.includes('[BGP/170]') && L.term.includes('unknown command'));
   await page.click('#lvTodo [data-a=ev]'); await page.click('#lvTodo [data-a=ip]');

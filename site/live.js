@@ -534,7 +534,7 @@
   <div class="card lv-sms"><div class="lv-timer" id="lvTimer"></div>
     <h3>문자 초안 <span class="seg" id="lvStage"></span></h3>
     <textarea id="lvDraft" rows="9" spellcheck="false"></textarea>
-    <div class="toolbar" style="margin-top:6px"><button class="btn primary" id="lvSend" type="button">보내기 (가상)</button><button class="btn" id="lvFill" type="button">숫자 자동 채우기</button><span class="muted" id="lvSendMsg"></span></div></div>
+    <div class="toolbar" style="margin-top:6px"><button class="btn primary" id="lvSend" type="button">보내기</button><button class="btn" id="lvFill" type="button" title="지금 시각·상황에 맞춰 문자 내용을 처음부터 다시 만듭니다. 직접 고친 내용은 사라집니다.">초안 다시 만들기</button><span class="muted" id="lvSendMsg"></span></div></div>
 </div>
 <div class="scnpop" id="lvResult" hidden><div class="scnpop-box" role="dialog" aria-modal="true" style="width:min(560px,100%)"><h3>대응 결과</h3><div id="lvResBody"></div><div class="scnpop-foot"><span class="sp"></span><button class="btn primary" id="lvResClose" type="button">닫기</button></div></div></div>`;
   const wrap = document.querySelector(".scn-wrap");   // 시나리오 목록은 이 화면에 있다 (관제 화면에서는 뺐다)
