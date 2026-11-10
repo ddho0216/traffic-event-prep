@@ -421,6 +421,18 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('#r3SlotAll');
   const sa = await page.evaluate(() => ({ rows: document.querySelectorAll('#r3DBody table tr[data-i]').length, dim: document.querySelectorAll('#r3DBody .pt.dim').length, head: document.querySelector('#r3DBody .dhd').innerText }));
   check('"장비 전체 보기"를 누르면 모든 포트가 다시 나옴', sa.rows > sd.rows && sa.dim === 0 && !sa.head.includes('칸:'));
+  // 포트를 누르면 가운데로 확대, 끌면 옮겨짐, 휠로 확대·축소
+  await page.locator('#r3DBody .pt[data-i="4"]').click();
+  const pz = await page.evaluate(() => { const sc = document.querySelector('#r3DBody .dscroll'), pt = document.querySelector('#r3DBody .pt[data-i="4"]'), a = sc.getBoundingClientRect(), b = pt.getBoundingClientRect(); return { z: R3.z, sel: R3.port, dx: Math.abs((b.left + b.width / 2) - (a.left + a.width / 2)), dy: Math.abs((b.top + b.height / 2) - (a.top + a.height / 2)), w: a.width }; });
+  check('포트를 누르면 1.6배 이상 확대되고 그 포트가 보이는 영역 가운데에 놓임', pz.z >= 1.6 && pz.sel === 4 && pz.dx < 30 && pz.dy < 40, JSON.stringify(pz));
+  const dbox = await page.locator('#r3DBody .dscroll').boundingBox(), l0 = await page.evaluate(() => document.querySelector('#r3DBody .dscroll').scrollLeft);
+  await page.mouse.move(dbox.x + dbox.width / 2 + 100, dbox.y + 8); await page.mouse.down(); await page.mouse.move(dbox.x + dbox.width / 2 - 120, dbox.y + 8, { steps: 6 }); await page.mouse.up();
+  const l1 = await page.evaluate(() => ({ l: document.querySelector('#r3DBody .dscroll').scrollLeft, sel: R3.port }));
+  check('마우스로 끌면 확대한 그림이 옆으로 옮겨지고(스크롤 값 변화), 끈 뒤에 포트 선택이 바뀌지 않음', Math.abs(l1.l - l0) > 60 && l1.l > l0 && l1.sel === 4, JSON.stringify([l0, l1]));
+  await page.mouse.move(dbox.x + dbox.width / 2, dbox.y + 60); const z0 = await page.evaluate(() => R3.z); await page.mouse.wheel(0, -300);
+  check('휠을 올리면 더 확대됨', (await page.evaluate(() => R3.z)) > z0);
+  await page.click('#r3ZFit');
+  check('"전체 맞춤"을 누르면 배율이 100%로 돌아옴', (await page.evaluate(() => R3.z)) === 1);
   await page.click('#r3DClose');
   await page.mouse.click((await slotSpot('sup1')).x, (await slotSpot('sup1')).y);
   const sp = await page.evaluate(() => ({ slot: G.slot && G.slot.label, btn: !!document.getElementById('glSlotPorts'), box: document.getElementById('glDetail').innerText }));

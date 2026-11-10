@@ -1417,7 +1417,7 @@ function startScn(id, opts) {
 
 /* ---------- 서버실-3D 공용: 포트 배치, 장비 상세(포트·광케이블). 3D 화면 자체는 room3d.js ---------- */
 // 장비 크기: Cisco는 Nexus 7710(14U, 사진·메모로 추정), Juniper 6U·Huawei 2U와 포트 배치는 제가 만든 가상 그림입니다.
-const R3 = { dev: null, port: null };   // 장비 상세(포트·광케이블) 창의 상태
+const R3 = { dev: null, port: null, z: 1, focus: null };   // z: 확대 배율, focus: 다시 그린 뒤 화면 가운데에 놓을 위치(그림 좌표)   // 장비 상세(포트·광케이블) 창의 상태
 const RACK_U = 42, DEV_U = { cisco: 14, juniper: 6, huawei: 2 }, ROW_N = 8;   // 장비 높이는 제가 만든 가정
 const portBad = f => !f[11] && (f[2] > 50 || f[3] < -9);   // 아직 안 쓰는 회선(f[11])은 이상이 아니다
 function portPlan(d) {   // 포트를 슬롯·번호 순서대로 위치(0부터)에 놓는다. 위아래 2줄, 왼쪽부터
@@ -1459,20 +1459,43 @@ function r3DetailNow() {
   $("#r3Detail").hidden = false;
   $("#r3DBody").innerHTML = `<div class="dhd"><b>${d.id}</b>${slot ? `<span class="tag ok">칸: ${esc(slot.label)}</span><button class="btn sm" id="r3SlotAll" type="button">장비 전체 보기</button>` : ""}<span class="tag">${{ juniper: "Juniper", cisco: "Cisco", huawei: "Huawei" }[d.vendor]}</span><span class="muted">${esc(d.role)} · ${d.rack} · 입구 ${rack.temp[i].toFixed(1)}°C</span>${ledHtml(st)}<span class="muted">전원 ${st.power ? "켜짐" : "꺼짐"} · 상태 ${label[st.status]} · 팬 ${label[st.fan]}</span>${outNow ? `<span class="tag crit">전원 꺼짐${outNow.why ? ": " + esc(outNow.why) : ""}</span>` : ""}<span class="sp"></span><button class="btn" id="r3DTerm">이 장비 터미널 열기</button><button class="btn" id="r3DClose">닫기</button></div>` +
     `<p class="note">노란 선이 꽂혀 있는 광케이블(가상, 단일모드로 가정)이고 빨간 선은 광 수신이 약하거나 CRC 오류가 많은 포트입니다. 회색 포트는 아직 쓰지 않는 회선(Down)이라 케이블을 그리지 않았습니다. 위줄 포트의 케이블은 위로, 아래줄은 아래로 나갑니다. 포트를 누르면 표시됩니다.</p>` +
-    `<div class="dscroll"><div class="dwrap" style="width:${W}px;height:${H}px"><svg width="${W}" height="${H}">${svg}</svg>` +
-    `<div class="plate ${d.vendor}" style="left:0;top:${ZONE}px;width:${W}px;height:${plateH}px"><span class="pl">${d.id} · ${d.vendor === "cisco" ? "Cisco Nexus 7710 (추정)" : d.vendor === "juniper" ? "Juniper" : "Huawei"}</span></div>${plate}${tags}</div></div>` +
+    `<div class="dzoom"><button class="btn sm" id="r3ZIn" type="button">＋ 확대</button><button class="btn sm" id="r3ZOut" type="button">－ 축소</button><button class="btn sm" id="r3ZFit" type="button">전체 맞춤</button><span class="muted">포트를 누르면 가운데로 확대됩니다. 마우스로 끌어서 옮기고, 휠로 확대·축소합니다. (${Math.round(R3.z * 100)}%)</span></div>` +
+    `<div class="dscroll"><div class="dsizer${R3.z > 1 ? " pad" : ""}" style="width:${W * R3.z}px;height:${H * R3.z}px"><div class="dwrap" style="width:${W}px;height:${H}px;transform:scale(${R3.z});transform-origin:0 0"><svg width="${W}" height="${H}">${svg}</svg>` +
+    `<div class="plate ${d.vendor}" style="left:0;top:${ZONE}px;width:${W}px;height:${plateH}px"><span class="pl">${d.id} · ${d.vendor === "cisco" ? "Cisco Nexus 7710 (추정)" : d.vendor === "juniper" ? "Juniper" : "Huawei"}</span></div>${plate}${tags}</div></div></div>` +
     `<div class="card" style="padding:0;margin-top:10px;max-height:240px;overflow:auto"><table><tr><th>포트</th><th>연결 상대</th><th>종류</th><th class="n">Gbps</th><th class="n">수신 dBm</th><th class="n">CRC</th><th>상태</th></tr>${rows || `<tr><td colspan="6" class="muted">연결된 포트가 없습니다.</td></tr>`}</table></div>`;
-  if (slot) { const sc = document.querySelector("#r3DBody .dscroll"); if (sc) sc.scrollLeft = Math.max(0, pos(slot.a).x - 60); }   // 고른 칸이 보이도록 옆으로 옮긴다
+  const sc = document.querySelector("#r3DBody .dscroll");
+  if (sc) {
+    if (R3.focus) { const o = r3Origin(sc); sc.scrollLeft = o.x + R3.focus.x * R3.z - sc.clientWidth / 2; sc.scrollTop = o.y + R3.focus.y * R3.z - sc.clientHeight / 2; R3.focus = null; }   // 고른 포트를 가운데에
+    else if (slot) sc.scrollLeft = Math.max(0, pos(slot.a).x * R3.z - 60);   // 고른 칸이 보이도록 옆으로 옮긴다
+  }
+  R3.pos = pos;
 }
-function r3Open(id, slot) { R3.dev = id; R3.port = null; R3.slot = slot && slot.ports ? { a: slot.ports[0], b: slot.ports[1], label: slot.label } : null; r3Detail(); }
+function r3Origin(sc) {   // 그림 왼쪽 위 모서리가 스크롤 영역 안에서 있는 위치 (확대하면 양옆에 빈 칸을 둬서 가장자리 포트도 가운데로 올 수 있다)
+  const a = sc.getBoundingClientRect(), b = sc.querySelector(".dwrap").getBoundingClientRect(); return { x: b.left - a.left + sc.scrollLeft, y: b.top - a.top + sc.scrollTop };
+}
+function r3Zoom(nz, fx, fy) {   // 배율을 바꾸고 (fx, fy: 그림 좌표)가 화면 가운데에 오게 다시 그린다
+  R3.z = Math.min(3, Math.max(0.5, nz)); if (fx != null) R3.focus = { x: fx, y: fy }; r3Detail();
+}
+function r3Open(id, slot) { R3.dev = id; R3.port = null; R3.z = 1; R3.focus = null; R3.slot = slot && slot.ports ? { a: slot.ports[0], b: slot.ports[1], label: slot.label } : null; r3Detail(); }
 function r3Close() { R3.dev = null; $("#r3Detail").hidden = true; }
 (function initDetailModal() {   // 장비 상세(포트·광케이블) 창의 버튼
   $("#r3Detail").addEventListener("click", ev => {
     if (ev.target.id === "r3Detail" || ev.target.id === "r3DClose") { r3Close(); return; }
     if (ev.target.id === "r3DTerm") { openDeviceTerminal(R3.dev); return; }
     if (ev.target.id === "r3SlotAll") { R3.slot = null; R3.port = null; r3Detail(); return; }
-    const pt = ev.target.closest("[data-i]"); if (pt) { R3.port = +pt.dataset.i; r3Detail(); }
+    if (ev.target.id === "r3ZIn" || ev.target.id === "r3ZOut") { const sc = document.querySelector("#r3DBody .dscroll"); { const o = r3Origin(sc); r3Zoom(R3.z * (ev.target.id === "r3ZIn" ? 1.3 : 1 / 1.3), (sc.scrollLeft + sc.clientWidth / 2 - o.x) / R3.z, (sc.scrollTop + sc.clientHeight / 2 - o.y) / R3.z); }; return; }
+    if (ev.target.id === "r3ZFit") { R3.z = 1; R3.focus = null; r3Detail(); const sc = document.querySelector("#r3DBody .dscroll"); if (sc) { sc.scrollLeft = 0; sc.scrollTop = 0; } return; }
+    if (R3.dragged) { R3.dragged = false; return; }   // 끌어서 옮긴 직후의 클릭은 포트 선택이 아니다
+    const pt = ev.target.closest("[data-i]"); if (pt) {
+      const k = +pt.dataset.i; R3.port = k; const p = R3.pos(k);
+      if (pt.closest(".dwrap")) r3Zoom(Math.max(R3.z, 1.6), p.x, p.y + 10); else r3Detail();   // 포트를 누르면 가운데로 확대
+    }
   });
+  const dv = $("#r3Detail"); let drag = null;
+  dv.addEventListener("pointerdown", ev => { const sc = ev.target.closest(".dscroll"); if (!sc || ev.button !== 0) return; drag = { sc, x: ev.clientX, y: ev.clientY, l: sc.scrollLeft, t: sc.scrollTop, moved: false }; });
+  window.addEventListener("pointermove", ev => { if (!drag) return; const dx = ev.clientX - drag.x, dy = ev.clientY - drag.y; if (!drag.moved && Math.hypot(dx, dy) < 5) return; drag.moved = true; drag.sc.classList.add("grab"); drag.sc.scrollLeft = drag.l - dx; drag.sc.scrollTop = drag.t - dy; });
+  window.addEventListener("pointerup", () => { if (drag) { if (drag.moved) { R3.dragged = true; setTimeout(() => { R3.dragged = false; }, 0); } drag.sc.classList.remove("grab"); drag = null; } });
+  dv.addEventListener("wheel", ev => { const sc = ev.target.closest(".dscroll"); if (!sc) return; ev.preventDefault(); const r = sc.getBoundingClientRect(), z = R3.z, o = r3Origin(sc), fx = (sc.scrollLeft + ev.clientX - r.left - o.x) / z, fy = (sc.scrollTop + ev.clientY - r.top - o.y) / z; const nz = Math.min(3, Math.max(0.5, z * (ev.deltaY < 0 ? 1.15 : 1 / 1.15))); R3.z = nz; r3Detail(); const s2 = document.querySelector("#r3DBody .dscroll"); if (s2) { const o2 = r3Origin(s2); s2.scrollLeft = o2.x + fx * nz - (ev.clientX - r.left); s2.scrollTop = o2.y + fy * nz - (ev.clientY - r.top); } }, { passive: false });
   window.addEventListener("keydown", e => { if (e.key === "Escape" && R3.dev) r3Close(); });
 })();
 

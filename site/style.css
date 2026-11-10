@@ -206,8 +206,12 @@ body.popup #centerBar{display:none}
 .r3panel{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;width:min(1100px,100%)}
 .dhd{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px}
 .dhd b{font:700 17px var(--mono)}
-.dscroll{overflow:auto;background:#05080b;border:1px solid var(--line)}
-.dwrap{position:relative;margin:0 auto}
+.dscroll{overflow:auto;background:#05080b;border:1px solid var(--line);max-height:min(66vh,560px);cursor:grab;user-select:none;touch-action:none}
+.dscroll.grab{cursor:grabbing}
+.dsizer{margin:0 auto;box-sizing:content-box}
+.dsizer.pad{margin:0;padding:12% 40%}
+.dzoom{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:6px 0}
+.dwrap{position:relative;margin:0}
 .dwrap svg{position:absolute;left:0;top:0;pointer-events:none}
 .plate{position:absolute;background:linear-gradient(#b4bcc3,#8e979f);border:2px solid #2a3138;border-radius:3px}
 .plate.cisco{background:linear-gradient(#bcc3c9,#98a0a7)}
