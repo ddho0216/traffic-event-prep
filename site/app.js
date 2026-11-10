@@ -448,27 +448,35 @@ function evBaseline(l, ev) {
   const s = idxOf(parseT(ev.start)), e = idxOf(parseT(ev.end)), len = e - s, off = s % PER_DAY;
   const evDays = new Set(DATA.events.flatMap(x => [Math.floor(idxOf(parseT(x.start)) / PER_DAY), Math.floor(idxOf(parseT(x.end)) / PER_DAY)]));
   const vals = [];
-  for (let d = 0; d * PER_DAY + off + len < N; d++) {
+  const evDay = Math.floor(s / PER_DAY);   // 그때(이벤트 전날)까지 가진 데이터만 쓴다: 이벤트 이후 날짜는 그때는 몰랐던 값이라 뺀다
+  for (let d = 0; d * PER_DAY + off + len < N && d < evDay; d++) {
     if (evDays.has(d)) continue;
     let m = 0; for (let k = 0; k <= len; k++) m = Math.max(m, l.out[d * PER_DAY + off + k]);
     vals.push(m);
   }
+  return vals.length ? median(vals) : evBaselineAll(l, ev);
+}
+function evBaselineAll(l, ev) {   // 이벤트 앞에 쓸 날이 없을 때만: 전체 데이터에서 계산 (이전 방식)
+  const s = idxOf(parseT(ev.start)), e = idxOf(parseT(ev.end)), len = e - s, off = s % PER_DAY, vals = [];
+  const evDays = new Set(DATA.events.flatMap(x => [Math.floor(idxOf(parseT(x.start)) / PER_DAY), Math.floor(idxOf(parseT(x.end)) / PER_DAY)]));
+  for (let d = 0; d * PER_DAY + off + len < N; d++) { if (evDays.has(d)) continue; let m = 0; for (let k = 0; k <= len; k++) m = Math.max(m, l.out[d * PER_DAY + off + k]); vals.push(m); }
   return median(vals);
 }
-function refPeak(l) {   // 평소 하루 최대 out의 중앙값 (경기 있는 날 제외)
-  if (!REF[l.id]) {
+function refPeak(l, until) {   // 평소 하루 최대 out의 중앙값 (이벤트 있는 날 제외). until이 있으면 그 날짜(0부터 센 날 번호) 전날까지만
+  const key = until == null ? l.id : `${l.id}|${until}`;
+  if (!REF[key]) {
     const evDays = new Set(DATA.events.flatMap(x => [Math.floor(idxOf(parseT(x.start)) / PER_DAY), Math.floor(idxOf(parseT(x.end)) / PER_DAY)]));
     const v = [];
-    for (let d = 0; (d + 1) * PER_DAY <= N; d++) { if (evDays.has(d)) continue; let m = 0; for (let k = 0; k < PER_DAY; k++) m = Math.max(m, l.out[d * PER_DAY + k]); v.push(m); }
-    REF[l.id] = median(v);
+    for (let d = 0; (d + 1) * PER_DAY <= N && (until == null || d < until); d++) { if (evDays.has(d)) continue; let m = 0; for (let k = 0; k < PER_DAY; k++) m = Math.max(m, l.out[d * PER_DAY + k]); v.push(m); }
+    REF[key] = v.length ? median(v) : refPeak(l);
   }
-  return REF[l.id];
+  return REF[key];
 }
 function evCalc(ev) {
   const s = idxOf(parseT(ev.start)), e = idxOf(parseT(ev.end));
   const rows = LINKS.map(l => {
     const base = evBaseline(l, ev), f = ev.links.includes(l.id) ? ev.expected : 1;
-    const exp = base + (f > 1 ? refPeak(l) * (f - 1) : 0), util = exp / l.cap;
+    const exp = base + (f > 1 ? refPeak(l, Math.floor(s / PER_DAY)) * (f - 1) : 0), util = exp / l.cap;
     let act = 0; for (let i = s; i <= e; i++) act = Math.max(act, l.out[i]);
     return { l, base, f, exp, util, act, level: util >= MOVE_LIMIT ? "crit" : util >= WATCH ? "warn" : "ok" };
   });
@@ -510,7 +518,8 @@ function renderEvList() {
 }
 function renderEvent() {
   const ev = DATA.events[$("#evSel").selectedIndex], calc = evCalc(ev);
-  $("#evInfo").textContent = `${md(msOf(calc.s))} ~ ${hm(msOf(calc.e))} · 예상 배율 ×${ev.expected} (${ev.links.join(", ")})`;
+  const evDay = Math.floor(calc.s / PER_DAY);
+  $("#evInfo").textContent = `${md(msOf(calc.s))} ~ ${hm(msOf(calc.e))} · 예상 배율 ×${ev.expected} (${ev.links.join(", ")}) · 그때 가진 데이터: ${ymdhm(T0).slice(5, 10).replace("-", "/")} ~ ${ymdhm(msOf(evDay * PER_DAY - 1)).slice(5, 10).replace("-", "/")} (${evDay}일치, 이 이벤트 전날까지만 사용)`;
   const lv = { crit: ["분산 필요", "crit"], warn: ["주의", "warn"], ok: ["정상", "ok"] };
   $("#evPlan").innerHTML = `<tr><th>링크</th><th class="n">평소 최대</th><th class="n">배율</th><th class="n">예상 최대</th><th class="n">용량</th><th class="n">예상 사용률</th><th>판정</th></tr>` +
     calc.rows.map(r => `<tr><td>${r.l.id} <span class="muted">${esc(r.l.desc)}</span></td><td class="n">${r.base.toFixed(1)}</td><td class="n">${r.f === 1 ? "-" : "×" + r.f}</td><td class="n">${r.exp.toFixed(1)}</td><td class="n">${r.l.cap}</td><td class="n">${(r.util * 100).toFixed(0)}%</td><td><span class="tag ${lv[r.level][1]}">${lv[r.level][0]}</span></td></tr>`).join("");

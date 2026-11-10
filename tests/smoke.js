@@ -344,6 +344,22 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('#evReportPhone');
   check('이벤트 대비 탭에서도 "휴대폰에서 보기"가 됨', await page.evaluate(() => !document.getElementById('phone').hidden));
   await page.click('#phoneClose');
+  // 사전 계획은 이벤트 전날까지의 데이터만 쓴다 (그때의 대비를 그대로 보여 주려고)
+  await goTab('event');
+  const asof = await page.evaluate(() => {
+    const out = [];
+    for (const nm of ['개회식', '축구 결승']) {
+      const ev = DATA.events.find(e => e.name === nm), l = LINKS.find(x => x.id === 'IDC_B_FS1_UP1'), s = idxOf(parseT(ev.start)), e = idxOf(parseT(ev.end)), len = e - s, off = s % PER_DAY, day = Math.floor(s / PER_DAY);
+      const evDays = new Set(DATA.events.flatMap(x => [Math.floor(idxOf(parseT(x.start)) / PER_DAY), Math.floor(idxOf(parseT(x.end)) / PER_DAY)]));
+      const v = []; for (let d = 0; d < day; d++) { if (evDays.has(d)) continue; let m = 0; for (let k = 0; k <= len; k++) m = Math.max(m, l.out[d * PER_DAY + off + k]); v.push(m); }
+      const mid = median(v);   // 앱이 쓰는 중앙값 함수
+      out.push({ nm, days: v.length, want: mid, got: evCalc(ev).rows.find(r => r.l.id === l.id).base });
+    }
+    return out;
+  });
+  check('사전 계획의 "평소 최대"는 이벤트 전날까지의 데이터로만 계산됨 (개회식은 9/10~9/18 안의 날, 결승은 그 전날까지)', asof.every(x => Math.abs(x.want - x.got) < 1e-9) && asof[0].days >= 8, JSON.stringify(asof));
+  await page.selectOption('#evSel', { index: 0 });
+  check('이벤트 정보 줄에 "그때 가진 데이터: 09/10 ~ 09/18 (9일치, 이 이벤트 전날까지만 사용)"이 보임', (await page.locator('#evInfo').innerText()).includes('그때 가진 데이터: 09/10 ~ 09/18 (9일치, 이 이벤트 전날까지만 사용)'));
   const vis = {};
   for (const tab of ['monitor', 'room', 'room3d', 'term', 'event', 'monthly', 'visit', 'sms', 'gear', 'live']) { await goTab(tab); vis[tab] = await page.locator('#centerBar').isVisible(); }
   check('센터 선택은 관제·서버실에서만 보이고 나머지 탭에서는 숨겨짐', vis.monitor && vis.room && vis.room3d && !vis.term && !vis.event && !vis.monthly && !vis.visit && !vis.sms && !vis.gear && !vis.live, JSON.stringify(vis));
