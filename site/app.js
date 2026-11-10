@@ -493,26 +493,33 @@ function renderEvReport() {   // 이벤트 보고 문자: 장비·고객 데이�
   try { $("#evReport").value = REPORT.event(DATA.events[$("#evSel").selectedIndex]); } catch (e) { /* 준비 전 */ }
 }
 const euro = w => { const c = w.charCodeAt(w.length - 1) - 0xAC00; if (c < 0 || c > 11171) return "로"; const f = c % 28; return f === 0 || f === 8 ? "로" : "으로"; };   // 받침이 있으면 "으로" (ㄹ 받침과 받침 없음은 "로")
-function evNoticeText(ev, calc) {
+function evNoticeList(ev, calc) {   // 고객사마다 따로 보내는 통보문 [{ name, text }]
   const when = `${md(msOf(calc.s)).split(" ")[0]} ${hm(msOf(calc.s))}~${hm(msOf(calc.e))}`;
-  if (!calc.moves.length) return `분산이 필요한 링크가 없습니다. (예상 사용률 ${Math.round(MOVE_LIMIT * 100)}% 미만)\n사전 통보는 필요 없고, 당일 모니터링만 진행합니다.`;
-  const blocks = CUSTOMERS.map(c => {
+  if (!calc.moves.length) return [{ name: "", text: `분산이 필요한 링크가 없습니다. (예상 사용률 ${Math.round(MOVE_LIMIT * 100)}% 미만)\n사전 통보는 필요 없고, 당일 모니터링만 진행합니다.` }];
+  return CUSTOMERS.map(c => {
     const mine = calc.moves.filter(m => c.links.includes(m.r.l.id)); if (!mine.length) return null;
     const lines = mine.map(m => {
       const to = m.best ? `${m.best.c.l.id}${CENTER(m.best.c.l.id) !== CENTER(m.r.l.id) ? " (" + CENTER(m.best.c.l.id) + ", 협의 후 진행)" : ""}` : "(여유 회선 없음, 별도 협의)";
       return `- ${m.r.l.id}: 예상 최대 ${m.r.exp.toFixed(0)}Gbps (용량 대비 ${(m.r.util * 100).toFixed(0)}%)\n  조치: 해당 시간대 일부(약 ${Math.max(1, Math.ceil(m.need))}Gbps)를 ${to}로 보내겠습니다.`;
     }).join("\n");
-    return `제목: [${COMPANY}] ${when} ${ev.name} 대비 트래픽 분산 안내\n\n${c.name} 담당자님, 안녕하세요.\n${when} ${ev.name}${euro(ev.name)} 트래픽 증가가 예상되어 미리 안내드립니다.\n\n${lines}\n\n서비스 중단 없이 진행할 예정이며, 종료 후 원복하고 결과를 안내드리겠습니다.\n문의는 관제 담당에게 연락 주세요. (가상 고객사 · 가상 센터)`;
+    return { name: c.name, text: `안녕하십니까 ${COMPANY} 담당자 ㅇㅇㅇ입니다.\n${c.name} 이용 회선에서 ${when} ${ev.name}${euro(ev.name)} 트래픽 증가가 예상되어 미리 안내드립니다.\n\n${lines}\n\n서비스 중단 없이 진행할 예정이며, 종료 후 원복하고 결과를 안내드리겠습니다.\n추가로 필요한 사항이 있을시 회신 부탁드립니다.\n감사합니다.` };
   }).filter(Boolean);
-  return blocks.join("\n\n--------------------------------\n\n");
+}
+function evNoticeText(ev, calc) { return evNoticeList(ev, calc).map(x => x.text).join("\n\n--------------------------------\n\n"); }   // 한 번에 모아 볼 때(시나리오 안내 등)만 쓴다
+let evNoticeSel = 0;
+function renderEvNotice(ev, calc) {   // 고객사 버튼 + 고른 고객사 통보문 한 통만 보여 준다
+  const list = evNoticeList(ev, calc); evNoticeSel = Math.min(evNoticeSel, list.length - 1);
+  $("#evNoticeTabs").hidden = list.length < 2 || !list[0].name;
+  $("#evNoticeTabs").innerHTML = list.map((x, i) => `<button class="btn${i === evNoticeSel ? " primary" : ""}" data-n="${i}" type="button">${esc(x.name)}</button>`).join("");
+  $("#evNotice").value = list[evNoticeSel].text;
+  $("#evCopy").textContent = list[evNoticeSel].name ? `${list[evNoticeSel].name} 통보문 복사` : "통보문 복사";
 }
 function renderEvList() {
   const sel = $("#evSel").selectedIndex;
-  $("#evList").innerHTML = `<tr><th>이벤트</th><th>시작</th><th>시간대</th><th class="n">예상 배율</th><th>분산 필요 링크</th><th class="n">실제 최대 사용률</th><th>사후 판정</th></tr>` +
+  $("#evList").innerHTML = `<tr><th>이벤트</th><th>시작</th><th class="c">예상 배율</th><th>분산 필요 링크</th><th class="c">실제 최대 사용률</th><th class="c">사후 판정</th></tr>` +
     DATA.events.map((ev, i) => {
       const c = evCalc(ev), top = c.rows.filter(r => r.f !== 1).sort((a, b) => b.act / b.l.cap - a.act / a.l.cap)[0], u = top.act / top.l.cap * 100;
-      const hr = +hm(msOf(c.s)).slice(0, 2), slot = hr < 6 ? "새벽" : "저녁";
-      return `<tr class="click ${i === sel ? "sel" : ""}" data-i="${i}"><td>${esc(ev.name)}</td><td>${md(msOf(c.s))}</td><td>${slot}</td><td class="n">×${ev.expected}</td><td>${c.moves.map(m => m.r.l.id).join(", ") || "-"}</td><td class="n">${u.toFixed(0)}% (${top.l.id})</td><td>${u >= 80 ? '<span class="tag crit">경고선 초과</span>' : u >= 70 ? '<span class="tag warn">주의</span>' : '<span class="tag ok">여유</span>'}</td></tr>`;
+      return `<tr class="click ${i === sel ? "sel" : ""}" data-i="${i}"><td>${esc(ev.name)}</td><td>${md(msOf(c.s))}</td><td class="c">×${ev.expected}</td><td>${c.moves.map(m => m.r.l.id).join(", ") || "-"}</td><td class="c">${u.toFixed(0)}% (${top.l.id})</td><td class="c">${u >= 80 ? '<span class="tag crit">경고선 초과</span>' : u >= 70 ? '<span class="tag warn">주의</span>' : '<span class="tag ok">여유</span>'}</td></tr>`;
     }).join("");
 }
 function renderEvent() {
@@ -522,10 +529,10 @@ function renderEvent() {
   const lv = { crit: ["분산 필요", "crit"], warn: ["주의", "warn"], ok: ["정상", "ok"] };
   $("#evPlan").innerHTML = `<tr><th>링크</th><th class="n">평소 최대</th><th class="n">배율</th><th class="n">예상 최대</th><th class="n">용량</th><th class="n">예상 사용률</th><th>판정</th></tr>` +
     calc.rows.map(r => `<tr><td>${r.l.id} <span class="muted">${esc(r.l.desc)}</span></td><td class="n">${r.base.toFixed(1)}</td><td class="n">${r.f === 1 ? "-" : "×" + r.f}</td><td class="n">${r.exp.toFixed(1)}</td><td class="n">${r.l.cap}</td><td class="n">${(r.util * 100).toFixed(0)}%</td><td><span class="tag ${lv[r.level][1]}">${lv[r.level][0]}</span></td></tr>`).join("");
-  $("#evMove").innerHTML = `<div class="note">기준: 예상 사용률 ${Math.round(MOVE_LIMIT * 100)}% 이상이면 미리 분산 (경고선 80%에 여유를 둠). 분산 후 목표 ${Math.round(TARGET * 100)}% 이하.</div>` +
+  $("#evMove").innerHTML = `<div class="note">이 이벤트에서 <b>어느 회선의 트래픽을 얼마나, 어디로 옮기기로 했는지</b>를 보여 줍니다. 예상 사용률이 ${Math.round(MOVE_LIMIT * 100)}% 이상인 회선은 경고선(80%)에 닿기 전에 미리 일부를 덜어 내고, 덜어 낸 뒤 ${Math.round(TARGET * 100)}% 이하가 되게 합니다. 옮길 후보는 같은 센터의 여유 있는 회선을 먼저 보고, 다른 센터면 협의가 필요하다고 표시합니다.</div>` +
     (calc.moves.length ? calc.moves.map(m => `<p><b>${m.r.l.id}</b>: 예상 ${m.r.exp.toFixed(0)}G → 약 <b>${Math.max(1, Math.ceil(m.need))}G</b> 덜어내기. ` +
       (m.best ? `후보 <b>${m.best.c.l.id}</b> (${CENTER(m.best.c.l.id)}, 여유 약 ${m.best.spare.toFixed(0)}G) ${m.ok ? '<span class="tag ok">가능</span>' : '<span class="tag warn">여유 부족</span>'}${CENTER(m.best.c.l.id) !== CENTER(m.r.l.id) ? ' <span class="muted">다른 센터라 협의 필요</span>' : ""}` : '<span class="tag crit">후보 없음</span> 증설·서비스 협의 필요') + "</p>").join("") : "<p>분산이 필요한 링크가 없습니다.</p>");
-  $("#evNotice").value = evNoticeText(ev, calc);
+  renderEvNotice(ev, calc);
   renderEvReport();
   $("#evPost").innerHTML = `<tr><th>링크</th><th class="n">예상 최대</th><th class="n">실제 최대</th><th class="n">차이</th><th class="n">실제 사용률</th><th>비고</th></tr>` +
     calc.rows.filter(r => r.f !== 1).map(r => {
@@ -538,14 +545,57 @@ function renderEvent() {
   renderEvList();
   $("#evCheck").innerHTML = CHECK_ITEMS.map((t, i) => `<label class="chk" style="display:flex;margin:4px 0"><input type="checkbox" data-i="${i}" ${done.has(i) ? "checked" : ""}> ${t}</label>`).join("");
 }
+/* 당일 모니터링 슬라이드: 그날 관제 화면을 어떻게 맞춰 놓고 무엇을 봤는지 (관제 탭은 건드리지 않고 따로 띄운다) */
+const EVMON = { i: 0 };
+function evMonSlides(ev) {
+  const c = evCalc(ev), s = c.s, e = c.e, win = 36, endI = s + 25, fromI = endI - win + 1;
+  const watch = c.rows.filter(r => r.f !== 1 || r.level !== "ok").sort((a, b) => b.util - a.util).slice(0, 6);
+  const top = c.rows.filter(r => r.f !== 1).sort((a, b) => b.util - a.util)[0] || c.rows[0];
+  const chart = (r) => {
+    const W = 640, H = 190, L = 38, B = 20, T = 8, R = 8, a = s - 24, z = e + 12, cap = r.l.cap, n = z - a;
+    const x = i => L + (W - L - R) * (i - a) / n, y = v => T + (H - T - B) * (1 - Math.min(v, cap) / cap);
+    let g = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${r.l.id} 이벤트 시간대 그래프">`;
+    g += `<rect x="${x(s)}" y="${T}" width="${x(e) - x(s)}" height="${H - T - B}" fill="#59b4f5" opacity=".12"/>`;
+    for (const v of [0, cap / 2, cap]) g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="#26323d"/><text x="${L - 4}" y="${y(v) + 3}" fill="#7b8a98" font-size="10" text-anchor="end">${Math.round(v)}</text>`;
+    g += `<line x1="${L}" x2="${W - R}" y1="${y(cap * 0.8)}" y2="${y(cap * 0.8)}" stroke="#e5604d" stroke-dasharray="4 3"/><text x="${W - R}" y="${y(cap * 0.8) - 3}" fill="#e5604d" font-size="10" text-anchor="end">경고선 80%</text>`;
+    g += `<line x1="${L}" x2="${W - R}" y1="${y(r.exp)}" y2="${y(r.exp)}" stroke="#d9b13b" stroke-dasharray="2 3"/><text x="${L + 4}" y="${y(r.exp) - 3}" fill="#d9b13b" font-size="10">예상 최대 ${r.exp.toFixed(0)}G</text>`;
+    const pts = []; for (let i = a; i <= z; i++) pts.push(`${x(i)},${y(r.l.out[i])}`);
+    g += `<polyline fill="none" stroke="#4db6ac" stroke-width="1.8" points="${pts.join(" ")}"/>`;
+    for (const i of [a, s, e, z]) g += `<text x="${x(i)}" y="${H - 4}" fill="#7b8a98" font-size="10" text-anchor="${i === a ? "start" : i === z ? "end" : "middle"}">${hm(msOf(i))}</text>`;
+    return g + "</svg>";
+  };
+  const peakAt = r => { let m = s; for (let i = s; i <= e; i++) if (r.l.out[i] > r.l.out[m]) m = i; return m; };
+  const marks = (ev.marks || []).map(m => `${{ hydration: "쉬는 시간(하이드레이션)", halftime: "하프타임" }[m.k] || m.k} ${hm(msOf(s) + m.a * 60000)}~${hm(msOf(s) + m.b * 60000)}`);
+  return [
+    { t: "1. 관제 화면을 이렇게 맞췄습니다", h: `<p>관제 탭에서 아래처럼 맞춰 놓고 봤습니다.</p><table class="evm-tbl"><tr><td>보는 시간 창</td><td>${win * 5 / 60}시간 (${md(msOf(fromI))} ~ ${hm(msOf(endI))})</td></tr><tr><td>이벤트 시간</td><td>${md(msOf(s))} ~ ${hm(msOf(e))} (${esc(ev.name)})</td></tr><tr><td>눈금(Y축)</td><td>회선 용량 기준이라 80% 경고선이 그래프 위쪽에 보임</td></tr><tr><td>같이 본 선</td><td>어제 같은 시각(점선)과 80% 경고선</td></tr></table><p class="muted">관제 화면 자체는 평소와 같고, 이 슬라이드는 그날의 설정과 본 것을 정리한 것입니다.</p>` },
+    { t: "2. 어느 회선을 봤나", h: `<p>예상 사용률이 높은 순서입니다. 이 회선들을 먼저 확인했습니다.</p><table class="evm-tbl"><tr><th>회선</th><th class="n">예상 최대</th><th class="n">용량</th><th class="n">예상 사용률</th><th>판정</th></tr>${watch.map(r => `<tr><td>${r.l.id}</td><td class="n">${r.exp.toFixed(0)}G</td><td class="n">${r.l.cap}G</td><td class="n">${(r.util * 100).toFixed(0)}%</td><td>${{ crit: "분산 필요", warn: "주의", ok: "정상" }[r.level]}</td></tr>`).join("")}</table>` },
+    { t: `3. 그래프에서 이렇게 봤습니다 (${top.l.id})`, h: `${chart(top)}<p class="muted">파란 칸이 이벤트 시간, 노란 점선이 사전에 계산한 예상 최대, 빨간 점선이 경고선(80%)입니다. 초록 선이 실제 값입니다.</p>` },
+    { t: "4. 확인 간격과 기준", h: `<ul><li>이벤트 중 <b>30분마다</b> 사용률을 확인했습니다.</li><li>예상 사용률 ${Math.round(MOVE_LIMIT * 100)}% 이상이면 미리 분산, 경고선 80%에 닿으면 바로 조치하고 고객사에 연락합니다.</li>${marks.length ? `<li>이 이벤트의 값이 잠깐 내려가는 구간: ${marks.join(", ")}. 장애로 오해하지 않도록 미리 알고 봅니다.</li>` : "<li>이 이벤트에는 값이 잠깐 내려가는 쉬는 구간이 없습니다.</li>"}<li>이상이 있으면 조장에게 전달하고 기록을 남깁니다.</li></ul>` },
+    { t: "5. 실제로 이렇게 나왔습니다", h: `<table class="evm-tbl"><tr><th>회선</th><th class="n">예상</th><th class="n">실제 최대</th><th>최대 시각</th><th class="n">사용률</th></tr>${c.rows.filter(r => r.f !== 1).map(r => `<tr><td>${r.l.id}</td><td class="n">${r.exp.toFixed(0)}G</td><td class="n">${r.act.toFixed(0)}G</td><td>${hm(msOf(peakAt(r)))}</td><td class="n">${(r.act / r.l.cap * 100).toFixed(0)}%${r.act / r.l.cap >= 0.8 ? " ⚠" : ""}</td></tr>`).join("")}</table><p class="muted">분산 조치 전 가상 데이터 기준입니다. 자세한 비교와 다음에 바꿀 점은 아래 "사후 정리"에 있습니다.</p>` },
+    { t: "6. 끝난 뒤에 할 일", h: `<ul><li>분산했던 트래픽을 원래대로 돌렸는지 확인합니다 (원복).</li><li>이벤트 최대 트래픽 보고 문자를 보냅니다 (아래 "이벤트 최대 트래픽 보고 문자").</li><li>사후 정리에 예상과 실제의 차이, 놓친 점, 다음에 달리할 점을 적습니다.</li></ul>` }
+  ];
+}
+function openEvMon(i) {
+  const ev = DATA.events[$("#evSel").selectedIndex], sl = evMonSlides(ev);
+  EVMON.i = Math.max(0, Math.min(sl.length - 1, i));
+  $("#evMonTitle").textContent = `당일 모니터링 · ${ev.name}`; $("#evMonStep").textContent = `${EVMON.i + 1} / ${sl.length}`;
+  $("#evMonBody").innerHTML = `<h4>${esc(sl[EVMON.i].t)}</h4>${sl[EVMON.i].h}`;
+  $("#evMonPrev").disabled = EVMON.i === 0; $("#evMonNext").disabled = EVMON.i === sl.length - 1;
+  $("#evMon").hidden = false;
+}
 (function initEvent() {
+  $("#evMonPrev").onclick = () => openEvMon(EVMON.i - 1); $("#evMonNext").onclick = () => openEvMon(EVMON.i + 1);
+  $("#evMonClose").onclick = () => { $("#evMon").hidden = true; };
+  $("#evMon").addEventListener("click", e => { if (e.target.id === "evMon") $("#evMon").hidden = true; });
+  document.addEventListener("keydown", e => { if (!$("#evMon").hidden) { if (e.key === "Escape") $("#evMon").hidden = true; else if (e.key === "ArrowRight") openEvMon(EVMON.i + 1); else if (e.key === "ArrowLeft") openEvMon(EVMON.i - 1); } });
   $("#evSel").innerHTML = DATA.events.map(e => `<option>${e.name} (${md(parseT(e.start))})</option>`).join("");
-  $("#evList").addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { $("#evSel").selectedIndex = +tr.dataset.i; renderEvent(); } });
-  $("#evSel").onchange = renderEvent;
+  $("#evList").addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { $("#evSel").selectedIndex = +tr.dataset.i; evNoticeSel = 0; renderEvent(); } });
+  $("#evSel").onchange = () => { evNoticeSel = 0; renderEvent(); };
+  $("#evNoticeTabs").addEventListener("click", e => { const b = e.target.closest("[data-n]"); if (b) { evNoticeSel = +b.dataset.n; const ev = DATA.events[$("#evSel").selectedIndex]; renderEvNotice(ev, evCalc(ev)); } });
   $("#evReportPhone").onclick = () => { const ev = DATA.events[$("#evSel").selectedIndex]; openPhone($("#evReport").value, hm(parseT(ev.end) + 40 * 60000)); };
   $("#evReportCopy").onclick = async () => { try { await navigator.clipboard.writeText($("#evReport").value); $("#evReportMsg").textContent = "복사했습니다"; } catch (e) { $("#evReport").select(); $("#evReportMsg").textContent = "선택했습니다. Ctrl+C로 복사하세요"; } };
   $("#evCopy").onclick = () => copyText($("#evNotice").value, $("#evCopy"));
-  $("#evGo").onclick = () => { const ev = DATA.events[$("#evSel").selectedIndex]; state.win = 36; state.end = idxOf(parseT(ev.start)) + 25; showTab("monitor"); };
+  $("#evGo").onclick = () => openEvMon(0);
   $("#evCheck").addEventListener("change", e => {
     const ev = DATA.events[$("#evSel").selectedIndex];
     const set = new Set(store.get("chk:" + ev.id, [])); e.target.checked ? set.add(+e.target.dataset.i) : set.delete(+e.target.dataset.i);

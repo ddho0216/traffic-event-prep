@@ -370,6 +370,27 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('#evReportPhone');
   check('이벤트 대비 탭에서도 "휴대폰에서 보기"가 됨', await page.evaluate(() => !document.getElementById('phone').hidden));
   await page.click('#phoneClose');
+  // 이벤트 탭 정리: 일정 표, 사전 계획 용어, 통보문(고객사별 버튼·제목 없음), 당일 모니터링 슬라이드, 보고 문자 줄 간격
+  await goTab('event');
+  const evx = await page.evaluate(() => ({ heads: [...document.querySelectorAll('#evList th')].map(x => x.textContent), centered: [...document.querySelectorAll('#evList tr:nth-child(2) td.c')].length, plan: document.getElementById('evPlan').innerText }));
+  check('일정 표에 "시간대" 칸이 없고 예상 배율·실제 최대 사용률·사후 판정은 가운데 정렬', !evx.heads.includes('시간대') && evx.centered === 3 && await page.evaluate(() => getComputedStyle(document.querySelector('#evList td.c')).textAlign === 'center'), evx.heads.join());
+  check('사전 계획에는 "큰 고객사" 대신 "주요 고객사"라고 나옴', evx.plan.includes('주요 고객사') && !evx.plan.includes('큰 고객사'));
+  await page.selectOption('#evSel', { label: (await page.locator('#evSel option').allTextContents()).find(x => x.startsWith('축구 결승')) });
+  const nt = await page.evaluate(() => ({ tabs: [...document.querySelectorAll('#evNoticeTabs button')].map(b => b.textContent), text: document.getElementById('evNotice').value, copy: document.getElementById('evCopy').textContent }));
+  check('통보문은 고객사마다 버튼으로 나뉘고, 고른 고객사 한 통만 보이며(구분선 없음) 제목 줄이 없고 "안녕하십니까 TEP IDC 담당자 ㅇㅇㅇ입니다."로 시작', nt.tabs.length >= 1 && !nt.text.includes('--------') && !nt.text.includes('제목:') && nt.text.startsWith('안녕하십니까 TEP IDC 담당자 ㅇㅇㅇ입니다.') && nt.text.includes('이용 회선에서') && nt.text.endsWith('추가로 필요한 사항이 있을시 회신 부탁드립니다.\n감사합니다.') && nt.copy.includes(nt.tabs[0]), JSON.stringify([nt.tabs, nt.copy]));
+  if (nt.tabs.length > 1) { await page.click('#evNoticeTabs button >> nth=1'); const t2 = await page.inputValue('#evNotice'); check('다른 고객사 버튼을 누르면 그 고객사 통보문으로 바뀜', t2 !== nt.text && t2.includes(nt.tabs[1])); }
+  const tabBefore = await page.evaluate(() => document.querySelector('#tabs button.on').dataset.tab);
+  await page.click('#evGo');
+  const mon = await page.evaluate(() => ({ vis: !document.getElementById('evMon').hidden, tab: document.querySelector('#tabs button.on').dataset.tab, step: document.getElementById('evMonStep').textContent, svg: document.querySelectorAll('#evMonBody svg').length, title: document.getElementById('evMonTitle').textContent }));
+  check('"당일 모니터링 보기"는 관제 탭으로 가지 않고 이 화면 위에 슬라이드를 띄움 (1 / 6)', mon.vis && mon.tab === tabBefore && mon.step === '1 / 6' && mon.title.includes('당일 모니터링'), JSON.stringify(mon));
+  await page.click('#evMonNext'); await page.click('#evMonNext');
+  check('3번째 슬라이드에 그날의 그래프(예상선·경고선 포함)가 보임', (await page.locator('#evMonBody svg').count()) === 1 && (await page.locator('#evMonBody svg').innerHTML()).includes('경고선 80%') && (await page.locator('#evMonBody svg').innerHTML()).includes('예상 최대'));
+  for (let k = 0; k < 3; k++) await page.click('#evMonNext');
+  check('마지막(6/6) 슬라이드에서 "다음"이 막히고, 닫기를 누르면 닫히며 그 사이 관제 탭 설정은 그대로', (await page.locator('#evMonNext').isDisabled()) && (await page.locator('#evMonStep').innerText()) === '6 / 6');
+  await page.click('#evMonClose');
+  check('슬라이드를 닫으면 이벤트 탭 그대로 남아 있음', !(await page.evaluate(() => !document.getElementById('evMon').hidden)) && (await page.evaluate(() => document.querySelector('#tabs button.on').dataset.tab)) === tabBefore);
+  const rp = await page.inputValue('#evReport');
+  check('이벤트 보고 문자의 줄 간격: 제목 뒤 한 줄만 비우고, 백본·고객 줄은 빈 줄 없이 붙고, 섹션 사이는 한 줄, 서비스 영향·VOC는 붙어 있음', /^\[TEP IDC\]\n\[Web발신\]\n\[2026 아이치·나고야 아시안게임\][^\n]+\n\n■ 백본 트래픽\n(- [^\n]+\n)+\n■ 고객 트래픽\n(- [^\n]+\n)+\n■ 서비스 영향 : [^\n]+\n■ VOC : 없음$/.test(rp) && !rp.includes('\n\n\n'), JSON.stringify(rp));
   // 사전 계획은 이벤트 전날까지의 데이터만 쓴다 (그때의 대비를 그대로 보여 주려고)
   await goTab('event');
   const asof = await page.evaluate(() => {
@@ -680,10 +701,10 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const icons = await page.evaluate(() => [...document.querySelectorAll('link[rel~=icon], link[rel=apple-touch-icon]')].map(l => l.getAttribute('href')));
   const fsx = require('fs'), siteDir = require('path').resolve(__dirname, '../site'), png = f => fsx.readFileSync(siteDir + '/' + f).subarray(0, 8).toString('hex') === '89504e470d0a1a0a';
   check('탭 아이콘(로고): svg·32px png·아이패드용 아이콘이 연결되어 있고 파일이 올바름', icons.includes('favicon.svg') && icons.includes('favicon-32.png') && icons.includes('apple-touch-icon.png') && fsx.readFileSync(siteDir + '/favicon.svg', 'utf8').includes('<svg') && png('favicon-32.png') && png('apple-touch-icon.png'), icons.join(','));
-  const mails = await page.evaluate(() => [(ev => evNoticeText(ev, evCalc(ev)))(DATA.events.find(e => e.name === '축구 결승')), replyText(parseMail(SAMPLE_MAIL))].map(x => x.split('\n')[0]));
-  check('다른 메일 제목에도 [TEP IDC]가 붙음 (경기 사전 안내, 방문 회신)', mails.every(x => x.includes('[TEP IDC]')), mails.join(' | '));
+  const mails = await page.evaluate(() => [(ev => evNoticeList(ev, evCalc(ev))[0].text)(DATA.events.find(e => e.name === '축구 결승')), replyText(parseMail(SAMPLE_MAIL))].map(x => x.split('\n')[0]));
+  check('다른 메일에도 회사 이름이 붙음 (경기 사전 안내는 "안녕하십니까 TEP IDC 담당자", 방문 회신은 제목 [TEP IDC])', mails[0].startsWith('안녕하십니까 TEP IDC 담당자') && mails[1].includes('[TEP IDC]'), mails.join(' | '));
   const scenarios = [['calm', '평일 오후 7시', 4, ['그래프 15개 확인', '서버실 확인', '이상 없음']], ['drop', '트래픽 급감', 6, ['급감', 'IDC_B_FS2_INTL1', '광값', '예시미디어', '회복']],
-    ['redundancy', '이중화로 무사히 넘기기', 8, ['이중화', '전원 꺼짐', '트래픽은 거의 그대로', '고객 영향 없음']], ['linkDown', '업링크 회선 다운', 9, ['Admin', '트래픽(전/후)', '광값', 'ping', '연동망', '원인 확인', '회복']], ['ddos', 'DDoS 공격 수신', 10, ['DDoS', '공격량', '클린존', '블랙홀', '정상화', '해제']], ['surge', '트래픽 폭주', 7, ['사전 연락', '분산', '하이드레이션', '경고선 80%', '사후 정리', '[TEP IDC]']], ['temp', '서버실 온도 변화', 7, ['온도 경고', '빨강 깜박임', '터미널', '냉각 복구', '-40.00 dBm']]];
+    ['redundancy', '이중화로 무사히 넘기기', 8, ['이중화', '전원 꺼짐', '트래픽은 거의 그대로', '고객 영향 없음']], ['linkDown', '업링크 회선 다운', 9, ['Admin', '트래픽(전/후)', '광값', 'ping', '연동망', '원인 확인', '회복']], ['ddos', 'DDoS 공격 수신', 10, ['DDoS', '공격량', '클린존', '블랙홀', '정상화', '해제']], ['surge', '트래픽 폭주', 7, ['사전 연락', '분산', '하이드레이션', '경고선 80%', '사후 정리', 'TEP IDC']], ['temp', '서버실 온도 변화', 7, ['온도 경고', '빨강 깜박임', '터미널', '냉각 복구', '-40.00 dBm']]];
   for (const [id, name, n, words] of scenarios) {
     await goTab('monitor');
     await page.evaluate(([i]) => startScn(i, i === 'linkDown' ? { cause: 'work' } : undefined), [id]);   // 슬라이드 버전은 목록에서 뺐지만 코드는 남아 있다

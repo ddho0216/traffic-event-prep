@@ -34,7 +34,7 @@ function dgOverview(light, footer) {
   // 서초 (코어)
   b += `<rect x="250" y="90" width="700" height="250" rx="10" fill="${th.box}" stroke="${th.coreLine}" stroke-width="2"/>`;
   b += dgText(270, 120, "서초 센터 (코어 백본)", { size: 18, bold: true, fill: th.text });
-  b += dgText(270, 142, `장비 ${S.devs.length}대 (Cisco ${S.cisco} · Juniper ${S.juniper} · Huawei ${S.huawei}) · 랙 ${S.racks}개 · 고객사 ${S.cust.length}곳(큰 고객사 ${S.big})`, { size: 12.5, fill: th.sub });
+  b += dgText(270, 142, `장비 ${S.devs.length}대 (Cisco ${S.cisco} · Juniper ${S.juniper} · Huawei ${S.huawei}) · 랙 ${S.racks}개 · 고객사 ${S.cust.length}곳(주요 고객사 ${S.big})`, { size: 12.5, fill: th.sub });
   [["IDC_S_FS1", 330], ["IDC_S_FS2", 670]].forEach(([id, x]) => { b += `<g data-dev="${id}" style="cursor:pointer"><rect x="${x}" y="165" width="200" height="62" rx="6" fill="${th.core}" stroke="${th.coreLine}" stroke-width="2"/>${dgText(x + 100, 192, id, { size: 16, bold: true, fill: th.text, anchor: "middle" })}${dgText(x + 100, 214, "중앙 백본 (대형)", { size: 12, fill: th.sub, anchor: "middle" })}</g>`; });
   b += `<line x1="530" y1="190" x2="670" y2="190" stroke="${th.coreLine}" stroke-width="3"/><line x1="530" y1="204" x2="670" y2="204" stroke="${th.coreLine}" stroke-width="3"/>` + dgText(600, 182, "중앙 백본 간 400G ×2", { size: 11.5, fill: th.sub, anchor: "middle" });
   b += dgText(270, 262, "서초 센터 백본(Cisco 짝): IDC_S_FR1 · IDC_S_FR2   ↔ 중앙 백본 IDC_S_FS2 (IDC_S_FR1_UP1, 400G)", { size: 12.5, fill: th.text });
@@ -46,7 +46,7 @@ function dgOverview(light, footer) {
     const s = dgStats(c);
     b += `<rect x="${x}" y="470" width="360" height="190" rx="10" fill="${th.box}" stroke="${th.boxLine}" stroke-width="1.5"/>`;
     b += dgText(x + 16, 498, TOPOLOGY.centers[c], { size: 17, bold: true, fill: th.text });
-    b += dgText(x + 16, 520, `장비 ${s.devs.length}대 · 랙 ${s.racks}개 · 고객사 ${s.cust.length}곳(큰 고객사 ${s.big})`, { size: 12.5, fill: th.sub });
+    b += dgText(x + 16, 520, `장비 ${s.devs.length}대 · 랙 ${s.racks}개 · 고객사 ${s.cust.length}곳(주요 고객사 ${s.big})`, { size: 12.5, fill: th.sub });
     b += dgText(x + 16, 540, `Cisco ${s.cisco} · Juniper ${s.juniper} · Huawei ${s.huawei}`, { size: 12.5, fill: th.sub });
     const h1 = DG_HUB[c];
     [[h1, 0], [dgPartner(h1), 1]].forEach(([id, k]) => { const bx = x + 16 + k * 168; b += `<g data-dev="${id}" style="cursor:pointer"><rect x="${bx}" y="560" width="160" height="42" rx="6" fill="${k ? th.b : th.a}" stroke="${k ? th.bLine : th.aLine}" stroke-width="1.5"/>${dgText(bx + 80, 579, id, { size: 13, bold: true, fill: th.text, anchor: "middle" })}${dgText(bx + 80, 595, k ? "센터 백본 (B측)" : "센터 백본 (A측)", { size: 11, fill: th.sub, anchor: "middle" })}</g>`; });
@@ -79,7 +79,7 @@ function dgCenter(code, light, footer) {
   const th = dgTheme(light), W = 1200, T = TOPOLOGY, s = dgStats(code), h1 = DG_HUB[code], h2 = dgPartner(h1), BW = 82, BH = 40, STEP = 92, COLS = 6;
   const xA = 40, xB = W - 40 - COLS * STEP + 10, pairsOf = v => s.devs.filter(d => d.vendor === v && dgNum(d.id) % 2 === 1 && d.id !== h1 && d.id !== h2).map(d => [d.id, d.partner]);
   const groups = [["cisco", "Cisco 장비"], ["juniper", "Juniper 장비"], ["huawei", "Huawei 랙 접속 스위치"]].map(([v, name]) => ({ v, name, pairs: pairsOf(v) })).filter(g => g.pairs.length);
-  let y = 192, b = dgText(40, 36, `${T.centers[code]} 구성도 (가상)`, { size: 22, bold: true, fill: th.text }) + dgText(40, 58, `장비 ${s.devs.length}대 (Cisco ${s.cisco} · Juniper ${s.juniper} · Huawei ${s.huawei}) · 랙 ${s.racks}개 · 고객사 ${s.cust.length}곳(큰 고객사 ${s.big}). 같은 줄·같은 칸의 파란 장비(A측)와 주황 장비(B측)가 이중화 짝이고, 서로 다른 랙에 있습니다.`, { size: 12.5, fill: th.sub });
+  let y = 192, b = dgText(40, 36, `${T.centers[code]} 구성도 (가상)`, { size: 22, bold: true, fill: th.text }) + dgText(40, 58, `장비 ${s.devs.length}대 (Cisco ${s.cisco} · Juniper ${s.juniper} · Huawei ${s.huawei}) · 랙 ${s.racks}개 · 고객사 ${s.cust.length}곳(주요 고객사 ${s.big}). 같은 줄·같은 칸의 파란 장비(A측)와 주황 장비(B측)가 이중화 짝이고, 서로 다른 랙에 있습니다.`, { size: 12.5, fill: th.sub });
   const hubBox = (id, x, side) => `<g data-dev="${id}" style="cursor:pointer"><title>${dgX(`${id} · ${TOPOLOGY.devices.find(d => d.id === id).role} · ${TOPOLOGY.devices.find(d => d.id === id).rack}`)}</title><rect x="${x}" y="78" width="230" height="50" rx="7" fill="${side ? th.b : th.a}" stroke="${side ? th.bLine : th.aLine}" stroke-width="2"/>${dgText(x + 115, 99, id, { size: 15, bold: true, fill: th.text, anchor: "middle" })}${dgText(x + 115, 117, `센터 백본 (${side ? "B" : "A"}측) · ${TOPOLOGY.devices.find(d => d.id === id).rack.split("_")[2]}`, { size: 11.5, fill: th.sub, anchor: "middle" })}</g>`;
   const hx1 = 300, hx2 = W - 300 - 230 + 0;
   b += hubBox(h1, hx1, 0) + hubBox(h2, hx2, 1);
@@ -105,7 +105,7 @@ function dgCenter(code, light, footer) {
   });
   b += `<line x1="${rA}" y1="${busY}" x2="${rA}" y2="${lastRowY}" stroke="${th.aLine}" stroke-width="3"/><line x1="${rB}" y1="${busY}" x2="${rB}" y2="${lastRowY}" stroke="${th.bLine}" stroke-width="3"/>`;
   // 고객사
-  const names = s.cust.map(c => c.name + (c.big ? "(큰 고객사)" : "")); let line = "", lines = [];
+  const names = s.cust.map(c => c.name + (c.big ? "(주요 고객사)" : "")); let line = "", lines = [];
   names.forEach(n => { if ((line + n).length > 96) { lines.push(line); line = ""; } line += (line ? ", " : "") + n; }); if (line) lines.push(line);
   b += dgText(40, y + 8, "이 센터의 고객사", { size: 13, bold: true, fill: th.text }); lines.forEach((t, k) => { b += dgText(40, y + 28 + k * 19, t, { size: 12, fill: th.sub }); });
   y += 36 + lines.length * 19;
@@ -191,8 +191,8 @@ async function makeDesignPdf() {
     const ov = dgOverview(true, footer); pages.push({ canvas: await dgSvgToCanvas(ov.svg, ov.w, ov.h, 2) });
     for (const c of DG_CODES) { const r = dgCenter(c, true, footer); pages.push({ canvas: await dgSvgToCanvas(r.svg, r.w, r.h, 2) }); }
     const devOf = k => T.devices.find(d => (d.customers || []).includes(k));
-    dgTablePages("고객사", "고객사 19곳(전부 가상). 큰 고객사는 전용 접속 장비와 전용 회선이 있습니다.", ["고객사", "구분", "센터", "접속 장비(전용/대표)", "쓰는 그래프 회선"],
-      T.customers.map(c => [c.name, c.big ? "큰 고객사" : "일반", T.centers[dgCode(c.links[0])], (devOf(c.key) || {}).id || "-", c.links.join(", ")]), [2, 1.2, 1.4, 2, 6], footer).forEach(p => pages.push(p));
+    dgTablePages("고객사", "고객사 19곳(전부 가상). 주요 고객사는 전용 접속 장비와 전용 회선이 있습니다.", ["고객사", "구분", "센터", "접속 장비(전용/대표)", "쓰는 그래프 회선"],
+      T.customers.map(c => [c.name, c.big ? "주요 고객사" : "일반", T.centers[dgCode(c.links[0])], (devOf(c.key) || {}).id || "-", c.links.join(", ")]), [2, 1.2, 1.4, 2, 6], footer).forEach(p => pages.push(p));
     dgTablePages("그래프 회선", "관제 그래프에 나오는 회선과 연결 장비·용량(가상).", ["회선", "설명", "용량", "연결", "고객사"],
       DATA.links.map(l => { const t = T.links.find(x => x.link === l.id); return [l.id, l.desc, `${l.cap}G`, t ? `${t.a} ${t.ap} ↔ ${t.b}${t.bp && t.bp !== "-" ? " " + t.bp : ""}` : "", custOf(l.id).slice(0, 4).join(", ")]; }), [2.2, 3.2, 0.8, 4.2, 3], footer).forEach(p => pages.push(p));
     dgTablePages("장비 목록", "장비 120대: Cisco(FR)·Juniper(FS)·Huawei(AS). 이중화 짝은 서로 다른 랙에 있습니다.", ["장비", "종류", "센터", "랙", "이중화 짝", "짝의 랙", "역할"],

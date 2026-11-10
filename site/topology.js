@@ -128,12 +128,12 @@
     L("IDC_G_FS1_DN2", "IDC_G_FS1", "xe-0/0/11", "IDC_G_FS3", "xe-0/0/10", "고객 접속 업링크", 10),
     L("IDC_A_FS1_DN1", "IDC_A_FS1", "xe-0/0/10", "IDC_A_FS2", "xe-0/0/10", "고객 접속 업링크", 10),
     // 큰 고객사 전용 회선 (용량은 제가 정한 가정)
-    L("IDC_S_FR1_BIG1", "IDC_S_FR1", "Te1/0/2", "IDC_S_FS5", "xe-0/0/10", "큰 고객사 전용 (Cisco-Juniper)", 200),
-    L("IDC_S_FR1_BIG2", "IDC_S_FR1", "Te1/0/3", "IDC_S_FS6", "xe-0/0/10", "큰 고객사 전용 (Cisco-Juniper)", 100),
-    L("IDC_B_FS1_BIG1", "IDC_B_FS1", "xe-0/0/3", "IDC_B_FS8", "xe-0/0/10", "큰 고객사 전용", 200),
-    L("IDC_B_FS1_BIG2", "IDC_B_FS1", "xe-0/0/4", "IDC_B_FR4", "Te1/0/1", "큰 고객사 전용 (Juniper-Cisco)", 100),
-    L("IDC_G_FS1_BIG1", "IDC_G_FS1", "xe-0/0/5", "IDC_G_FS4", "xe-0/0/10", "큰 고객사 전용", 100),
-    L("IDC_A_FS1_BIG1", "IDC_A_FS1", "xe-0/0/5", "IDC_A_FS3", "xe-0/0/10", "큰 고객사 전용", 100)
+    L("IDC_S_FR1_BIG1", "IDC_S_FR1", "Te1/0/2", "IDC_S_FS5", "xe-0/0/10", "주요 고객사 전용 (Cisco-Juniper)", 200),
+    L("IDC_S_FR1_BIG2", "IDC_S_FR1", "Te1/0/3", "IDC_S_FS6", "xe-0/0/10", "주요 고객사 전용 (Cisco-Juniper)", 100),
+    L("IDC_B_FS1_BIG1", "IDC_B_FS1", "xe-0/0/3", "IDC_B_FS8", "xe-0/0/10", "주요 고객사 전용", 200),
+    L("IDC_B_FS1_BIG2", "IDC_B_FS1", "xe-0/0/4", "IDC_B_FR4", "Te1/0/1", "주요 고객사 전용 (Juniper-Cisco)", 100),
+    L("IDC_G_FS1_BIG1", "IDC_G_FS1", "xe-0/0/5", "IDC_G_FS4", "xe-0/0/10", "주요 고객사 전용", 100),
+    L("IDC_A_FS1_BIG1", "IDC_A_FS1", "xe-0/0/5", "IDC_A_FS3", "xe-0/0/10", "주요 고객사 전용", 100)
   ];
   // ---- 이중화: 같은 종류 장비를 번호 순서대로 둘씩 짝짓는다 (FS1-FS2, FS3-FS4 ... FR1-FR2 ... AS1-AS2 ...)
   const partnerOf = id => { const m = id.match(/^(IDC_[BSGA]_(?:FS|FR|AS))(\d+)$/), n = +m[2]; return `${m[1]}${n % 2 ? n + 1 : n - 1}`; };

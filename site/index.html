@@ -141,12 +141,13 @@
   <h2>2. 분산 제안</h2>
   <div class="card" id="evMove"></div>
 
-  <h2>3. 고객사 통보문 초안</h2>
-  <textarea id="evNotice" rows="14"></textarea>
+  <h2>3. 고객사 통보문 초안 <small>고객사마다 따로 보냅니다. 버튼으로 고객사를 고르세요</small></h2>
+  <div class="toolbar" id="evNoticeTabs"></div>
+  <textarea id="evNotice" rows="12"></textarea>
   <div class="toolbar" style="margin-top:8px"><button class="btn" id="evCopy">통보문 복사</button></div>
 
-  <h2>4. 당일 모니터링</h2>
-  <button class="btn" id="evGo">관제 화면에서 이벤트 시간 보기</button>
+  <h2>4. 당일 모니터링 <small>그날 관제 화면을 어떻게 맞춰 놓고 무엇을 봤는지 (슬라이드)</small></h2>
+  <button class="btn" id="evGo">당일 모니터링 보기</button>
 
   <h2>5. 사후 정리 <small>예상 vs 실제 (분산 조치 전 가상 데이터 기준)</small></h2>
   <div class="card" style="padding:0"><table id="evPost"></table></div>
@@ -388,6 +389,9 @@
   <div class="card" style="padding:0;overflow:auto"><table id="gTbl"></table></div>
 </section>
 
+<div class="scnpop" id="evMon" hidden><div class="scnpop-box" role="dialog" aria-modal="true" style="width:min(720px,100%)">
+  <h3 id="evMonTitle"></h3><div id="evMonBody" class="evm-body"></div>
+  <div class="scnpop-foot"><span class="muted" id="evMonStep"></span><span class="sp"></span><button class="btn" id="evMonPrev" type="button">◀ 이전</button><button class="btn primary" id="evMonNext" type="button">다음 ▶</button><button class="btn" id="evMonClose" type="button">닫기</button></div></div></div>
 <div class="phone-ov" id="phone" hidden role="dialog" aria-label="휴대폰 미리보기">
   <div class="phone-wrap">
     <div class="phone">

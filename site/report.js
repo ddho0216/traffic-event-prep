@@ -43,15 +43,15 @@ const REPORT = (() => {
     const s = parseT(ev.start), e = parseT(ev.end), a = idx(s), b = idx(e), a0 = idx(s - WEEK), b0 = idx(e - WEEK), hasPrev = a0 >= 0;
     const centers = ORDER.filter(c => c === "S" || c === "B" || ev.links.some(l => cOf(l) === c));
     const dlt = (now, prev) => hasPrev ? `전주 MAX 대비 ${fT(Math.abs(now - prev))} ${now >= prev ? "증가" : "감소"}` : "전주 데이터 없음";
-    const d = new Date(s), L = ["[" + COMPANY + "]", "[Web발신]", `[2026 아이치·나고야 아시안게임] ${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일 ${ev.name} 중 최대 트래픽`, "", "", "■ 백본 트래픽", ""];
-    centers.forEach(c => { const now = maxUp(c, a, b), prev = hasPrev ? maxUp(c, a0, b0) : 0, cap = upCap(c); L.push(`- ${NM[c]} : ${fT(now)} / ${cap}G (사용률 ${(now / cap * 100).toFixed(1)}% ${dlt(now, prev)})`, ""); });
-    L.push("■ 고객 트래픽", "");
+    const d = new Date(s), L = ["[" + COMPANY + "]", "[Web발신]", `[2026 아이치·나고야 아시안게임] ${d.getUTCMonth() + 1}월 ${d.getUTCDate()}일 ${ev.name} 중 최대 트래픽`, "", "■ 백본 트래픽"];
+    centers.forEach(c => { const now = maxUp(c, a, b), prev = hasPrev ? maxUp(c, a0, b0) : 0, cap = upCap(c); L.push(`- ${NM[c]} : ${fT(now)} / ${cap}G (사용률 ${(now / cap * 100).toFixed(1)}% ${dlt(now, prev)})`); });
+    L.push("", "■ 고객 트래픽");
     centers.forEach(c => {
       const top = CUSTOMERS.filter(cu => homeOf(cu) === c).map(cu => ({ cu, now: custMax(cu, a, b) })).sort((x, y) => y.now - x.now)[0];
-      if (top) L.push(`- ${top.cu.name}(${NM[c]}) : ${fT(top.now)} (${dlt(top.now, hasPrev ? custMax(top.cu, a0, b0) : 0)})`, "");
+      if (top) L.push(`- ${top.cu.name}(${NM[c]}) : ${fT(top.now)} (${dlt(top.now, hasPrev ? custMax(top.cu, a0, b0) : 0)})`);
     });
     const hit = typeof ALERTS !== "undefined" ? ALERTS.filter(x => x.e >= a && x.s <= b && !x.evName) : [];
-    L.push(`■ 서비스 영향 : ${hit.length ? hit.map(x => `${x.link} ${x.kind}`).join(", ") + " 확인됨" : "서비스 및 DDoS 특이사항 없음"}`, "", "■ VOC : 없음");
+    L.push("", `■ 서비스 영향 : ${hit.length ? hit.map(x => `${x.link} ${x.kind}`).join(", ") + " 확인됨" : "서비스 및 DDoS 특이사항 없음"}`, "■ VOC : 없음");
     return L.join("\n");
   }
   return { daily, event, fT, mdhm, upCap, maxUp, custMax, capOf, homeOf };
