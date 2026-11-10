@@ -224,7 +224,21 @@ body.popup #centerBar{display:none}
 .ctag span{color:var(--muted);font-size:9.5px}
 .ctag.x{border-color:#e5604d}.ctag.sel{border-color:#fff}
 
-.runbook{margin:6px 0 0;padding-left:20px;font-size:13px;line-height:1.6}.runbook li{margin:4px 0}.runbook code{font-family:var(--mono);font-size:12px;background:var(--panel2);padding:1px 4px;border-radius:2px}
+/* 장애 매뉴얼: 번호 카드 + 명령 상자 */
+.runbook{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:8px;font-size:13.5px;line-height:1.65}
+.runbook>li{display:flex;gap:12px;padding:12px 14px;background:var(--panel2);border:1px solid var(--line);border-radius:4px;margin:0}
+.runbook .rbn{flex:none;width:26px;height:26px;border-radius:50%;background:var(--in);color:#04121c;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px}
+.runbook .rbb{flex:1;min-width:0}.runbook h4{margin:0 0 2px;font-size:14.5px}
+.runbook .rbwhy{margin:0 0 8px;color:var(--muted)}
+.runbook .rbcmd{display:flex;gap:10px;align-items:baseline;margin:3px 0;flex-wrap:wrap}
+.runbook .rbcmd>span{flex:none;min-width:86px;color:var(--muted);font-size:12px}
+.runbook code{font-family:var(--mono);font-size:12.5px;background:#05080b;border:1px solid var(--line);padding:2px 7px;border-radius:3px;overflow-wrap:anywhere}
+.runbook .rbread{margin:8px 0 0;padding:6px 10px;border-left:3px solid var(--in)}
+.runbook .rbpts{margin:2px 0 0;padding-left:18px}.runbook .rbpts li{margin:3px 0}
+.rbflow{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}.rbflow span{padding:5px 12px;border:1px solid var(--line);border-radius:14px;background:var(--panel2);font-weight:600}.rbflow i{color:var(--muted);font-style:normal}
+.rbwords{margin:6px 0 4px;padding:10px 14px;border:1px dashed var(--line);border-radius:4px;font-size:13px}
+.rbwords dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:8px 0 0}.rbwords dt{font-weight:700}.rbwords dd{margin:0}
+@media(max-width:640px){.rbwords dl{grid-template-columns:1fr}.runbook>li{padding:10px}}
 #runbook{margin-top:12px}
 .pt.d{background:#2d343b;color:#7f8c97;border-color:#1a2026}
 
