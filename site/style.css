@@ -471,3 +471,5 @@ nav.tabs .grpbtn{cursor:default}nav.tabs .grpbtn:hover{color:var(--text)}
 .stlab.x{color:#ff8d92}.stlab.sel{color:#fff;font-weight:700}.stlab:hover{color:#fff;z-index:5}
 .pinfo{margin:6px 0;padding:8px 12px;border:1px solid var(--accent);border-radius:4px;background:var(--info-bg);font-size:13px}.pinfo span{color:var(--muted);margin:0 4px 0 10px}.pinfo b:first-child{margin-right:6px}
 .plate.v2 .pl{top:auto;bottom:5px;left:12px}
+
+.ver{margin-left:10px;padding:1px 7px;border:1px solid var(--line,#263442);border-radius:10px;font:600 11px var(--mono);color:var(--muted);vertical-align:middle}

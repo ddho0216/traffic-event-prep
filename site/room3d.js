@@ -224,7 +224,7 @@ function fitCam(reset) {
   Object.assign(G.cs, { az: 0, pol: 88, dist: need + SC.RD / 2, tx: rowW / 2 - SC.RW / 2, ty: rackH() / 2 + 0.05 }); placeCam();
 }
 const ZMIN = 1.3, ZMAX = 14;
-function panLimits() { const n = G.rowRacks ? G.rowRacks.length : 8; return { x0: -0.6, x1: (n - 1) * (SC.RW + SC.GAP) + 0.6 }; }
+function panLimits() { const n = G.rowRacks ? G.rowRacks.length : 8; return { x0: -0.6, x1: Math.max((n - 1) * (SC.RW + SC.GAP) + 0.6, facX0() + facSpan() + 0.3) }; }
 function panTo(tx, ty) { const p = panLimits(); G.cs.tx = clamp(tx, p.x0, p.x1); G.cs.ty = clamp(ty, 0.2, 3); }
 function bindControls(cv) {
   const P = new Map();   // 눌려 있는 손가락(마우스)들
@@ -307,6 +307,7 @@ function hover(e) {
   const tip = $("#glTip");
   if (!u) { hideTip(); return; }
   const rk = RACKS.find(r => r.id === u.rack);
+  if (u.kind === "fac") { tip.textContent = `${u.name} · 가상 설비 (누르면 설명)`; const b0 = $("#glWrap").getBoundingClientRect(); tip.style.left = Math.min(e.clientX - b0.left + 14, b0.width - 260) + "px"; tip.style.top = (e.clientY - b0.top + 14) + "px"; tip.hidden = false; return; }
   tip.textContent = u.kind === "rack" ? `${u.rack} (랙)` : `${u.name || u.id} · ${KIND_TXT[u.kind]} · ${u.rack} U${u.u0}${u.u > 1 ? "–" + (u.u0 + u.u - 1) : ""}`;
   if (u.kind !== "rack" && G.sel && G.sel.id === u.id && G.lastHit && G.lastHit.face && G.lastHit.face.normal.z > 0.5) { const sl = slotAt(u, G.lastHit.uv); if (sl) tip.textContent += ` · ${sl.label} (누르면 이 칸 선택)`; }
   const b = $("#glWrap").getBoundingClientRect(); tip.style.left = Math.min(e.clientX - b.left + 14, b.width - 260) + "px"; tip.style.top = (e.clientY - b.top + 14) + "px"; tip.hidden = false;
@@ -314,6 +315,8 @@ function hover(e) {
 function hideTip() { const t = $("#glTip"); if (t) t.hidden = true; }
 function pick(e) {
   const u = rayAt(e);
+  if (u && u.kind === "fac") { G.fac = FAC.find(a => a.id === u.id); G.sel = null; G.slot = null; render3d(); flyTo({ az: 0, pol: 88, dist: 3.2, tx: facCenterX(G.fac), ty: SC.BASE + G.fac.h / 2 }); return; }
+  G.fac = null;
   if (u && u.kind !== "rack" && G.sel && G.sel.id === u.id && G.sel.rack === u.rack && DEV[u.id]) {   // 확대한 장비를 다시 누르면 그 자리의 칸을 고른다
     const h = G.lastHit, sl = h && h.face && h.face.normal.z > 0.5 ? slotAt(u, h.uv) : null;
     G.slot = sl ? Object.assign({ id: u.id }, sl) : null; render3d(); return;
@@ -375,11 +378,68 @@ function buildRack(r, k, i, sel) {
   const lb = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.22), new THREE.MeshBasicMaterial({ map: labelTex(r.id.slice(4), `장비 ${r.devices.length}대 · ${used}U/${RACK_U}U`, hi), transparent: true })); lb.position.set(0, H + 0.2, RD / 2 - 0.02); g.add(lb);
   return g;
 }
+
+/* ---------- 전원·냉방 설비 (UPS·배터리·분전반·항온항습기): 랙 줄 오른쪽 끝에 놓는 가상 설비. 데이터 없음 ---------- */
+const FAC = [
+  { id: "UPS-A", type: "ups", name: "무정전전원장치 (UPS)", w: 0.8, h: 1.9, d: 0.9, why: "정전이 나면 배터리로 전기를 끊김 없이 이어 주고, 평소에는 들어오는 전기를 안정시켜 줍니다.", rows: [["입력", "정상 (가상)"], ["부하", "58% (가상)"], ["배터리", "100% 충전 (가상)"], ["버틸 수 있는 시간", "약 12분 (가상)"]] },
+  { id: "BATT-1", type: "batt", name: "배터리 캐비닛 1", w: 0.8, h: 1.9, d: 0.9, why: "UPS에 붙은 배터리 보관함입니다. 정전 때 발전기가 켜질 때까지 서버 전원을 버텨 줍니다.", rows: [["배터리", "12V 납축전지 18개 (가상)"], ["상태", "정상 (가상)"], ["교체 주기", "보통 3~5년 (일반 상식)"]] },
+  { id: "BATT-2", type: "batt", name: "배터리 캐비닛 2", w: 0.8, h: 1.9, d: 0.9, why: "UPS에 붙은 배터리 보관함입니다. 1번과 함께 쓰는 짝입니다.", rows: [["배터리", "12V 납축전지 18개 (가상)"], ["상태", "정상 (가상)"], ["교체 주기", "보통 3~5년 (일반 상식)"]] },
+  { id: "DB-1", type: "panel", name: "분전반 (배전반)", w: 0.7, h: 1.5, d: 0.3, why: "UPS에서 나온 전기를 각 열의 PDU로 나누어 보내는 차단기함입니다.", rows: [["차단기", "A·B 두 계통 (가상)"], ["상태", "정상 (가상)"]] },
+  { id: "CRAC-1", type: "crac", name: "항온항습기 (CRAC)", w: 1.0, h: 1.9, d: 0.9, why: "서버실의 온도와 습도를 맞추는 에어컨입니다. 차가운 바람을 만들어 랙 앞쪽으로 보냅니다.", rows: [["설정 온도", "23°C (가상)"], ["습도", "45% (가상)"], ["상태", "가동 중 (가상)"]] },
+];
+function facTex(a) {
+  return canvasTex(256, 512, (g, w, h) => {
+    g.fillStyle = a.type === "crac" ? "#cfd5da" : a.type === "panel" ? "#aeb6bd" : "#2a3138"; g.fillRect(0, 0, w, h);
+    g.strokeStyle = "#0c0f12"; g.lineWidth = 4; g.strokeRect(2, 2, w - 4, h - 4);
+    const tag = (t, y, dk) => { g.fillStyle = dk ? "#10151a" : "#f1f3f5"; rr(g, 40, y, w - 80, 34, 6); g.fill(); g.fillStyle = dk ? "#f1f3f5" : "#10151a"; g.font = "bold 20px monospace"; g.textAlign = "center"; g.fillText(t, w / 2, y + 24); };
+    if (a.type === "ups") {
+      g.fillStyle = "#06120c"; rr(g, 30, 40, w - 60, 130, 6); g.fill(); g.fillStyle = "#3fd07a"; g.font = "bold 17px monospace"; g.textAlign = "left";
+      ["UPS-A   ONLINE", "INPUT   OK", "LOAD    58%", "BATT    100%", "BACKUP  12min"].forEach((t, k) => g.fillText(t, 42, 66 + k * 24));
+      [["#3fd07a", 60], ["#3fd07a", 100], ["#39444d", 140]].forEach(([c, x]) => { g.fillStyle = c; g.beginPath(); g.arc(x, 200, 8, 0, 7); g.fill(); });
+      g.fillStyle = "#141a1f"; for (let y = 240; y < 470; y += 12) g.fillRect(34, y, w - 68, 6);
+      tag("UPS-A", 14, false);
+    } else if (a.type === "batt") {
+      for (let s = 0; s < 4; s++) {
+        const y = 24 + s * 118; g.fillStyle = "#12171b"; g.fillRect(14, y, w - 28, 108);
+        for (let b = 0; b < 3; b++) { const x = 20 + b * 74; g.fillStyle = grad(g, y, y + 100, "#2c4a7a", "#1b2f50"); g.fillRect(x, y + 10, 68, 88); g.fillStyle = "#c9ced3"; g.fillRect(x + 8, y + 4, 14, 8); g.fillRect(x + 46, y + 4, 14, 8); g.fillStyle = "#e5604d"; g.fillRect(x + 46, y + 2, 14, 3); g.fillStyle = "#cfd8df"; g.font = "bold 13px monospace"; g.textAlign = "center"; g.fillText("12V", x + 34, y + 62); }
+      }
+      g.fillStyle = "#3fd07a"; g.beginPath(); g.arc(w - 22, 14, 6, 0, 7); g.fill();
+    } else if (a.type === "panel") {
+      g.fillStyle = "#8f979e"; g.fillRect(16, 20, w - 32, h - 40);
+      for (let r = 0; r < 12; r++) for (let c = 0; c < 4; c++) { const x = 28 + c * 50, y = 44 + r * 36; g.fillStyle = "#1b2127"; rr(g, x, y, 38, 26, 3); g.fill(); g.fillStyle = r % 5 === 4 ? "#39444d" : "#3fd07a"; g.fillRect(x + 6, y + 6, 26, 6); }
+      tag("분전반", 6, true);
+    } else {
+      g.fillStyle = "#9aa3ab"; for (let y = 120; y < 470; y += 10) g.fillRect(24, y, w - 48, 5);
+      g.fillStyle = "#06120c"; rr(g, 60, 36, w - 120, 50, 5); g.fill(); g.fillStyle = "#3fd07a"; g.font = "bold 18px monospace"; g.textAlign = "center"; g.fillText("23.0C  45%", w / 2, 68);
+      tag("CRAC-1", 90, true);
+    }
+  });
+}
+function facX0() { const n = G.rowRacks ? G.rowRacks.length : 8; return (n - 1) * (SC.RW + SC.GAP) + SC.RW / 2 + 0.7; }
+function facSpan() { let x = 0; FAC.forEach(a => { x += a.w + 0.08; }); return x - 0.08; }
+function facCenterX(a) { let x = facX0(); for (const q of FAC) { if (q === a) return x + q.w / 2; x += q.w + 0.08; } return x; }
+function buildFacilities() {
+  const g = new THREE.Group(); let x = facX0();
+  FAC.forEach(a => {
+    const side = dark(0x20272d), front = new THREE.MeshStandardMaterial({ map: facTex(a), roughness: 0.7, metalness: 0.2 });
+    const m = new THREE.Mesh(new THREE.BoxGeometry(a.w, a.h, a.d), [side, side, side, side, front, side]);
+    const z = a.type === "panel" ? SC.RD / 2 - a.d / 2 - 0.02 : 0;   // 분전반은 얇아서 앞면을 다른 설비와 비슷하게 맞춘다
+    m.position.set(x + a.w / 2, SC.BASE / 2 + a.h / 2, z); m.userData = { kind: "fac", id: a.id, name: a.name };
+    G.ray.push(m); g.add(m); x += a.w + 0.08;
+  });
+  const lb = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.22), new THREE.MeshBasicMaterial({ map: canvasTex(400, 56, (c, w, h) => { c.fillStyle = "#1b2229"; rr(c, 2, 2, w - 4, h - 4, 8); c.fill(); c.fillStyle = "#cfd8df"; c.font = "bold 22px sans-serif"; c.textAlign = "center"; c.fillText("전원·냉방 설비 (가상)", w / 2, 37); }), transparent: true }));
+  lb.position.set(facX0() + facSpan() / 2, 2.2, SC.RD / 2 - 0.02); g.add(lb);
+  return g;
+}
+function facHtml(a) {
+  return `<h3>${esc(a.name)} <span class="tag">가상 설비</span></h3><p class="note">${esc(a.why)}</p><table class="kv">${a.rows.map(r => `<tr><td>${esc(r[0])}</td><td>${esc(r[1])}</td></tr>`).join("")}</table><p class="note">화면을 보기 좋게 넣은 가상 설비라 실제 측정값은 없습니다. 같은 줄 왼쪽의 랙을 누르면 선택이 바뀝니다.</p>`;
+}
 function buildScene() {
   if (!G.ready) return;
   disposeRoot();
   const i = clamp(sr.end, 0, N - 1);
-  withTime(msOf(i), () => G.rowRacks.forEach((r, k) => G.root.add(buildRack(r, k, i, G.sel))));   // 꺼진 장비 옆 포트는 Down으로 그려진다
+  withTime(msOf(i), () => G.rowRacks.forEach((r, k) => G.root.add(buildRack(r, k, i, G.sel))));
+  G.root.add(buildFacilities());   // 꺼진 장비 옆 포트는 Down으로 그려진다
   G.dirty = true;
 }
 function stepFly() {
@@ -403,6 +463,7 @@ function bigChart(r, i) {
 }
 function selRack(vr) { return G.sel ? vr.find(r => r.id === G.sel.rack) : null; }
 function detailHtml(vr, rows, i) {
+  if (G.fac) return facHtml(G.fac);
   const rk = selRack(vr);
   if (!rk) {
     const cnt = k => rows[G.row].racks.filter(r => stCls(rackStatus(r, i)) === k).length;
@@ -505,7 +566,8 @@ function render3d() {
   hold($("#glPadOut"), () => { G.cs.dist = clamp(G.cs.dist / 0.96, ZMIN, ZMAX); placeCam(); });
   $("#glPadTog").onclick = () => { const m = $("#glPad").classList.toggle("min"); $("#glPadTog").textContent = m ? "조작판 펼치기" : "조작판 접기"; $("#glPadTog").setAttribute("aria-expanded", String(!m)); };
   $$("[data-gm]").forEach(b => { b.classList.toggle("on", b.dataset.gm === G.gmode); b.onclick = () => { G.gmode = b.dataset.gm; $$("[data-gm]").forEach(x => x.classList.toggle("on", x.dataset.gm === G.gmode)); }; });
-  $("#glFit").onclick = () => { if (G.ready) flyTo(fitTarget()); };
+  $("#glFit").onclick = () => { G.fac = null; if (G.ready) flyTo(fitTarget()); };
+  $("#glPower").onclick = () => { if (!G.ready) return; G.fac = FAC[0]; G.sel = null; G.slot = null; render3d(); flyTo({ az: 0, pol: 88, dist: 6.2, tx: facX0() + facSpan() / 2, ty: 1.0 }); };
   $("#glHome").onclick = () => { if (G.ready) flyTo(Object.assign({}, G.cs, { az: 0, pol: 88 })); };
   $("#glList").addEventListener("click", ev => { const el = ev.target.closest(".gli"); if (el) { G.sel = { kind: "rack", rack: el.dataset.rack }; G.jump = true; G.focus = { rack: el.dataset.rack, u0: 0 }; render3d(); } });
   $("#glAlerts").addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { if (+tr.dataset.t) sr.end = +tr.dataset.t; G.sel = { kind: "rack", rack: tr.dataset.rack }; G.jump = true; G.focus = { rack: tr.dataset.rack, u0: 0 }; render3d(); } });

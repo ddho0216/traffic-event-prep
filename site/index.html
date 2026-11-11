@@ -12,7 +12,7 @@
 </head>
 <body>
 <header class="top">
-  <h1><a href="#monitor" id="homeLink" title="관제(홈)로 가기"><img class="logo" src="favicon.svg" alt="" width="26" height="26">백본 트래픽 관제</a></h1>
+  <h1><a href="#monitor" id="homeLink" title="관제(홈)로 가기"><img class="logo" src="favicon.svg" alt="" width="26" height="26">백본 트래픽 관제</a><span class="ver" id="appVer" title="변경 내역은 저장소의 CHANGELOG.md">v2.12.0</span></h1>
   <span class="badge">가상 데이터 · 센터는 지명만 빌린 가상 센터</span>
   <nav class="tabs" id="tabs">
     <button data-tab="monitor" class="on">관제</button>
@@ -241,7 +241,7 @@
     <button class="btn" id="r3Next">다음 &rsaquo;</button>
     <label>열 <select id="r3RowSel"></select></label>
     <span class="seg"><button class="btn on" data-glmode="status">상태</button><button class="btn" data-glmode="temp">온도</button><button class="btn" disabled title="가상 데이터에 전력 값이 없어 아직 만들지 않았습니다">전력</button></span>
-    <span class="seg"><button class="btn" id="glZoomOut" title="축소">&minus;</button><button class="btn" id="glZoomIn" title="확대">+</button><button class="btn" id="glFit">화면 맞춤</button><button class="btn" id="glHome">초기 시점</button></span>
+    <span class="seg"><button class="btn" id="glZoomOut" title="축소">&minus;</button><button class="btn" id="glZoomIn" title="확대">+</button><button class="btn" id="glFit">화면 맞춤</button><button class="btn" id="glHome">초기 시점</button><button class="btn" id="glPower" title="랙 줄 오른쪽 끝의 UPS·배터리·분전반·항온항습기를 봅니다">전원·냉방 설비</button></span>
   </div>
   <div class="gltool" style="margin-top:6px">
     <span class="muted">빠른 이동</span>
