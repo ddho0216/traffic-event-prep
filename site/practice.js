@@ -34,7 +34,6 @@
     jRe: d => `Routing Engine status:\n  Temperature                 ${Math.round(rackTemp(d) + 17)} degrees C\n  CPU temperature             ${Math.round(rackTemp(d) + 19)} degrees C\n  DRAM                      4096 MB (4096 MB installed)\n  Memory utilization          38 percent\n  CPU utilization:\n    User                       3 percent\n    Idle                      95 percent\n  Model                          RE (가상)\n  Start time                     2026-08-14 02:11:40 KST\n  Uptime                         68 days, 18 hours, 49 minutes\n  Last reboot reason             Normal shutdown`,
     jUsers: d => "USER     TTY      FROM                              LOGIN@  IDLE WHAT\n(연습)   p0       (연습 모드는 접속 기록이 없음)    9:00PM     - -cli (cli)",
     jCliHist: () => practiceHistory(),
-    jLogCmd: () => `Oct 22 20:41:12  (가상) mgd[2201]: UI_CMDLINE_READ_LINE: User 'user_a', command 'show interfaces terse'\nOct 22 20:42:03  (가상) mgd[2201]: UI_CMDLINE_READ_LINE: User 'user_a', command 'show log messages'\nOct 22 20:55:47  (가상) mgd[2310]: UI_CMDLINE_READ_LINE: User 'user_b', command 'clear log messages'\n[연습] 위는 실제 장비가 \"누가 어떤 명령을 쳤는지\"를 남길 때의 모양을 흉내 낸 예시입니다 (user_a·user_b는 가상). 설정에 따라 이런 기록이 남을 수 있습니다. 이 연습 모드의 명령은 이렇게 남지 않습니다.`,
     cVersion: d => `Cisco Nexus Operating System (NX-OS) Software (가상 표기)\n  system:    version 9.3(8) (가상)\n  Device name: ${d.id}\n  Hardware: (가상) ${d.role}\n  bootflash: 3 GB (가상)\nKernel uptime is 68 day(s), 18 hour(s), 49 minute(s), 12 second(s)`,
     cInventory: d => `NAME: "Chassis", DESCR: "(가상) ${d.role}"\nPID: (가상), VID: V01, SN: ${SERIAL(d)}\n\nNAME: "Slot 1", DESCR: "(가상) 10G I/O 모듈"\nPID: (가상), VID: V01, SN: ${SERIAL(d)}`,
     cEnv: d => `Fan:\n---------------------------------------------------\nFan             Model                Hw     Status\n---------------------------------------------------\nFan1(sys_fan1)  (가상)               --     Ok\nFan2(sys_fan2)  (가상)               --     Ok\n\nTemperature:\n--------------------------------------------------------------------\nModule   Sensor        MajorThresh   MinorThres   CurTemp     Status\n                       (Celsius)     (Celsius)    (Celsius)\n--------------------------------------------------------------------\n1        Intake        70            42           ${rackTemp(d).toFixed(0)}          Ok\n1        Exhaust       75            50           ${Math.round(rackTemp(d) + 10)}          Ok\n\nPower Supply:\nPS  Model                Power(W)   Status\n1   (가상)               650        Ok\n2   (가상)               650        Ok`,
@@ -47,7 +46,6 @@
     cUsers: () => "NAME     LINE         TIME         IDLE          PID COMMENT\n(연습)   pts/0        Oct 22 21:00 .           (연습 모드는 접속 기록이 없음) *",
     cCpu: d => `CPU utilization for five seconds: 3%/1%; one minute: 2%; five minutes: 2%\nPID    Runtime(ms)  Invoked   uSecs  1Sec    Process\n-----  -----------  --------  -----  ------  -----------\n1      812          91233     8      0.00%   init\n2210   5120         11230     456    0.20%   bgp`,
     cErrCounters: d => "--------------------------------------------------------------------------------\nPort          Align-Err    FCS-Err   Xmit-Err    Rcv-Err  UnderSize OutDiscards\n--------------------------------------------------------------------------------\n" + ifLines(d, f => `${pad(f[0], 13)} ${pad(0, 12)} ${pad(f[2], 9)} ${pad(0, 11)} ${pad(f[2], 8)} ${pad(0, 10)} 0`),
-    cHistory: () => practiceHistory(),
     hVersion: d => `Huawei Versatile Routing Platform Software (가상 표기)\nVRP (R) software, Version 5.170 (가상)\nHUAWEI (가상) uptime is 68 days, 18 hours, 49 minutes\nBKP 0 version information:\n  Device: ${d.id}`,
     hDevice: d => `${d.id}'s Device status:\nSlot Sub Type                 Online    Power    Register     Status   Role\n-------------------------------------------------------------------------------\n0    -   (가상) ${d.role.slice(0, 14)}   Present   PowerOn  Registered   Normal   Master\n\nFan status: normal   Power status: normal`,
     hIfBrief: d => "PHY: Physical\n*down: administratively down\nInterface                   PHY     Protocol  InUti OutUti   inErrors  outErrors\n" + ifLines(d, f => `${pad(f[0].replace("XGigabitEthernet", "XGE"), 27)} ${pad(f[6] === "down" ? "*down" : f[5], 7)} ${pad(f[5], 9)} 0%    0%   ${pad(f[2], 10)} 0`),
@@ -58,7 +56,7 @@
     hUsers: () => "  User-Intf    Delay    Type   Network Address     AuthenStatus   AuthorcmdFlag\n+ 0   CON 0    00:00:00 (연습)                      pass           no\n(연습 모드는 접속 기록이 없음)",
     hClock: () => `${nowStr()}:11+09:00 (가상 시각)`
   };
-  function practiceHistory() { return S.hist.length ? S.hist.map((c, i) => `${String(i + 1).padStart(4)}  ${c}`).join("\n") + "\n[연습] 이 연습 화면에서 친 명령만 보이고, 저장되지 않아 새로고침하면 사라집니다." : "(아직 친 명령이 없습니다)"; }
+  function practiceHistory() { return S.hist.length ? S.hist.map((c, i) => { const s = (21 * 3600 + i * 23) % 86400; return `${String(Math.floor(s / 3600)).padStart(2, "0")}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")} ${c}`; }).join("\n") + "\n[연습] 이 연습 화면에서 친 명령만 보이고, 저장되지 않아 새로고침하면 사라집니다." : "(아직 친 명령이 없습니다)"; }
 
   /* ---------- 명령어 사전 ---------- */
   // v: 제조사, cat: 분류, cmd: 입력 예시({port}·{ip}는 고른 장비에 맞게 채움), what: 한 줄 설명, read: 결과 읽는 법, own: 이 파일의 생성기 이름(없으면 기존 터미널이 처리), risk: 위험 명령 설명
@@ -82,7 +80,6 @@
     { v: "juniper", cat: "이웃·경로", cmd: "ping {ip} rapid count 100", what: "상대까지 닿는지 100번 확인", read: "느낌표(!)는 응답, 점(.)은 무응답입니다. 손실 0%가 정상입니다." },
     { v: "juniper", cat: "로그·기록", cmd: "show log messages | last 20", what: "최근 로그 20줄", read: "Down 기록의 시각이 장애 시작 시각입니다." },
     { v: "juniper", cat: "로그·기록", cmd: "show cli history", what: "이 접속에서 친 명령 목록", read: "방금 어떤 명령을 쳤는지 되짚을 때 씁니다. 연습 모드에서는 이 연습 화면의 명령만 보입니다.", own: "jCliHist" },
-    { v: "juniper", cat: "로그·기록", cmd: "show log messages | match UI_CMDLINE_READ_LINE", what: "누가 어떤 명령을 쳤는지 남은 기록(형식 예시)", read: "실제 장비는 설정에 따라 사용자와 친 명령을 로그에 남길 수 있습니다. 그 모양을 보여 주는 가상 예시입니다.", own: "jLogCmd" },
     { v: "juniper", cat: "로그·기록", cmd: "show system users", what: "지금 접속해 있는 사람", read: "누가 접속 중인지, 얼마나 놀고 있는지 봅니다.", own: "jUsers" },
     { v: "juniper", cat: "설정", cmd: "show configuration interfaces {port} | display set", what: "포트 설정 확인", read: "disable이 있으면 관리자가 내려 둔 포트입니다." },
     { v: "juniper", cat: "설정", cmd: "show configuration routing-options static | display set", what: "정적 경로(기본 경로 등) 설정 보기", read: "route 뒤가 목적지, next-hop 뒤가 다음 장비 IP입니다. 0.0.0.0/0은 기본 경로입니다." },
@@ -102,7 +99,6 @@
     { v: "cisco", cat: "이웃·경로", cmd: "show bgp summary", what: "BGP 상대 상태", read: "State/PfxRcd가 숫자면 정상, Active/Idle이면 끊긴 것입니다." },
     { v: "cisco", cat: "이웃·경로", cmd: "ping {ip} repeat 100", what: "상대까지 닿는지 100번 확인", read: "!는 응답, .는 무응답입니다." },
     { v: "cisco", cat: "로그·기록", cmd: "show logging last 100", what: "최근 로그 100줄", read: "UPDOWN 기록의 시각이 장애 시작 시각입니다." },
-    { v: "cisco", cat: "로그·기록", cmd: "show history", what: "이 접속에서 친 명령 목록", read: "연습 모드에서는 이 연습 화면의 명령만 보입니다.", own: "cHistory" },
     { v: "cisco", cat: "로그·기록", cmd: "show users", what: "지금 접속해 있는 사람", read: "누가 접속 중인지 봅니다.", own: "cUsers" },
     { v: "cisco", cat: "설정", cmd: "show running-config interface {port}", what: "포트 설정 확인", read: "shutdown이 있으면 관리자가 내려 둔 포트입니다." },
     { v: "cisco", cat: "설정", cmd: "show running-config interface {eport}", what: "포트 설정 확인 (Ethernet 1/17 형식, VLAN 포함)", read: "switchport access vlan 100이면 100번 VLAN에 묶인 고객 포트, no switchport + ip address면 라우팅 포트(장비 간 연결)입니다.", },
@@ -119,7 +115,6 @@
     { v: "huawei", cat: "회선·인터페이스", cmd: "display transceiver interface {hwport} verbose", what: "그 포트의 광 수신값", read: "Rx Power가 평소보다 크게 낮으면 케이블·SFP를 의심합니다." },
     { v: "huawei", cat: "이웃·경로", cmd: "display lldp neighbor brief", what: "옆에 붙은 장비", read: "Neighbor Dev와 Neighbor Intf로 연결 상대를 확인합니다.", own: "hLldp" },
     { v: "huawei", cat: "로그·기록", cmd: "display logbuffer", what: "최근 로그", read: "Down 기록의 시각이 장애 시작 시각입니다." },
-    { v: "huawei", cat: "로그·기록", cmd: "display history-command", what: "이 접속에서 친 명령 목록", read: "연습 모드에서는 이 연습 화면의 명령만 보입니다.", own: "cHistory" },
     { v: "huawei", cat: "로그·기록", cmd: "display users", what: "지금 접속해 있는 사람", read: "누가 접속 중인지 봅니다.", own: "hUsers" },
     { v: "huawei", cat: "설정", cmd: "display current-configuration interface {hwport}", what: "포트 설정 확인 (VLAN 포함)", read: "port default vlan이 있으면 그 VLAN에 묶인 고객 포트(access), trunk allow-pass는 여러 VLAN이 지나가는 연결 포트입니다. shutdown은 관리자가 내려 둔 포트입니다." },
     { v: "huawei", cat: "설정", cmd: "display vlan", what: "VLAN 목록과 어느 포트가 묶였는지", read: "VID별로 속한 포트가 나옵니다 (UT = 태그 없음/access, TG = 태그 있음/trunk)." },

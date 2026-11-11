@@ -929,6 +929,11 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.mouse.move(5, 5);
   const allOk = await page.evaluate(() => { const bad = [], S = PRACTICE.state; let n = 0; for (const d of DEVICES) { S.vendor = d.vendor; S.dev = d.id; for (const x of PRACTICE.libFor()) { n++; try { const r = PRACTICE.run(x.text); if (typeof r.text !== 'string' || !r.text || /undefined|NaN/.test(r.text)) bad.push(d.id + ' ' + x.text); } catch (e) { bad.push(d.id + ' ' + x.text + ' ' + e.message); } } } S.vendor = 'juniper'; S.dev = null; return { n, bad: bad.slice(0, 5) }; });
   check('연습 모드: 120대 장비 × 사전의 모든 명령이 오류·undefined·NaN 없이 출력됨', allOk.n > 1500 && allOk.bad.length === 0, JSON.stringify(allOk));
+  // 공식 문서로 확인하지 못한 명령은 사전에 없다 (Cisco show history, Huawei display history-command, 로그에서 명령 기록 찾기 예시)
+  const gone = await page.evaluate(() => ['juniper', 'cisco', 'huawei'].map(v => PRACTICE.lib.filter(x => x.v === v).map(x => x.cmd).join('|')).join('|'));
+  check('확인하지 못한 이력 명령(show history, display history-command, UI_CMDLINE_READ_LINE 검색)은 사전에서 빠졌고 확인된 show cli history는 남아 있음', !/show history|display history-command|UI_CMDLINE_READ_LINE/.test(gone) && gone.includes('show cli history'), gone.slice(0, 60));
+  const hl = await prRun('show cli history');
+  check('Juniper show cli history는 줄마다 시각(HH:MM:SS)이 앞에 붙음 (공식 문서 형식)', /^\d{2}:\d{2}:\d{2} /m.test(hl.split('show cli history').pop() || hl) || /\d{2}:\d{2}:\d{2} show/.test(hl), hl.slice(-120));
   // 정적 경로 설정(Juniper), VLAN이 들어간 포트 설정(Cisco·Huawei)
   await page.selectOption('#prVendor', 'juniper'); await page.selectOption('#prDev', 'IDC_S_FS1');
   po = await prRun('show configuration routing-options static | display set | match 100.0.0.0');
