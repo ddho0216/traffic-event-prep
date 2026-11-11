@@ -315,7 +315,7 @@ function hover(e) {
 function hideTip() { const t = $("#glTip"); if (t) t.hidden = true; }
 function pick(e) {
   const u = rayAt(e);
-  if (u && u.kind === "fac") { G.fac = FAC.find(a => a.id === u.id); G.sel = null; G.slot = null; render3d(); flyTo({ az: 0, pol: 88, dist: 3.2, tx: facCenterX(G.fac), ty: SC.BASE + G.fac.h / 2 }); return; }
+  if (u && u.kind === "fac") { G.fac = FAC.find(a => a.id === u.id); G.sel = null; G.slot = null; render3d(); flyTo({ az: 0, pol: 88, dist: facDist(G.fac.w / 2 + 0.5, 3.0), tx: facCenterX(G.fac), ty: SC.BASE + G.fac.h / 2 }); return; }
   G.fac = null;
   if (u && u.kind !== "rack" && G.sel && G.sel.id === u.id && G.sel.rack === u.rack && DEV[u.id]) {   // 확대한 장비를 다시 누르면 그 자리의 칸을 고른다
     const h = G.lastHit, sl = h && h.face && h.face.normal.z > 0.5 ? slotAt(u, h.uv) : null;
@@ -381,94 +381,121 @@ function buildRack(r, k, i, sel) {
 
 /* ---------- 전원·냉방 설비 (UPS·배터리·분전반·항온항습기): 랙 줄 오른쪽 끝에 놓는 가상 설비. 데이터 없음 ---------- */
 const FAC = [
-  { id: "UPS-A", type: "ups", name: "무정전전원장치 (UPS)", w: 0.8, h: 1.9, d: 0.9, why: "정전이 나면 배터리로 전기를 끊김 없이 이어 주고, 평소에는 들어오는 전기를 안정시켜 줍니다.", rows: [["입력", "정상 (가상)"], ["부하", "58% (가상)"], ["배터리", "100% 충전 (가상)"], ["버틸 수 있는 시간", "약 12분 (가상)"]] },
+  { id: "UPS-A", type: "ups", name: "무정전전원장치 (UPS)", w: 1.3, h: 1.9, d: 0.85, why: "정전이 나면 배터리로 전기를 끊김 없이 이어 주고, 평소에는 들어오는 전기를 안정시켜 줍니다. 큰 본체와 좁은 보조 캐비닛 두 짝으로 된 모양을 참고해 그린 가상 모델입니다.", rows: [["입력", "정상 (가상)"], ["부하", "58% (가상)"], ["배터리", "100% 충전 (가상)"], ["버틸 수 있는 시간", "약 12분 (가상)"]] },
   { id: "BATT-1", type: "batt", name: "배터리 캐비닛 1", w: 0.8, h: 1.9, d: 0.9, why: "UPS에 붙은 배터리 보관함입니다. 정전 때 발전기가 켜질 때까지 서버 전원을 버텨 줍니다.", rows: [["배터리", "12V 납축전지 18개 (가상)"], ["상태", "정상 (가상)"], ["교체 주기", "보통 3~5년 (일반 상식)"]] },
   { id: "BATT-2", type: "batt", name: "배터리 캐비닛 2", w: 0.8, h: 1.9, d: 0.9, why: "UPS에 붙은 배터리 보관함입니다. 1번과 함께 쓰는 짝입니다.", rows: [["배터리", "12V 납축전지 18개 (가상)"], ["상태", "정상 (가상)"], ["교체 주기", "보통 3~5년 (일반 상식)"]] },
-  { id: "DB-1", type: "panel", name: "분전반 (배전반)", w: 0.7, h: 1.9, d: 0.7, why: "UPS에서 나온 전기를 각 열의 PDU로 나누어 보내는 차단기함입니다. 데이터센터용 분전반(ABB 안내서의 제품 사진)을 보고 모양을 참고해 직접 그린 가상 모델이며, 문을 열어 내부 차단기가 보이게 했습니다.", rows: [["구성", "위·아래 두 칸, 소형 차단기 72개 (가상)"], ["입력", "3상 380V (가상)"], ["상태", "정상 (가상)"]] },
-  { id: "CRAC-1", type: "crac", name: "항온항습기 (CRAC)", w: 1.0, h: 1.9, d: 0.9, why: "서버실의 온도와 습도를 맞추는 에어컨입니다. 차가운 바람을 만들어 랙 앞쪽으로 보냅니다.", rows: [["설정 온도", "23°C (가상)"], ["습도", "45% (가상)"], ["상태", "가동 중 (가상)"]] },
+  { id: "DB-1", type: "panel", name: "분전반 (배전반)", w: 1.5, h: 1.7, d: 0.6, why: "UPS에서 나온 전기를 각 열의 PDU로 나누어 보내는 차단기함입니다. 문 네 짝에 환기창과 빗장, 오른쪽에 제어창이 있는 모양을 참고해 그린 가상 모델입니다.", rows: [["문", "네 짝 (가상)"], ["입력", "3상 380V (가상)"], ["상태", "정상 (가상)"]] },
+  { id: "CRAC-1", type: "crac", name: "항온항습기 (CRAC)", w: 1.3, h: 1.9, d: 0.8, why: "서버실의 온도와 습도를 맞추는 에어컨입니다. 아래 메쉬로 따뜻한 공기를 빨아들이고, 윗면 송풍구로 찬 바람을 내보냅니다. 송풍구 네 개 달린 모양을 참고해 그린 가상 모델입니다.", rows: [["설정 온도", "23°C (가상)"], ["습도", "45% (가상)"], ["상태", "가동 중 (가상)"]] },
 ];
-function facTex(a) {
+function facTex(a) {   // 배터리 캐비닛 앞면 (칸마다 12V 배터리 셋)
   return canvasTex(256, 512, (g, w, h) => {
-    g.fillStyle = a.type === "crac" ? "#cfd5da" : a.type === "panel" ? "#aeb6bd" : "#2a3138"; g.fillRect(0, 0, w, h);
-    g.strokeStyle = "#0c0f12"; g.lineWidth = 4; g.strokeRect(2, 2, w - 4, h - 4);
-    const tag = (t, y, dk) => { g.fillStyle = dk ? "#10151a" : "#f1f3f5"; rr(g, 40, y, w - 80, 34, 6); g.fill(); g.fillStyle = dk ? "#f1f3f5" : "#10151a"; g.font = "bold 20px monospace"; g.textAlign = "center"; g.fillText(t, w / 2, y + 24); };
-    if (a.type === "ups") {
-      g.fillStyle = "#06120c"; rr(g, 30, 40, w - 60, 130, 6); g.fill(); g.fillStyle = "#3fd07a"; g.font = "bold 17px monospace"; g.textAlign = "left";
-      ["UPS-A   ONLINE", "INPUT   OK", "LOAD    58%", "BATT    100%", "BACKUP  12min"].forEach((t, k) => g.fillText(t, 42, 66 + k * 24));
-      [["#3fd07a", 60], ["#3fd07a", 100], ["#39444d", 140]].forEach(([c, x]) => { g.fillStyle = c; g.beginPath(); g.arc(x, 200, 8, 0, 7); g.fill(); });
-      g.fillStyle = "#141a1f"; for (let y = 240; y < 470; y += 12) g.fillRect(34, y, w - 68, 6);
-      tag("UPS-A", 14, false);
-    } else if (a.type === "batt") {
-      for (let s = 0; s < 4; s++) {
-        const y = 24 + s * 118; g.fillStyle = "#12171b"; g.fillRect(14, y, w - 28, 108);
-        for (let b = 0; b < 3; b++) { const x = 20 + b * 74; g.fillStyle = grad(g, y, y + 100, "#2c4a7a", "#1b2f50"); g.fillRect(x, y + 10, 68, 88); g.fillStyle = "#c9ced3"; g.fillRect(x + 8, y + 4, 14, 8); g.fillRect(x + 46, y + 4, 14, 8); g.fillStyle = "#e5604d"; g.fillRect(x + 46, y + 2, 14, 3); g.fillStyle = "#cfd8df"; g.font = "bold 13px monospace"; g.textAlign = "center"; g.fillText("12V", x + 34, y + 62); }
-      }
-      g.fillStyle = "#3fd07a"; g.beginPath(); g.arc(w - 22, 14, 6, 0, 7); g.fill();
-    } else {
-      g.fillStyle = "#9aa3ab"; for (let y = 120; y < 470; y += 10) g.fillRect(24, y, w - 48, 5);
-      g.fillStyle = "#06120c"; rr(g, 60, 36, w - 120, 50, 5); g.fill(); g.fillStyle = "#3fd07a"; g.font = "bold 18px monospace"; g.textAlign = "center"; g.fillText("23.0C  45%", w / 2, 68);
-      tag("CRAC-1", 90, true);
+    g.fillStyle = "#2a3138"; g.fillRect(0, 0, w, h); g.strokeStyle = "#0c0f12"; g.lineWidth = 4; g.strokeRect(2, 2, w - 4, h - 4);
+    for (let s = 0; s < 4; s++) {
+      const y = 24 + s * 118; g.fillStyle = "#12171b"; g.fillRect(14, y, w - 28, 108);
+      for (let b = 0; b < 3; b++) { const x = 20 + b * 74; g.fillStyle = grad(g, y, y + 100, "#2c4a7a", "#1b2f50"); g.fillRect(x, y + 10, 68, 88); g.fillStyle = "#c9ced3"; g.fillRect(x + 8, y + 4, 14, 8); g.fillRect(x + 46, y + 4, 14, 8); g.fillStyle = "#e5604d"; g.fillRect(x + 46, y + 2, 14, 3); g.fillStyle = "#cfd8df"; g.font = "bold 13px monospace"; g.textAlign = "center"; g.fillText("12V", x + 34, y + 62); }
     }
+    g.fillStyle = "#3fd07a"; g.beginPath(); g.arc(w - 22, 14, 6, 0, 7); g.fill();
   });
 }
+function facDist(halfW, min) { const vf = G.cam.fov * Math.PI / 180, hf = 2 * Math.atan(Math.tan(vf / 2) * G.cam.aspect); return Math.max(min, halfW / Math.tan(hf / 2)); }
 function facX0() { const n = G.rowRacks ? G.rowRacks.length : 8; return (n - 1) * (SC.RW + SC.GAP) + SC.RW / 2 + 0.7; }
 function facSpan() { let x = 0; FAC.forEach(a => { x += a.w + 0.08; }); return x - 0.08; }
 function facCenterX(a) { let x = facX0(); for (const q of FAC) { if (q === a) return x + q.w / 2; x += q.w + 0.08; } return x; }
 
-function buildPanelBoard(a, x) {   // 문이 열린 분전반: 받침대·몸체·표시창·차단기 줄·열린 문(창 구멍, 빗장, 경첩)을 부품으로 만든다
-  const g = new THREE.Group(), w = a.w, h = a.h, d = a.d, F = d / 2;
-  g.position.set(x + w / 2, 0.05, SC.RD / 2 - d / 2);
-  const M = (c, r, m) => new THREE.MeshStandardMaterial({ color: c, roughness: r == null ? 0.6 : r, metalness: m == null ? 0.4 : m });
-  const hit = { kind: "fac", id: a.id, name: a.name };
+/* 설비 공통 도구: 바닥 기준 그룹, 재질, 상자, 그림 판 */
+function facKit(a, x) {
+  const g = new THREE.Group(); g.position.set(x + a.w / 2, 0.05, SC.RD / 2 - a.d / 2);
+  const M = (c, r, m) => new THREE.MeshStandardMaterial({ color: c, roughness: r == null ? 0.6 : r, metalness: m == null ? 0.2 : m }), hit = { kind: "fac", id: a.id, name: a.name };
   const box = (sx, sy, sz, px, py, pz, mat, ud) => { const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat); m.position.set(px, py, pz); if (ud) { m.userData = ud; G.ray.push(m); } g.add(m); return m; };
-  box(w - 0.05, 0.12, d - 0.07, 0, 0.06, -0.01, M(0x0b0d0f, 0.9, 0.1), hit);   // 받침대
-  box(w, h - 0.12, d, 0, 0.12 + (h - 0.12) / 2, 0, M(0x17191c, 0.5, 0.5), hit);   // 몸체
-  // 맨 위 칸: 표시창과 주 차단기 둘
-  box(w - 0.1, 0.26, 0.02, 0, h - 0.27, F + 0.008, M(0x0e1012, 0.7, 0.3));
-  const disp = new THREE.Mesh(new THREE.PlaneGeometry(0.26, 0.14), new THREE.MeshBasicMaterial({ map: canvasTex(208, 112, (c, cw, ch) => { c.fillStyle = "#06120c"; c.fillRect(0, 0, cw, ch); c.strokeStyle = "#1f6b3f"; c.lineWidth = 4; c.strokeRect(3, 3, cw - 6, ch - 6); c.fillStyle = "#3fd07a"; c.font = "bold 34px monospace"; c.textAlign = "center"; c.fillText("380V", cw / 2, 44); c.fillText("62.4A", cw / 2, 82); c.font = "13px monospace"; c.fillText("L1  L2  L3   OK", cw / 2, 104); }) }));
-  disp.position.set(0, h - 0.27, F + 0.0195); g.add(disp);
-  [-1, 1].forEach(s => { box(0.07, 0.11, 0.035, s * 0.255, h - 0.27, F + 0.02, M(0x2a2e33, 0.5, 0.4)); box(0.025, 0.045, 0.02, s * 0.255, h - 0.27, F + 0.045, M(0xd9dde1, 0.4, 0.2)); });
-  // 가운데·아래 두 칸: 차단기 줄 (기둥 둘 × 18개)
-  const bodyM = M(0xdfe3e6, 0.5, 0.1), togM = M(0x1d2125, 0.5, 0.2), togOn = M(0xe5604d, 0.5, 0.2);
-  const pitch = 0.0335, per = 18;
-  [[0.24, 0.66], [0.94, 0.66]].forEach(([y0, ph], pi) => {
-    const yc = y0 + ph / 2 + 0.12 - 0.12;
-    box(w - 0.12, ph, 0.016, 0, yc, F + 0.006, M(0x20252a, 0.6, 0.3), hit);   // 안쪽 덮개판
-    box(0.2, ph - 0.04, 0.008, -0.12, yc, F + 0.016, M(0x50585f, 0.5, 0.6));   // 모선(구리·철 띠)
-    const bg = new THREE.BoxGeometry(0.075, 0.029, 0.034), tg = new THREE.BoxGeometry(0.026, 0.012, 0.014);
-    const bi = new THREE.InstancedMesh(bg, bodyM, per * 2), ti = new THREE.InstancedMesh(tg, togM, per * 2 - 2), to = new THREE.InstancedMesh(tg, togOn, 2), o = new THREE.Object3D();
-    let n = 0, m = 0, q = 0;
-    for (let col = 0; col < 2; col++) for (let k = 0; k < per; k++) {
-      const px = -0.2 + col * 0.088, py = yc + (k - (per - 1) / 2) * pitch;
-      o.position.set(px, py, F + 0.032); o.updateMatrix(); bi.setMatrixAt(n++, o.matrix);
-      o.position.set(px - 0.004, py, F + 0.054); o.updateMatrix(); if (k === per - 1 && pi === 1) to.setMatrixAt(q++, o.matrix); else ti.setMatrixAt(m++, o.matrix);
-    }
-    ti.count = m; to.count = q; [bi, ti, to].forEach(t => { t.instanceMatrix.needsUpdate = true; g.add(t); });
-    // 회로 안내표(종이)와 감전 주의 스티커
-    const card = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.2), new THREE.MeshBasicMaterial({ map: canvasTex(150, 200, (c, cw, ch) => { c.fillStyle = "#eceff1"; c.fillRect(0, 0, cw, ch); c.fillStyle = "#2a3138"; c.font = "bold 13px sans-serif"; c.textAlign = "left"; c.fillText(pi ? "분전반 DB-1 하단" : "분전반 DB-1 상단", 8, 18); c.fillRect(8, 24, cw - 16, 1.5); c.font = "11px monospace"; for (let r = 0; r < 12; r++) c.fillText(`${String(r * 3 + 1).padStart(2, "0")}  ${r % 4 === 3 ? "SPARE" : "RACK PDU"}`, 8, 42 + r * 13); c.fillStyle = "#b8bec4"; c.fillRect(8, 192, cw - 16, 1); }) }));
-    card.position.set(0.2, yc + ph / 2 - 0.13, F + 0.016); g.add(card);
-    const warn = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.05), new THREE.MeshBasicMaterial({ map: canvasTex(100, 50, (c, cw, ch) => { c.fillStyle = "#fff"; c.fillRect(0, 0, cw, ch); c.fillStyle = "#d62828"; c.fillRect(0, 0, cw, 16); c.fillStyle = "#fff"; c.font = "bold 12px sans-serif"; c.textAlign = "center"; c.fillText("DANGER", cw / 2, 13); c.fillStyle = "#222"; c.font = "10px sans-serif"; c.fillText("감전 주의", cw / 2, 34); c.fillText("380V", cw / 2, 46); }) }));
-    warn.position.set(0.2, yc - 0.03, F + 0.016); g.add(warn);
+  const pl = (pw, ph, px, py, pz, map) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), new THREE.MeshStandardMaterial({ map, roughness: 0.7, metalness: 0 })); m.position.set(px, py, pz); g.add(m); return m; };
+  return { g, M, hit, box, pl, F: a.d / 2 };
+}
+function meshTex(rx, ry) {   // 구멍 뚫린 메쉬(통풍망)
+  const t = canvasTex(64, 64, (c, w, h) => { c.fillStyle = "#a3aab0"; c.fillRect(0, 0, w, h); c.fillStyle = "#3b4248"; for (let y = 4; y < h; y += 8) for (let x = ((y / 8) % 2) * 4 + 4; x < w; x += 8) { c.beginPath(); c.arc(x, y, 2.5, 0, 7); c.fill(); } });
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx, ry); return t;
+}
+function louverTex(rows) {   // 환기창 비늘
+  return canvasTex(80, 80, (c, w, h) => { c.fillStyle = "#8d9288"; c.fillRect(0, 0, w, h); for (let k = 0; k < rows; k++) { const y = 6 + k * ((h - 12) / rows); c.fillStyle = "#c9cdc0"; c.fillRect(4, y, w - 8, 4); c.fillStyle = "#3d4239"; c.fillRect(4, y + 4, w - 8, 3); } c.strokeStyle = "#5d6258"; c.lineWidth = 3; c.strokeRect(1.5, 1.5, w - 3, h - 3); });
+}
+function hazardTex() {   // 노란 삼각형 감전 주의 스티커
+  return canvasTex(80, 80, (c, w, h) => { c.fillStyle = "#f3f4f4"; c.fillRect(0, 0, w, h); c.fillStyle = "#f2c230"; c.strokeStyle = "#111"; c.lineWidth = 4; c.beginPath(); c.moveTo(w / 2, 8); c.lineTo(w - 8, h - 10); c.lineTo(8, h - 10); c.closePath(); c.fill(); c.stroke(); c.fillStyle = "#111"; c.beginPath(); c.moveTo(w / 2 + 6, 26); c.lineTo(w / 2 - 8, 46); c.lineTo(w / 2, 46); c.lineTo(w / 2 - 6, 62); c.lineTo(w / 2 + 9, 41); c.lineTo(w / 2 + 1, 41); c.closePath(); c.fill(); });
+}
+function buildUPS(a, x) {   // 큰 본체 + 좁은 보조 캐비닛, 파란 손잡이, 노란 경고 삼각형, 통풍 메쉬, 바닥 고무매트
+  const { g, M, hit, box, pl, F } = facKit(a, x), w = a.w, h = a.h, wm = w * 0.64, ws = w - wm - 0.02, xm = -w / 2 + wm / 2, xs = w / 2 - ws / 2, grey = M(0xc7cacd, 0.55, 0.15), lite = M(0xd9dcde, 0.5, 0.1), dk = M(0x23272b, 0.8, 0.3);
+  box(w - 0.06, 0.08, a.d - 0.08, 0, 0.04, 0, M(0x4b4f54, 0.8, 0.3), hit);
+  box(wm, h - 0.08, a.d, xm, 0.08 + (h - 0.08) / 2, 0, grey, hit);
+  box(ws, h - 0.08, a.d, xs, 0.08 + (h - 0.08) / 2, 0, grey, hit);
+  box(0.02, h - 0.08, a.d - 0.02, xm + wm / 2 + 0.01, 0.08 + (h - 0.08) / 2, 0, dk);   // 두 캐비닛 사이 틈
+  box(wm - 0.08, 0.5, 0.02, xm, h - 0.38, F + 0.01, lite);   // 위 앞판(살짝 튀어나옴)
+  box(0.24, 0.07, 0.012, xm - 0.05, h - 0.2, F + 0.026, M(0x1b2024, 0.4, 0.2));   // 표시창 틀
+  pl(0.21, 0.045, xm - 0.05, h - 0.2, F + 0.033, canvasTex(168, 36, (c, cw, ch) => { c.fillStyle = "#0d2a2c"; c.fillRect(0, 0, cw, ch); c.fillStyle = "#58d6c9"; c.font = "bold 14px monospace"; c.textAlign = "center"; c.fillText("UPS-A ONLINE 58%", cw / 2, 23); }));
+  [-0.05, 0.05].forEach(dx => box(0.022, 0.022, 0.012, xm + dx + 0.02, h - 0.3, F + 0.026, M(dx < 0 ? 0x3fd07a : 0x39444d, 0.4, 0)));
+  const hd = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.02, 20), M(0x3a7bd5, 0.4, 0.3)); hd.rotation.x = Math.PI / 2; hd.position.set(xm + wm / 2 - 0.045, h - 0.52, F + 0.03); g.add(hd);   // 파란 손잡이
+  box(wm - 0.12, 0.74, 0.012, xm, 0.5, F + 0.006, M(0x30363b, 0.7, 0.3));   // 아래 통풍 틀
+  pl(wm - 0.16, 0.7, xm, 0.5, F + 0.013, meshTex(7, 7));
+  pl(0.14, 0.14, xs, h - 0.32, F + 0.002, hazardTex());   // 노란 삼각형 스티커
+  box(ws - 0.08, 0.7, 0.012, xs, 0.5, F + 0.006, M(0x30363b, 0.7, 0.3));
+  pl(ws - 0.12, 0.66, xs, 0.5, F + 0.013, meshTex(4, 6));
+  const mat = new THREE.Mesh(new THREE.BoxGeometry(w + 0.3, 0.012, 0.8), M(0x15181b, 0.95, 0)); mat.position.set(0, -0.044, F + 0.4); g.add(mat);   // 바닥 고무매트
+  return g;
+}
+function buildCRAC(a, x) {   // 윗면 둥근 송풍구 넷, 주황 옆띠, 터치 화면, 아래 메쉬 두 장
+  const { g, M, hit, box, pl, F } = facKit(a, x), w = a.w, h = a.h, d = a.d, topH = 0.34, bodyH = h - 0.1 - topH, white = M(0xeceff1, 0.45, 0.1), org = M(0xdd5a28, 0.5, 0.1);
+  box(w - 0.06, 0.1, d - 0.08, 0, 0.05, 0, M(0x2a2e33, 0.8, 0.3), hit);
+  box(w - 0.04, bodyH, d - 0.04, 0, 0.1 + bodyH / 2, 0, white, hit);
+  box(w, topH, d, 0, h - topH / 2, 0, white, hit);
+  box(w - 0.04, 0.012, d - 0.03, 0, h - topH - 0.002, 0, M(0xb8bec3, 0.6, 0.3));   // 윗상자 밑 그림자 띠
+  [-1, 1].forEach(s => box(0.05, bodyH, 0.012, s * (w / 2 - 0.045), 0.1 + bodyH / 2, F - 0.02 + 0.006, org));   // 주황 옆띠
+  for (let i = 0; i < 4; i++) {   // 윗상자 앞면의 둥근 송풍구
+    const px = (i - 1.5) * (w / 4.3), py = h - topH / 2 + 0.01;
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.024, 12, 28), white); ring.position.set(px, py, F + 0.02); g.add(ring);
+    const bore = new THREE.Mesh(new THREE.CircleGeometry(0.105, 28), M(0x111417, 0.9, 0)); bore.position.set(px, py, F + 0.012); g.add(bore);
+    const vane = new THREE.Mesh(new THREE.CircleGeometry(0.075, 24, 0, Math.PI), M(0x6c757c, 0.5, 0.5)); vane.position.set(px, py - 0.01, F + 0.016); g.add(vane);
+  }
+  const sy = 0.1 + bodyH - 0.3;
+  box(0.24, 0.18, 0.016, 0, sy, F - 0.02 + 0.008, M(0x20252a, 0.5, 0.3));   // 터치 화면 틀
+  pl(0.21, 0.15, 0, sy, F - 0.02 + 0.018, canvasTex(168, 120, (c, cw, ch) => { c.fillStyle = "#e9f1fb"; c.fillRect(0, 0, cw, ch); c.fillStyle = "#2c6ef2"; c.fillRect(0, 0, cw, 22); c.fillStyle = "#fff"; c.font = "bold 13px sans-serif"; c.fillText("CRAC-1  가동 중", 6, 16); c.fillStyle = "#1c2630"; c.font = "bold 24px monospace"; c.fillText("23.0°C", 8, 56); c.fillText("45 %RH", 8, 88); c.fillStyle = "#3fd07a"; c.fillRect(120, 40, 36, 14); c.fillStyle = "#e5a43a"; c.fillRect(120, 66, 36, 14); }));
+  [-1, 1].forEach(s => box(0.016, 0.07, 0.016, s * 0.17, sy, F - 0.02 + 0.014, M(0xb9c0c6, 0.3, 0.8)));   // 문 손잡이
+  [-1, 1].forEach(s => {   // 아래 메쉬 두 장
+    const gx = s * (w / 4 - 0.03);
+    box(w / 2 - 0.16, 0.8, 0.014, gx, 0.1 + 0.46, F - 0.02 + 0.006, white);
+    pl(w / 2 - 0.22, 0.72, gx, 0.1 + 0.46, F - 0.02 + 0.015, meshTex(8, 8));
   });
-  // 경첩 셋
-  [0.25, 0.95, 1.6].forEach(y => box(0.016, 0.07, 0.016, -w / 2 - 0.004, y, F + 0.012, M(0xb9c0c6, 0.3, 0.8)));
-  // 열린 문: 왼쪽 경첩을 축으로 앞쪽으로 활짝 열려 있다 (안쪽 면이 보임)
-  const dw = w - 0.02, dh = h - 0.16, hinge = new THREE.Group();
-  hinge.position.set(-w / 2 + 0.005, 0.14, F + 0.014); hinge.rotation.y = -Math.PI * 0.58; g.add(hinge);
-  const sh = new THREE.Shape(); sh.moveTo(0, 0); sh.lineTo(dw, 0); sh.lineTo(dw, dh); sh.lineTo(0, dh); sh.lineTo(0, 0);
-  const hole = new THREE.Path(); hole.moveTo(0.14, dh - 0.32); hole.lineTo(0.38, dh - 0.32); hole.lineTo(0.38, dh - 0.14); hole.lineTo(0.14, dh - 0.14); hole.lineTo(0.14, dh - 0.32); sh.holes.push(hole);
-  const door = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 0.025, bevelEnabled: false }), M(0x1a1c1f, 0.5, 0.5)); door.userData = hit; G.ray.push(door); hinge.add(door);
-  const plane = (pw, ph, px, py, tex) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), new THREE.MeshBasicMaterial({ map: tex })); m.position.set(px, py, -0.001); m.rotation.y = Math.PI; hinge.add(m); };
-  plane(0.12, 0.16, dw - 0.1, dh - 0.26, canvasTex(120, 160, (c, cw, ch) => { c.fillStyle = "#eceff1"; c.fillRect(0, 0, cw, ch); c.fillStyle = "#2a3138"; c.font = "bold 12px sans-serif"; c.fillText("점검 시 주의", 8, 18); c.font = "10px sans-serif"; ["1. 전원 차단 확인", "2. 잠금·표지 부착", "3. 검전 후 작업", "4. 복구 후 보고"].forEach((t, k) => c.fillText(t, 8, 40 + k * 16)); }));
-  plane(0.1, 0.05, 0.16, 0.5, canvasTex(100, 50, (c, cw, ch) => { c.fillStyle = "#f2c230"; c.fillRect(0, 0, cw, ch); c.fillStyle = "#111"; c.font = "bold 14px sans-serif"; c.textAlign = "center"; c.fillText("고압 주의", cw / 2, 30); }));
-  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, dh - 0.3, 8), M(0xc9ced3, 0.3, 0.9)); rod.position.set(dw - 0.035, dh / 2, -0.012); hinge.add(rod);
-  [0.1, dh - 0.12].forEach(y => { const lt = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, 0.02), M(0xc9ced3, 0.3, 0.9)); lt.position.set(dw - 0.035, y, -0.014); hinge.add(lt); });
+  return g;
+}
+function buildDB(a, x) {   // 연회색 네 짝 문, 환기창, 빗장, 오른쪽 제어창, 지붕
+  const { g, M, hit, box, pl, F } = facKit(a, x), w = a.w, h = a.h, d = a.d, body = M(0xb7baad, 0.6, 0.25), cap = M(0xa8aba0, 0.6, 0.25), seam = M(0x4a4e44, 0.9, 0.1);
+  box(w - 0.04, 0.07, d - 0.04, 0, 0.035, 0, M(0x8c9086, 0.8, 0.2), hit);
+  const bh = h - 0.07 - 0.12; box(w, bh, d, 0, 0.07 + bh / 2, 0, body, hit);
+  box(w + 0.05, 0.1, d + 0.05, 0, h - 0.07, 0, cap, hit);   // 지붕(앞으로 살짝 튀어나옴)
+  box(0.3, 0.035, 0.06, 0, h - 0.01, 0, cap);   // 지붕 가운데 솔기 덮개
+  const dw = (w - 0.06) / 4 - 0.01, dy = 0.07 + bh / 2 - 0.02, dh = bh - 0.1;
+  for (let k = 0; k < 4; k++) {
+    const dx = (k - 1.5) * ((w - 0.06) / 4) + (k < 2 ? -0.005 : 0.005);
+    box(dw, dh, 0.014, dx, dy, F + 0.006, body, hit);   // 문
+    box(0.008, dh, 0.016, dx + dw / 2 + 0.005, dy, F + 0.008, seam);   // 문 틈
+  }
+  box(0.014, bh, 0.02, 0, 0.07 + bh / 2, F + 0.01, seam);   // 가운데 큰 틈
+  [-1, 0].forEach(k => {   // 문 1·2: 위 환기창과 아래 비늘 구멍
+    const px = (k === -1 ? -1.5 : -0.5) * ((w - 0.06) / 4) - 0.005;
+    pl(0.2, 0.2, px, dy + dh / 2 - 0.2, F + 0.016, louverTex(7));
+    pl(0.22, 0.3, px, dy - dh / 2 + 0.25, F + 0.016, louverTex(10));
+  });
+  [-1, 1].forEach(s => {   // 두 문을 잇는 빗장과 열쇠 구멍
+    const bx = s * (w / 4 + 0.0), by = dy - 0.02;
+    box(0.34, 0.03, 0.02, bx, by, F + 0.024, M(0x4d5258, 0.4, 0.7));
+    [-0.12, 0.12].forEach(o => { const kc = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.012, 14), M(0xb48a46, 0.4, 0.8)); kc.rotation.x = Math.PI / 2; kc.position.set(bx + o, by - 0.035, F + 0.02); g.add(kc); });
+  });
+  const px = 1.5 * ((w - 0.06) / 4) + 0.005;   // 문 4: 제어창과 이름표
+  box(0.16, 0.3, 0.014, px, dy + 0.06, F + 0.018, M(0x34413a, 0.6, 0.3));
+  pl(0.12, 0.26, px, dy + 0.06, F + 0.026, canvasTex(96, 208, (c, cw, ch) => { c.fillStyle = "#0b0f12"; c.fillRect(0, 0, cw, ch); c.fillStyle = "#06120c"; c.fillRect(14, 12, 68, 52); c.fillStyle = "#3fd07a"; c.font = "bold 16px monospace"; c.textAlign = "center"; c.fillText("380V", cw / 2, 34); c.fillText("62A", cw / 2, 56); [["#d62828", 100], ["#d62828", 122], ["#f2c230", 146], ["#3fd07a", 170]].forEach(([col, y], k) => { c.fillStyle = col; c.beginPath(); c.arc(k < 2 ? 28 + k * 40 : 48, y - (k < 2 ? 0 : 0), 11, 0, 7); c.fill(); }); }));
+  pl(0.14, 0.04, px, dy + dh / 2 - 0.05, F + 0.016, canvasTex(112, 32, (c, cw, ch) => { c.fillStyle = "#f3f4f4"; c.fillRect(0, 0, cw, ch); c.strokeStyle = "#999"; c.strokeRect(0.5, 0.5, cw - 1, ch - 1); c.fillStyle = "#222"; c.font = "bold 14px sans-serif"; c.textAlign = "center"; c.fillText("분전반 DB-1", cw / 2, 21); }));
   return g;
 }
 function buildFacilities() {
   const g = new THREE.Group(); let x = facX0();
   FAC.forEach(a => {
-    if (a.type === "panel") { g.add(buildPanelBoard(a, x)); x += a.w + 0.08; return; }
+    if (a.type === "ups" || a.type === "panel" || a.type === "crac") { g.add({ ups: buildUPS, panel: buildDB, crac: buildCRAC }[a.type](a, x)); x += a.w + 0.08; return; }
     const side = dark(0x20272d), front = new THREE.MeshStandardMaterial({ map: facTex(a), roughness: 0.7, metalness: 0.2 });
     const m = new THREE.Mesh(new THREE.BoxGeometry(a.w, a.h, a.d), [side, side, side, side, front, side]);
     const z = a.type === "panel" ? SC.RD / 2 - a.d / 2 - 0.02 : 0;   // 분전반은 얇아서 앞면을 다른 설비와 비슷하게 맞춘다
@@ -615,7 +642,7 @@ function render3d() {
   $("#glPadTog").onclick = () => { const m = $("#glPad").classList.toggle("min"); $("#glPadTog").textContent = m ? "조작판 펼치기" : "조작판 접기"; $("#glPadTog").setAttribute("aria-expanded", String(!m)); };
   $$("[data-gm]").forEach(b => { b.classList.toggle("on", b.dataset.gm === G.gmode); b.onclick = () => { G.gmode = b.dataset.gm; $$("[data-gm]").forEach(x => x.classList.toggle("on", x.dataset.gm === G.gmode)); }; });
   $("#glFit").onclick = () => { G.fac = null; if (G.ready) flyTo(fitTarget()); };
-  $("#glPower").onclick = () => { if (!G.ready) return; G.fac = FAC[0]; G.sel = null; G.slot = null; render3d(); flyTo({ az: 0, pol: 88, dist: 6.2, tx: facX0() + facSpan() / 2, ty: 1.0 }); };
+  $("#glPower").onclick = () => { if (!G.ready) return; G.fac = FAC[0]; G.sel = null; G.slot = null; render3d(); flyTo({ az: 0, pol: 88, dist: facDist(facSpan() / 2 + 0.5, 5), tx: facX0() + facSpan() / 2, ty: 1.0 }); };
   $("#glHome").onclick = () => { if (G.ready) flyTo(Object.assign({}, G.cs, { az: 0, pol: 88 })); };
   $("#glList").addEventListener("click", ev => { const el = ev.target.closest(".gli"); if (el) { G.sel = { kind: "rack", rack: el.dataset.rack }; G.jump = true; G.focus = { rack: el.dataset.rack, u0: 0 }; render3d(); } });
   $("#glAlerts").addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { if (+tr.dataset.t) sr.end = +tr.dataset.t; G.sel = { kind: "rack", rack: tr.dataset.rack }; G.jump = true; G.focus = { rack: tr.dataset.rack, u0: 0 }; render3d(); } });
