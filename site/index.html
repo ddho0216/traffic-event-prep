@@ -8,11 +8,13 @@
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<script>try { document.documentElement.dataset.theme = localStorage.getItem("theme") === "light" ? "light" : "dark"; } catch (e) { document.documentElement.dataset.theme = "dark"; }</script>
 </head>
 <body>
 <header class="top">
   <h1><a href="#monitor" id="homeLink" title="관제(홈)로 가기"><img class="logo" src="favicon.svg" alt="" width="26" height="26">백본 트래픽 관제</a></h1>
   <span class="badge">가상 데이터 · 센터는 지명만 빌린 가상 센터</span>
+  <button class="btn sm" id="themeBtn" type="button" aria-pressed="true" title="화면 색을 어둡게/밝게 바꿉니다">다크 모드: 켬</button>
   <nav class="tabs" id="tabs">
     <button data-tab="monitor" class="on">관제</button>
     <div class="tabgrp"><button data-tab="room" class="grpbtn">서버실</button><div class="submenu"><button data-tab="room">서버실</button><button data-tab="room3d">서버실 3D</button></div></div>

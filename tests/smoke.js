@@ -425,6 +425,21 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const so2 = await page.evaluate(() => Object.fromEntries(SOAR.state.rows.map(r => [r.a.id, r.status])));
   check('자동 대응: 조장 승인 → 블랙홀은 동시 2건까지(3번째는 한도 초과), 연동망 요청은 2번 실패 후 성공(조치됨)·계속 실패하면 일부 실패', so2['INC-101'] === '조치됨' && so2['INC-105'] === '일부 실패' && so2['INC-106'] === '한도 초과', JSON.stringify(so2));
   check('자동 대응: 담당자 확인이 필요한 건에 일부 실패·한도 초과 2건이 보임', (await page.locator('.so-chk').count()) === 2);
+  // 다크 모드 켜고 끄기: 기본은 켬, 끄면 밝은 화면, 고른 값은 새로고침해도 유지
+  const th = await ctx.newPage(); await th.goto(url, { waitUntil: 'load' });
+  const lum = () => th.evaluate(() => { const m = getComputedStyle(document.body).backgroundColor.match(/\d+/g).map(Number); return (m[0] + m[1] + m[2]) / 3; });
+  const thm0 = { theme: await th.evaluate(() => document.documentElement.dataset.theme), btn: await th.locator('#themeBtn').innerText(), l: await lum() };
+  check('다크 모드가 기본으로 켜져 있고(버튼 "다크 모드: 켬") 배경이 어두움', thm0.theme === 'dark' && thm0.btn === '다크 모드: 켬' && thm0.l < 60, JSON.stringify(thm0));
+  await th.click('#themeBtn');
+  const thm1 = { theme: await th.evaluate(() => document.documentElement.dataset.theme), btn: await th.locator('#themeBtn').innerText(), l: await lum(), pressed: await th.locator('#themeBtn').getAttribute('aria-pressed') };
+  check('버튼을 누르면 다크 모드가 꺼지고(버튼 "다크 모드: 끔") 배경이 밝아짐', thm1.theme === 'light' && thm1.btn === '다크 모드: 끔' && thm1.l > 200 && thm1.pressed === 'false', JSON.stringify(thm1));
+  await th.reload({ waitUntil: 'load' });
+  check('새로고침해도 고른 모드(끔)가 유지됨', (await th.evaluate(() => document.documentElement.dataset.theme)) === 'light' && (await th.locator('#themeBtn').innerText()) === '다크 모드: 끔');
+  const unread = await th.evaluate(() => { const rgb = s => s.match(/[\d.]+/g).slice(0, 3).map(Number), lumi = ([r, g, b]) => 0.2126 * r + 0.7152 * g + 0.0722 * b, bad = []; for (const sel of ['body', 'header.top h1 a', '#tab-monitor .note', '.card h3']) { const e = document.querySelector(sel); if (!e) continue; const cs = getComputedStyle(e); if (Math.abs(lumi(rgb(cs.color)) - lumi(rgb(getComputedStyle(document.body).backgroundColor))) < 80) bad.push(sel); } return bad; });
+  check('밝은 화면에서 본문·제목 글자가 배경과 충분히 구분됨', unread.length === 0, unread.join());
+  await th.click('#themeBtn');
+  check('다시 누르면 다크 모드가 켜짐', (await th.evaluate(() => document.documentElement.dataset.theme)) === 'dark' && (await th.locator('#themeBtn').innerText()) === '다크 모드: 켬');
+  await th.close();
   const vis = {};
   for (const tab of ['monitor', 'room', 'room3d', 'term', 'event', 'monthly', 'visit', 'sms', 'gear', 'live']) { await goTab(tab); vis[tab] = await page.locator('#centerBar').isVisible(); }
   check('센터 선택은 관제·서버실에서만 보이고 나머지 탭에서는 숨겨짐', vis.monitor && vis.room && vis.room3d && !vis.term && !vis.event && !vis.monthly && !vis.visit && !vis.sms && !vis.gear && !vis.live, JSON.stringify(vis));
