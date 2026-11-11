@@ -79,9 +79,6 @@
     { v: "juniper", cat: "로그·기록", cmd: "show log messages | match UI_CMDLINE_READ_LINE", what: "누가 어떤 명령을 쳤는지 남은 기록(형식 예시)", read: "실제 장비는 설정에 따라 사용자와 친 명령을 로그에 남길 수 있습니다. 그 모양을 보여 주는 가상 예시입니다.", own: "jLogCmd" },
     { v: "juniper", cat: "로그·기록", cmd: "show system users", what: "지금 접속해 있는 사람", read: "누가 접속 중인지, 얼마나 놀고 있는지 봅니다.", own: "jUsers" },
     { v: "juniper", cat: "설정", cmd: "show configuration interfaces {port} | display set", what: "포트 설정 확인", read: "disable이 있으면 관리자가 내려 둔 포트입니다." },
-    { v: "juniper", cat: "위험 명령", cmd: "clear log messages", what: "로그 파일 지우기", read: "", risk: "실제 장비라면 로그가 지워져서 장애 원인을 찾을 수 없게 되고, \"로그를 지웠다\"는 사실이 다른 기록에 남을 수 있습니다. 로그는 장애 원인과 작업 증거라서 함부로 지우지 않습니다." },
-    { v: "juniper", cat: "위험 명령", cmd: "clear interfaces statistics all", what: "포트 카운터(CRC 등) 0으로 되돌리기", read: "", risk: "CRC·에러 카운터가 0이 되어 장애 증거가 사라집니다. 지우기 전에 값을 캡처·기록해 둬야 합니다." },
-    { v: "juniper", cat: "위험 명령", cmd: "request system reboot", what: "장비 재부팅", read: "", risk: "실제 장비라면 \"Reboot the system? [yes,no]\"라고 한 번 묻고, yes면 장비가 꺼져 연결된 고객 회선이 모두 끊깁니다. 짝 장비(이중화)가 받는지, 작업 승인이 있는지 먼저 확인해야 합니다." },
     { v: "cisco", cat: "장비 상태", cmd: "show version", what: "장비 모델·OS 버전과 uptime", read: "최근 재부팅 여부는 Kernel uptime으로 봅니다.", own: "cVersion" },
     { v: "cisco", cat: "장비 상태", cmd: "show inventory", what: "부품·일련번호 목록", read: "교체·RMA 때 일련번호를 확인합니다.", own: "cInventory" },
     { v: "cisco", cat: "장비 상태", cmd: "show environment", what: "온도·팬·전원 상태", read: "Status가 Ok이고 CurTemp가 임계값보다 낮으면 정상입니다.", own: "cEnv" },
@@ -100,9 +97,6 @@
     { v: "cisco", cat: "로그·기록", cmd: "show history", what: "이 접속에서 친 명령 목록", read: "연습 모드에서는 이 연습 화면의 명령만 보입니다.", own: "cHistory" },
     { v: "cisco", cat: "로그·기록", cmd: "show users", what: "지금 접속해 있는 사람", read: "누가 접속 중인지 봅니다.", own: "cUsers" },
     { v: "cisco", cat: "설정", cmd: "show running-config interface {port}", what: "포트 설정 확인", read: "shutdown이 있으면 관리자가 내려 둔 포트입니다." },
-    { v: "cisco", cat: "위험 명령", cmd: "clear logging logfile", what: "로그 파일 지우기", read: "", risk: "실제 장비라면 저장된 로그가 지워져서 장애 원인을 찾기 어려워집니다. 지웠다는 사실도 기록에 남을 수 있습니다." },
-    { v: "cisco", cat: "위험 명령", cmd: "clear counters", what: "포트 카운터 0으로 되돌리기", read: "", risk: "CRC·에러 카운터가 사라져 장애 증거가 없어집니다. 먼저 값을 기록해 두세요." },
-    { v: "cisco", cat: "위험 명령", cmd: "reload", what: "장비 재부팅", read: "", risk: "실제 장비라면 \"Proceed with reload? (y/n)\"라고 묻고, y면 장비가 꺼져 연결된 회선이 모두 끊깁니다. 이중화 짝과 작업 승인을 먼저 확인합니다." },
     { v: "huawei", cat: "장비 상태", cmd: "display version", what: "장비 OS 버전과 uptime", read: "uptime이 짧으면 최근에 재부팅한 것입니다.", own: "hVersion" },
     { v: "huawei", cat: "장비 상태", cmd: "display device", what: "장비·카드 상태", read: "Status가 Normal이 아니면 그 카드를 확인합니다.", own: "hDevice" },
     { v: "huawei", cat: "장비 상태", cmd: "display cpu-usage", what: "CPU 사용률", read: "five seconds 값이 계속 높으면 과부하를 의심합니다.", own: "hCpu" },
@@ -117,11 +111,20 @@
     { v: "huawei", cat: "로그·기록", cmd: "display history-command", what: "이 접속에서 친 명령 목록", read: "연습 모드에서는 이 연습 화면의 명령만 보입니다.", own: "cHistory" },
     { v: "huawei", cat: "로그·기록", cmd: "display users", what: "지금 접속해 있는 사람", read: "누가 접속 중인지 봅니다.", own: "hUsers" },
     { v: "huawei", cat: "설정", cmd: "display current-configuration interface {hwport}", what: "포트 설정 확인", read: "shutdown이 있으면 관리자가 내려 둔 포트입니다." },
+  ];
+  /* 위험 명령은 사전에 싣지 않는다 (따라 쳤다가 실제 장비에서 큰일 나지 않도록). 연습 터미널에서 직접 쳤을 때만 아무 일도 안 일어나게 하고 왜 위험한지 알려 준다 */
+  const RISK = [
+    { v: "juniper", cat: "위험 명령", cmd: "clear log messages", what: "로그 파일 지우기", read: "", risk: "실제 장비라면 로그가 지워져서 장애 원인을 찾을 수 없게 되고, \"로그를 지웠다\"는 사실이 다른 기록에 남을 수 있습니다. 로그는 장애 원인과 작업 증거라서 함부로 지우지 않습니다." },
+    { v: "juniper", cat: "위험 명령", cmd: "clear interfaces statistics all", what: "포트 카운터(CRC 등) 0으로 되돌리기", read: "", risk: "CRC·에러 카운터가 0이 되어 장애 증거가 사라집니다. 지우기 전에 값을 캡처·기록해 둬야 합니다." },
+    { v: "juniper", cat: "위험 명령", cmd: "request system reboot", what: "장비 재부팅", read: "", risk: "실제 장비라면 \"Reboot the system? [yes,no]\"라고 한 번 묻고, yes면 장비가 꺼져 연결된 고객 회선이 모두 끊깁니다. 짝 장비(이중화)가 받는지, 작업 승인이 있는지 먼저 확인해야 합니다." },
+    { v: "cisco", cat: "위험 명령", cmd: "clear logging logfile", what: "로그 파일 지우기", read: "", risk: "실제 장비라면 저장된 로그가 지워져서 장애 원인을 찾기 어려워집니다. 지웠다는 사실도 기록에 남을 수 있습니다." },
+    { v: "cisco", cat: "위험 명령", cmd: "clear counters", what: "포트 카운터 0으로 되돌리기", read: "", risk: "CRC·에러 카운터가 사라져 장애 증거가 없어집니다. 먼저 값을 기록해 두세요." },
+    { v: "cisco", cat: "위험 명령", cmd: "reload", what: "장비 재부팅", read: "", risk: "실제 장비라면 \"Proceed with reload? (y/n)\"라고 묻고, y면 장비가 꺼져 연결된 회선이 모두 끊깁니다. 이중화 짝과 작업 승인을 먼저 확인합니다." },
     { v: "huawei", cat: "위험 명령", cmd: "reset logbuffer", what: "로그 버퍼 지우기", read: "", risk: "실제 장비라면 \"Are you sure to clear? [Y/N]\"이라고 묻고, Y면 로그가 지워져 장애 원인을 찾기 어려워집니다." },
     { v: "huawei", cat: "위험 명령", cmd: "reset counters interface", what: "포트 카운터 0으로 되돌리기", read: "", risk: "inErrors 같은 카운터가 사라져 장애 증거가 없어집니다. 먼저 값을 기록해 두세요." },
     { v: "huawei", cat: "위험 명령", cmd: "reboot", what: "장비 재부팅", read: "", risk: "실제 장비라면 저장 여부와 재부팅 여부를 묻고, 진행하면 장비가 꺼져 연결된 회선이 모두 끊깁니다. 이중화 짝과 작업 승인을 먼저 확인합니다." }
   ];
-  const CATS = ["장비 상태", "회선·인터페이스", "이웃·경로", "로그·기록", "설정", "위험 명령"];
+  const CATS = ["장비 상태", "회선·인터페이스", "이웃·경로", "로그·기록", "설정"];
   const dev = () => DEV[S.dev] || DEVICES.find(d => d.vendor === S.vendor);
   const fill = (cmd, d) => {   // {port}·{ip}·{hwport}를 고른 장비에 맞게 채운다
     const bad = d.ifs.find(f => !f[11] && (f[2] > 50 || f[3] < -9)) || d.ifs.find(f => !f[11]) || d.ifs[0], pp = d.ifs.find(f => f[8] && f[5] === "up");
@@ -141,19 +144,31 @@
     S.hist.push(cmd); S.hp = S.hist.length;
     if (cmd === "?" || /^help$/i.test(cmd)) return { text: "명령어를 입력하세요. 왼쪽 \"명령어 사전\"에서 골라 입력할 수도 있고, 앞부분만 치고 Tab 키를 누르면 이어서 채워 줍니다.\n예) \"show ?\" 처럼 물음표를 붙이면 그 뒤에 올 수 있는 명령을 보여 줍니다." };
     if (/ \?$/.test(cmd)) { const pre = cmd.slice(0, -2).toLowerCase(); const m = lib.filter(x => x.text.toLowerCase().startsWith(pre + " ")); return { text: m.length ? "가능한 명령:\n" + m.map(x => "  " + x.text.slice(pre.length + 1) + "   — " + x.what).join("\n") : "(그 뒤에 올 명령이 사전에 없습니다)" }; }
-    const risk = lib.find(x => x.risk && x.text.toLowerCase() === cmd.toLowerCase());
-    if (risk) return { text: `[연습] 위험 명령입니다: ${risk.what}\n${risk.risk}\n\n연습 모드에서는 아무 일도 일어나지 않았고 기록도 남지 않았습니다.`, warn: true };
+    const risk = RISK.find(x => x.v === S.vendor && x.cmd.toLowerCase() === cmd.toLowerCase());
+    if (risk) return { text: `[연습] 위험한 명령입니다: ${risk.what}\n${risk.risk}\n\n연습 모드에서는 아무 일도 일어나지 않았고 기록도 남지 않았습니다. 실제 장비에서는 절대 함부로 치지 마세요.`, warn: true };
     const own = lib.find(x => x.own && x.text.toLowerCase() === cmd.toLowerCase());
     if (own) return { text: OUT[own.own](d) };
     for (const [re, fn] of DEV_CMDS[d.vendor]) { const m = cmd.match(re); if (m) return { text: withTime(termMs(), () => fn(d, m)) || "(출력 없음)" }; }
     const sg = suggest(cmd, lib);
     return { text: VENDOR_ERR[d.vendor] + (sg.length ? "\n\n혹시 이 명령이 아닌가요?\n" + sg.map(x => "  " + x).join("\n") : "\n\n\"?\"를 입력하거나 왼쪽 명령어 사전을 보세요."), err: true };
   }
-  function tabComplete(v) {
-    const lib = libFor(), low = v.toLowerCase(), m = lib.filter(x => x.text.toLowerCase().startsWith(low));
-    if (m.length === 1) return { value: m[0].text };
-    if (m.length > 1) { let p = m[0].text; m.forEach(x => { while (!x.text.toLowerCase().startsWith(p.toLowerCase())) p = p.slice(0, -1); }); return { value: p.length > v.length ? p : v, list: m.map(x => x.text) }; }
-    return { value: v };
+  function tabComplete(v) {   // 명령 낱말은 이어서 채우고, 포트·IP 칸에서는 이 장비의 실제 포트·IP 목록으로 채운다 (실제 장비의 Tab처럼 공통 부분까지 채우고 목록을 보여 줌)
+    const d = dev(), low = v.toLowerCase(), cands = new Set(), argInfo = new Map(), ifs = sortedIfs(d);
+    const vals = { port: ifs.map(f => [f[0], f]), hwport: ifs.map(f => [f[0].replace("XGigabitEthernet", "XGigabitEthernet "), f]), ip: ifs.filter(f => f[8]).map(f => [f[8], f]) };
+    LIB.filter(x => x.v === S.vendor).forEach(x => {
+      const m = x.cmd.match(/\{(port|ip|hwport)\}/);
+      if (!m) { if (x.cmd.toLowerCase().startsWith(low)) cands.add(x.cmd); return; }
+      const pre = x.cmd.slice(0, m.index), post = x.cmd.slice(m.index + m[0].length);
+      if (low.startsWith(pre.toLowerCase())) { const part = low.slice(pre.length); vals[m[1]].filter(([p]) => p.toLowerCase().startsWith(part)).forEach(([p, f]) => { cands.add(pre + p + post); argInfo.set(pre + p + post, [p, f]); }); }
+      else if (pre.toLowerCase().startsWith(low)) cands.add(pre);
+    });
+    const all = [...cands]; if (!all.length) return { value: v };
+    let p = all[0]; all.forEach(c => { while (!c.toLowerCase().startsWith(p.toLowerCase())) p = p.slice(0, -1); });
+    const value = p.length >= v.length ? p : v;
+    if (all.length === 1) return { value: all[0] };
+    const fromArgs = all.every(c => argInfo.has(c));
+    const list = fromArgs ? [...new Map(all.map(c => [argInfo.get(c)[0], argInfo.get(c)[1]])).entries()].map(([name, f]) => `${pad(name, 24)} ${pad(f[5], 5)} ${f[1] || ""}`.trimEnd()) : all;
+    return { value, list };
   }
 
   /* ---------- 화면 ---------- */
@@ -166,7 +181,7 @@
     const q = document.getElementById("prSearch").value.trim().toLowerCase(), lib = libFor().filter(x => !q || (x.text + " " + x.what + " " + x.cat).toLowerCase().includes(q));
     document.getElementById("prLib").innerHTML = CATS.map(cat => {
       const items = lib.filter(x => x.cat === cat); if (!items.length) return "";
-      return `<div class="pr-cat${cat === "위험 명령" ? " risk" : ""}"><h4>${cat === "위험 명령" ? "⚠ 위험 명령 (연습에서는 안전)" : cat} <span class="muted">${items.length}</span></h4>` + items.map(x => `<button type="button" class="pr-item" data-cmd="${esc(x.text)}" data-tip-t="${esc(x.what)}" data-tip-a="${esc(x.risk || x.what)}"${x.read ? ` data-tip-b="${esc(x.read)}"` : ""}><code>${esc(x.text)}</code><span class="why">${esc(x.what)}</span></button>`).join("") + "</div>";
+      return `<div class="pr-cat"><h4>${cat} <span class="muted">${items.length}</span></h4>` + items.map(x => `<button type="button" class="pr-item" data-cmd="${esc(x.text)}" data-tip-t="${esc(x.what)}" data-tip-a="${esc(x.risk || x.what)}"${x.read ? ` data-tip-b="${esc(x.read)}"` : ""}><code>${esc(x.text)}</code><span class="why">${esc(x.what)}</span></button>`).join("") + "</div>";
     }).join("") || '<p class="muted">검색 결과가 없습니다.</p>';
   }
   function reset(keepHist) {
@@ -175,7 +190,7 @@
     document.getElementById("prOut").innerHTML = `<span class="muted">연습 모드: ${esc(d.id)} (${d.vendor}) — 실제 장비가 아닙니다. 친 명령은 저장되지 않고 접속 계정 이름도 남지 않습니다.\n"?"를 입력하면 도움말, 앞부분만 치고 Tab 키를 누르면 이어서 채워집니다.</span>\n`;
     document.getElementById("prPrompt").textContent = prompt(d);
   }
-  pane.innerHTML = `<div class="pr-banner"><b>연습 모드</b> — 여기서 친 명령은 <b>어디에도 저장되지 않고</b>, 접속 계정 이름도 남지 않습니다. 화면을 나가거나 새로고침하면 모두 사라집니다. 실제 장비는 설정에 따라 누가 어떤 명령을 쳤는지 로그에 남을 수 있으니, 틀려 보는 연습은 여기서 마음껏 하세요. <span class="muted">(출력은 전부 가상이고 실제 장비와 다를 수 있습니다)</span></div>
+  pane.innerHTML = `<div class="pr-banner"><b>연습 모드</b> — 여기서 친 명령은 <b>어디에도 저장되지 않고</b>, 접속 계정 이름도 남지 않습니다. 화면을 나가거나 새로고침하면 모두 사라집니다. 실제 장비는 설정에 따라 누가 어떤 명령을 쳤는지 로그에 남을 수 있으니, 틀려 보는 연습은 여기서 마음껏 하세요. <span class="muted">(출력은 전부 가상이고 실제 장비와 다를 수 있습니다)</span><br>포트 이름이 들어가는 명령(예: <code>show interfaces diagnostics optics</code>)은 포트 칸에서 <b>Tab</b>을 누르면 이 장비의 포트 목록이 나오고, 앞부분을 쓰고 Tab을 누르면 이어서 채워집니다.</div>
     <div class="pr-cols">
       <div class="card"><h3>명령어 사전 <small class="muted">(눌러서 입력창에 채우기 · 마우스를 올리면 설명)</small></h3>
         <input type="search" id="prSearch" placeholder="명령이나 설명으로 찾기 (예: 로그, CRC, 광)" autocomplete="off" spellcheck="false" style="width:100%">
