@@ -1588,7 +1588,7 @@ if (qs.get("popup") === "term") {
 /* ---------- 다크 모드 켜고 끄기 (기본은 켬, 고른 값은 이 브라우저에만 저장) ---------- */
 (function initTheme() {
   const btn = document.getElementById("themeBtn"), root = document.documentElement;
-  const paint = () => { const dark = root.dataset.theme !== "light"; btn.textContent = `다크 모드: ${dark ? "켬" : "끔"}`; btn.setAttribute("aria-pressed", String(dark)); };
+  const paint = () => { const dark = root.dataset.theme !== "light"; const label = `다크 모드 ${dark ? "켬" : "끔"}`; btn.setAttribute("aria-label", label); btn.title = `${label} (눌러서 ${dark ? "끄기" : "켜기"})`; btn.setAttribute("aria-pressed", String(dark)); };
   btn.addEventListener("click", () => {
     root.dataset.theme = root.dataset.theme === "light" ? "dark" : "light";
     try { localStorage.setItem("theme", root.dataset.theme); } catch (e) { /* 저장이 막혀도 화면은 바뀐다 */ }

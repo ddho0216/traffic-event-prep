@@ -123,7 +123,7 @@ body.popup .term{height:calc(100vh - 215px)}
 .seg button{background:none;border:0;border-bottom:2px solid transparent;padding:4px 10px;color:var(--muted);cursor:pointer}
 .seg button.on{color:var(--text);border-bottom-color:var(--accent)}
 .notif-body{padding:10px 12px}
-body.popup #bell,body.popup #notif{display:none}
+body.popup #bell,body.popup #notif,body.popup #themeBtn{display:none}
 
 .mono{font-family:var(--mono)}
 .scn-wrap{position:relative}
@@ -351,7 +351,8 @@ table tr{transition:background-color .12s ease}
 @media (prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;animation-delay:0s!important;transition-duration:.01ms!important}}
 
 /* 실시간 대응 (시험판) */
-nav.tabs .beta{font-size:10px;color:var(--warn);border:1px solid #54421d;border-radius:99px;padding:0 5px;margin-left:3px}
+.beta{display:inline-block;vertical-align:middle;font-size:10px;line-height:1.35;color:var(--warn);border:1px solid #54421d;border-radius:99px;padding:1px 6px;margin-left:4px;font-weight:400}
+nav.tabs .submenu button{display:flex;align-items:center;gap:2px}nav.tabs .submenu button .beta{margin-left:auto}
 .lv-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:8px 0 10px}.lv-bar h2{margin:0;font-size:15px;display:flex;gap:8px;align-items:center}
 .lv-ctl{display:flex;gap:6px;align-items:center}.lv-clock{margin-left:auto;text-align:right}.lv-clock b{font-size:18px}
 .lv-alert{display:flex;align-items:center;gap:12px;padding:8px 14px;border-radius:4px;margin-bottom:10px;border:1px solid var(--line)}
@@ -450,4 +451,5 @@ table th.c,table td.c{text-align:center}
   --in:#0b8a80; --out:#b87a14; --ok:#2e8049; --warn:#a97e00; --crit:#c63d2c; --accent:#2563a8;
   --sunken:#ffffff; --input:#ffffff; --header:#ffffff; --ok-bg:#e8f5ec; --prim-bg:#dbe9f8; --sel:#e3edf7; --warn-bg:#fdf3d6; --info-bg:#e6f0fa; --crit-bg:#fbe9e6; color-scheme:light;
 }
-#themeBtn{white-space:nowrap}
+#themeBtn{margin-left:0}#themeBtn+#bell{margin-left:-10px}
+:root[data-theme="light"] #themeBtn .ico-moon,:root:not([data-theme="light"]) #themeBtn .ico-sun{display:none}

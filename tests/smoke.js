@@ -73,7 +73,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.setViewportSize({ width: 1600, height: 900 });
 
   // 탭 순서와 센터 선택: 센터 선택은 관제·서버실에서만 보이고, 두 화면이 같은 센터로 동기화된다
-  check('위 메뉴: 관제 / 서버실▾ / 장비 터미널 / 대응▾ / 이벤트 대비 기록 / 고객 지원▾ (하위 메뉴: 서버실·서버실 3D / 실시간 대응·자동 대응 / 문자 전파·방문 신청·장비 반출입·월간 자료)', JSON.stringify(await page.locator('#tabs > button, #tabs > .tabgrp > .grpbtn').allTextContents()) === JSON.stringify(['관제', '서버실', '장비 터미널', '대응 시험판', '이벤트 대비 기록', '고객 지원']) && JSON.stringify(await page.locator('#tabs .tabgrp:nth-of-type(1) .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D']) && JSON.stringify(await page.locator('#tabs .tabgrp .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D', '실시간 대응', '자동 대응', '문자 전파', '방문 신청', '장비 반출입', '월간 자료']));
+  check('위 메뉴: 관제 / 서버실▾ / 장비 터미널 / 대응▾ / 이벤트 대비 기록 / 고객 지원▾ (하위 메뉴: 서버실·서버실 3D / 실시간 대응·자동 대응 / 문자 전파·방문 신청·장비 반출입·월간 자료)', JSON.stringify(await page.locator('#tabs > button, #tabs > .tabgrp > .grpbtn').allTextContents()) === JSON.stringify(['관제', '서버실', '장비 터미널', '대응', '이벤트 대비 기록', '고객 지원']) && JSON.stringify(await page.locator('#tabs .tabgrp:nth-of-type(1) .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D']) && JSON.stringify(await page.locator('#tabs .tabgrp .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D', '실시간 대응 시험판', '자동 대응 시험판', '문자 전파', '방문 신청', '장비 반출입', '월간 자료']));
   const sub0 = await page.locator('#tabs .tabgrp >> nth=2 >> .submenu').isVisible();
   await page.hover('#tabs .tabgrp >> nth=2 >> .grpbtn');
   const sub1 = await page.locator('#tabs .tabgrp >> nth=2 >> .submenu').isVisible();
@@ -428,17 +428,24 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   // 다크 모드 켜고 끄기: 기본은 켬, 끄면 밝은 화면, 고른 값은 새로고침해도 유지
   const th = await ctx.newPage(); await th.goto(url, { waitUntil: 'load' });
   const lum = () => th.evaluate(() => { const m = getComputedStyle(document.body).backgroundColor.match(/\d+/g).map(Number); return (m[0] + m[1] + m[2]) / 3; });
-  const thm0 = { theme: await th.evaluate(() => document.documentElement.dataset.theme), btn: await th.locator('#themeBtn').innerText(), l: await lum() };
-  check('다크 모드가 기본으로 켜져 있고(버튼 "다크 모드: 켬") 배경이 어두움', thm0.theme === 'dark' && thm0.btn === '다크 모드: 켬' && thm0.l < 60, JSON.stringify(thm0));
+  const thm0 = { theme: await th.evaluate(() => document.documentElement.dataset.theme), btn: await th.locator('#themeBtn').getAttribute('aria-label'), l: await lum() };
+  check('다크 모드가 기본으로 켜져 있고(아이콘 버튼 "다크 모드 켬") 배경이 어두움', thm0.theme === 'dark' && thm0.btn === '다크 모드 켬' && thm0.l < 60, JSON.stringify(thm0));
   await th.click('#themeBtn');
-  const thm1 = { theme: await th.evaluate(() => document.documentElement.dataset.theme), btn: await th.locator('#themeBtn').innerText(), l: await lum(), pressed: await th.locator('#themeBtn').getAttribute('aria-pressed') };
-  check('버튼을 누르면 다크 모드가 꺼지고(버튼 "다크 모드: 끔") 배경이 밝아짐', thm1.theme === 'light' && thm1.btn === '다크 모드: 끔' && thm1.l > 200 && thm1.pressed === 'false', JSON.stringify(thm1));
+  const thm1 = { theme: await th.evaluate(() => document.documentElement.dataset.theme), btn: await th.locator('#themeBtn').getAttribute('aria-label'), l: await lum(), pressed: await th.locator('#themeBtn').getAttribute('aria-pressed') };
+  check('버튼을 누르면 다크 모드가 꺼지고(아이콘 버튼 "다크 모드 끔") 배경이 밝아짐', thm1.theme === 'light' && thm1.btn === '다크 모드 끔' && thm1.l > 200 && thm1.pressed === 'false', JSON.stringify(thm1));
   await th.reload({ waitUntil: 'load' });
-  check('새로고침해도 고른 모드(끔)가 유지됨', (await th.evaluate(() => document.documentElement.dataset.theme)) === 'light' && (await th.locator('#themeBtn').innerText()) === '다크 모드: 끔');
+  check('새로고침해도 고른 모드(끔)가 유지됨', (await th.evaluate(() => document.documentElement.dataset.theme)) === 'light' && (await th.locator('#themeBtn').getAttribute('aria-label')) === '다크 모드 끔');
   const unread = await th.evaluate(() => { const rgb = s => s.match(/[\d.]+/g).slice(0, 3).map(Number), lumi = ([r, g, b]) => 0.2126 * r + 0.7152 * g + 0.0722 * b, bad = []; for (const sel of ['body', 'header.top h1 a', '#tab-monitor .note', '.card h3']) { const e = document.querySelector(sel); if (!e) continue; const cs = getComputedStyle(e); if (Math.abs(lumi(rgb(cs.color)) - lumi(rgb(getComputedStyle(document.body).backgroundColor))) < 80) bad.push(sel); } return bad; });
   check('밝은 화면에서 본문·제목 글자가 배경과 충분히 구분됨', unread.length === 0, unread.join());
   await th.click('#themeBtn');
-  check('다시 누르면 다크 모드가 켜짐', (await th.evaluate(() => document.documentElement.dataset.theme)) === 'dark' && (await th.locator('#themeBtn').innerText()) === '다크 모드: 켬');
+  check('다시 누르면 다크 모드가 켜짐', (await th.evaluate(() => document.documentElement.dataset.theme)) === 'dark' && (await th.locator('#themeBtn').getAttribute('aria-label')) === '다크 모드 켬');
+  const pos = await th.evaluate(() => { const t = document.getElementById('themeBtn').getBoundingClientRect(), b = document.getElementById('bell').getBoundingClientRect(), bt = document.getElementById('themeBtn').textContent.trim(); return { adj: Math.abs(t.right - b.left) < 14 && Math.abs(t.top - b.top) < 3 && Math.abs(t.height - b.height) < 2, left: t.right <= b.left, bt }; });
+  check('다크 모드 버튼은 글자 없이 아이콘(해·달)만 있고 알림 종 바로 옆(같은 높이)에 있음', pos.adj && pos.left && pos.bt === '', JSON.stringify(pos));
+  const betaChk = await th.evaluate(() => { const g = document.querySelector('#tabs .tabgrp:nth-of-type(2) .grpbtn'); const items = [...document.querySelectorAll('#tabs .submenu button[data-tab=live], #tabs .submenu button[data-tab=soar]')]; return { grp: g.textContent.trim(), betaInGrp: !!g.querySelector('.beta'), items: items.map(i => !!i.querySelector('.beta')) }; });
+  check('위 메뉴의 "대응"에는 시험판 표시가 없고, 하위 메뉴의 "실시간 대응"·"자동 대응" 옆에 시험판이 붙어 있음', betaChk.grp === '대응' && !betaChk.betaInGrp && betaChk.items.every(Boolean) && betaChk.items.length === 2, JSON.stringify(betaChk));
+  await th.hover('#tabs .tabgrp:has(button[data-tab=soar]) .grpbtn');
+  const alignChk = await th.evaluate(() => [...document.querySelectorAll('#tabs .submenu button[data-tab=live], #tabs .submenu button[data-tab=soar]')].map(b => { const r = b.getBoundingClientRect(), q = b.querySelector('.beta').getBoundingClientRect(); return Math.abs((r.top + r.height / 2) - (q.top + q.height / 2)); }));
+  check('"시험판" 표시가 메뉴 글자 줄의 세로 가운데에 맞음 (오차 2px 이하)', alignChk.every(d => d <= 2), alignChk.join());
   await th.close();
   const vis = {};
   for (const tab of ['monitor', 'room', 'room3d', 'term', 'event', 'monthly', 'visit', 'sms', 'gear', 'live']) { await goTab(tab); vis[tab] = await page.locator('#centerBar').isVisible(); }
