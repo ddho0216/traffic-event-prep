@@ -62,22 +62,29 @@ function loadThree(cb) {
 /* ---------- 텍스처 그리기 (장비 앞면) ---------- */
 const TEX = [];
 function canvasTex(w, h, fn) {
-  const c = document.createElement("canvas"); c.width = w; c.height = h; fn(c.getContext("2d"), w, h);
+  const c = document.createElement("canvas"); c.width = w * 2; c.height = h * 2; const g2 = c.getContext("2d"); g2.scale(2, 2); fn(g2, w, h);   // 2배 해상도로 그려서 확대해도 선명하게 (그리는 좌표는 그대로)
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; TEX.push(t); return t;
 }
 const LEDC = { ok: "#3fd07a", warn: "#e6b93a", crit: "#e5604d", off: "#39444d" };
 function grad(g, y0, y1, a, b) { const q = g.createLinearGradient(0, y0, 0, y1); q.addColorStop(0, a); q.addColorStop(1, b); return q; }
 function rr(g, x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
-function drawPorts(g, pl, a, b, x, y, w, h, cols, rows) {   // 포트 칸 (위아래 2줄, 번호순). 연결됨 = 초록 LED, 이상 = 빨강
-  const cw = w / cols, ch = h / rows;
+function drawPorts(g, pl, a, b, x, y, w, h, cols, rows) {   // 포트 칸 (위아래 2줄, 번호순). 연결됨 = 광케이블(LC)+초록 LED, 미사용(Down) = 보호캡, 이상 = 빨강 LED, 연결 없음 = 빈 구멍
+  const cw = w / cols, ch = h / rows, CAPS = ["#e8803a", "#4a8fe0", "#cfd5da"];
   for (let k = a; k < b; k++) {
     const c = Math.floor((k - a) / rows), rw = (k - a) % rows, f = pl.map.get(k);
-    const px = x + c * cw, py = y + rw * ch;
-    g.fillStyle = "#14181c"; rr(g, px + 2, py + ch * 0.28, cw - 4, ch * 0.66, 2); g.fill();
-    g.fillStyle = f && f[5] !== "down" ? "#2b323a" : "#1d2328"; g.fillRect(px + 4, py + ch * 0.36, cw - 8, ch * 0.46);
-    g.fillStyle = f ? (portBad(f) ? LEDC.crit : f[5] === "down" ? LEDC.off : LEDC.ok) : LEDC.off; g.fillRect(px + cw / 2 - 2.5, py + ch * 0.1, 5, ch * 0.12);
+    const px = x + c * cw, py = y + rw * ch, bw = cw - 3, bh = ch * 0.7, bx = px + 1.5, by = py + ch * 0.26;
+    g.fillStyle = "#0c0f12"; rr(g, bx, by, bw, bh, 2); g.fill(); g.strokeStyle = "#7d868e"; g.lineWidth = 0.8; rr(g, bx, by, bw, bh, 2); g.stroke();
+    g.fillStyle = "#2b3238"; g.fillRect(bx + 2, by + 1.5, bw - 4, Math.max(1, bh * 0.14));
+    if (f && f[5] !== "down") {   // 연결됨: LC 커넥터 + 광케이블
+      g.fillStyle = "#e3c34a"; rr(g, bx + bw * 0.22, by + bh * 0.38, bw * 0.56, bh * 0.62, 1.5); g.fill();
+      g.fillStyle = "#fff4b0"; g.fillRect(bx + bw * 0.3, by + bh * 0.5, bw * 0.4, Math.max(1, bh * 0.08));
+    } else if (f) {   // 미사용(Down): 보호캡
+      g.fillStyle = CAPS[(k + rw) % 3]; rr(g, bx + 1, by + bh * 0.25, bw - 2, bh * 0.72, 2); g.fill(); g.fillStyle = "#00000033"; g.fillRect(bx + bw * 0.38, by + bh * 0.45, bw * 0.24, bh * 0.3);
+    } else { g.fillStyle = "#040506"; g.fillRect(bx + 2, by + bh * 0.25, bw - 4, bh * 0.65); }
+    g.fillStyle = f ? (portBad(f) ? LEDC.crit : f[5] === "down" ? LEDC.off : LEDC.ok) : LEDC.off; g.beginPath(); g.arc(px + cw / 2, py + ch * 0.14, Math.max(1.4, Math.min(2.6, cw * 0.1)), 0, 7); g.fill();
   }
 }
+function honeycomb(g, x, y, w, h) { g.fillStyle = "#2a3036"; g.fillRect(x, y, w, h); g.fillStyle = "#0b0e11"; for (let yy = y + 3, r = 0; yy < y + h - 2; yy += 5, r++) for (let xx = x + 4 + (r % 2) * 3; xx < x + w - 3; xx += 6) { g.beginPath(); g.arc(xx, yy, 1.5, 0, 7); g.fill(); } }
 function drawLeds(g, x, y, st, size) { [st.power ? "ok" : "off", st.power ? st.status : "off", st.power ? st.fan : "off"].forEach((c, k) => { g.fillStyle = LEDC[c === "crit" ? "crit" : c]; g.beginPath(); g.arc(x + k * (size * 2.2), y, size, 0, 7); g.fill(); }); }
 function devTexture(it, st, pl) {
   const dv = it.dv, w = 640, h = it.u * 40;
@@ -96,26 +103,36 @@ function devTexture(it, st, pl) {
       drawPorts(g, pl, 0, pl.total, 205, 6, 340, h - 12, pl.cols, 2);
       g.fillStyle = "#2a3138"; g.fillRect(565, 14, 58, h - 28);
       g.fillStyle = "#3a434b"; for (let k = 0; k < 6; k++) g.fillRect(570, 18 + k * ((h - 36) / 6), 48, 3);
-    } else {   // Cisco Nexus 7710 (사진·메모로 추정): 슬롯 10개 = 위 I/O 4 + 슈퍼바이저 2(가운데) + 아래 I/O 4, 맨 아래 전원부
-      g.fillStyle = "#23282e"; g.fillRect(0, 0, w, h); g.strokeStyle = "#0b0e11"; g.lineWidth = 3; g.strokeRect(0, 0, w, h);
-      const cards = Math.min(8, Math.ceil(pl.total / 12)), supH = 54, psuH = 60, ioH = (h - supH * 2 - psuH - 22) / 8;
-      let y = 8, c = 0;
-      const io = () => {   // I/O 모듈 슬롯: 포트가 있으면 라인 카드, 남는 슬롯은 빈 판
-        if (c < cards) { g.fillStyle = grad(g, y, y + ioH, "#bcc3c9", "#9ca4ab"); g.fillRect(10, y, w - 20, ioH - 4);
-          g.fillStyle = "#111519"; g.fillRect(10, y, 22, ioH - 4); g.fillRect(w - 32, y, 22, ioH - 4);
-          g.fillStyle = "#2a3138"; g.font = "bold 12px monospace"; g.fillText(`I/O ${c + 1}`, 42, y + 18);
-          drawPorts(g, pl, c * 12, c * 12 + 12, 100, y + 4, w - 160, ioH - 12, 6, 2);
-        } else { g.fillStyle = "#3b434a"; g.fillRect(10, y, w - 20, ioH - 4); g.fillStyle = "#14181c"; g.beginPath(); g.arc(24, y + ioH / 2 - 2, 5, 0, 7); g.arc(w - 24, y + ioH / 2 - 2, 5, 0, 7); g.fill(); }
-        c++; y += ioH;
-      };
-      for (let k = 0; k < 4; k++) io();
-      for (let s = 0; s < 2; s++) { g.fillStyle = grad(g, y, y + supH, "#c9cfd4", "#9aa2a9"); g.fillRect(10, y, w - 20, supH - 6); g.fillStyle = "#111519"; g.fillRect(10, y, 26, supH - 6); g.fillRect(w - 36, y, 26, supH - 6);
-        g.fillStyle = "#2a3138"; g.font = "bold 13px monospace"; g.fillText(`NEXUS 7710 · SUP${s + 1} · ${dv.id.slice(4)}`, 50, y + 20); drawLeds(g, 56, y + 38, st, 6);
-        for (let q = 0; q < 2; q++) { g.fillStyle = "#111519"; g.fillRect(330 + q * 70, y + 12, 56, 28); } y += supH; }
-      for (let k = 0; k < 4; k++) io();
-      y += 6;
-      for (let k = 0; k < 8; k++) { const px = 12 + k * ((w - 24) / 8); g.fillStyle = grad(g, y, y + psuH, "#2d343b", "#1c2227"); g.fillRect(px, y, (w - 24) / 8 - 6, psuH - 8);
-        g.fillStyle = "#0c0f12"; g.fillRect(px + 8, y + 10, (w - 24) / 8 - 22, 26); g.fillStyle = st.power ? LEDC.ok : LEDC.off; g.fillRect(px + 10, y + 42, 8, 6); }
+    } else {   // Cisco Nexus 7710 (사진·메모로 추정, 제가 그린 가상 그림): 위 LED 줄 + I/O 모듈 8장 + 슈퍼바이저 2개(나란히) + 빈 판 3 + 전원 모듈 4
+      g.fillStyle = grad(g, 0, h, "#d5d9dd", "#aab1b7"); g.fillRect(0, 0, w, h); g.strokeStyle = "#6c757d"; g.lineWidth = 2; g.strokeRect(1, 1, w - 2, h - 2);
+      g.fillStyle = "#2a3036"; g.fillRect(14, 6, w - 28, 20); g.fillStyle = "#9aa4ad"; g.font = "bold 10px monospace"; g.fillText("NEXUS 7710 · 가상", 22, 20);
+      [st.power ? "ok" : "off", st.power ? st.status : "off", st.power ? st.fan : "off", st.power ? "ok" : "off", st.power ? "ok" : "off", st.power ? "ok" : "off", st.power ? "ok" : "off"].forEach((c, k) => { g.fillStyle = LEDC[c]; g.beginPath(); g.arc(250 + k * 18, 16, 3, 0, 7); g.fill(); });
+      const cards = Math.min(8, Math.ceil(pl.total / 12));
+      for (let c = 0; c < 8; c++) {
+        const y = 32 + c * 44, has = c < cards;
+        if (has) {
+          g.fillStyle = grad(g, y, y + 40, "#e0e4e7", "#b5bcc2"); g.fillRect(10, y, w - 20, 40); g.strokeStyle = "#7d868e"; g.strokeRect(10.5, y + 0.5, w - 21, 39);
+          g.fillStyle = grad(g, y + 14, y + 28, "#8a9299", "#5c646b"); rr(g, 0, y + 14, 38, 12, 5); g.fill();   // 이젝터 손잡이
+          g.fillStyle = "#9aa2a9"; g.fillRect(10, y, 12, 40); g.fillRect(w - 22, y, 12, 40);
+          g.fillStyle = "#2a3138"; g.font = "bold 10px monospace"; g.fillText(`I/O ${c + 1}`, 28, y + 14); g.fillStyle = "#1f9bd0"; g.fillRect(28, y + 30, 28, 4);
+          drawPorts(g, pl, c * 12, Math.min(pl.total, c * 12 + 12), 100, y + 2, 312, 37, 6, 2);
+          honeycomb(g, 428, y + 4, 132, 32); g.fillStyle = "#101417"; g.fillRect(570, y + 6, 40, 12); g.fillStyle = "#8d99a3"; g.font = "7px monospace"; g.fillText("MGT", 576, y + 15);
+        } else {
+          g.fillStyle = grad(g, y, y + 40, "#b4bbc1", "#939ba2"); g.fillRect(10, y, w - 20, 40); g.strokeStyle = "#6c757d"; g.strokeRect(10.5, y + 0.5, w - 21, 39);
+          g.fillStyle = "#3a4148"; g.fillRect(w / 2 - 12, y + 16, 24, 6); g.fillStyle = "#5c646b"; g.font = "9px monospace"; g.fillText(`빈 슬롯 (I/O ${c + 1})`, 28, y + 14);
+        }
+      }
+      [0, 1].forEach(s => { const x = 10 + s * 312, y = 388; g.fillStyle = grad(g, y, y + 52, "#d7dbde", "#aab1b7"); g.fillRect(x, y, 308, 52); g.strokeStyle = "#6c757d"; g.strokeRect(x + 0.5, y + 0.5, 307, 51);
+        g.fillStyle = "#2a3138"; g.font = "bold 10px monospace"; g.fillText(`SUP${s + 1}`, x + 8, y + 14);
+        [[10, "#101417"], [40, "#1b6fb0"], [70, "#101417"], [92, "#101417"]].forEach(([dx, col]) => { g.fillStyle = col; rr(g, x + dx, y + 22, dx === 70 || dx === 92 ? 18 : 24, 18, 2); g.fill(); });
+        [0, 1, 2, 3].forEach(q => { g.fillStyle = st.power ? LEDC.ok : LEDC.off; g.beginPath(); g.arc(x + 130 + q * 12, y + 30, 2.2, 0, 7); g.fill(); }); honeycomb(g, x + 190, y + 6, 108, 40); });
+      const by = 448, bh = 100;
+      [0, 1, 2].forEach(k => { const x = 10 + k * 98; g.fillStyle = grad(g, by, by + bh, "#b4bbc1", "#939ba2"); g.fillRect(x, by, 92, bh); g.strokeStyle = "#6c757d"; g.strokeRect(x + 0.5, by + 0.5, 91, bh - 1); g.fillStyle = "#6c757d"; g.fillRect(x + 38, by + 8, 16, 6); });
+      [0, 1, 2, 3].forEach(k => { const x = 308 + k * 80; g.fillStyle = grad(g, by, by + bh, "#8f979e", "#6c747b"); g.fillRect(x, by, 74, bh); g.strokeStyle = "#4a525a"; g.strokeRect(x + 0.5, by + 0.5, 73, bh - 1);
+        honeycomb(g, x + 6, by + 6, 62, 30); g.fillStyle = "#2d8fe0"; rr(g, x + 8, by + 52, 8, 36, 3); g.fill();   // 파란 손잡이
+        g.fillStyle = "#0d1013"; rr(g, x + 22, by + 54, 44, 36, 3); g.fill(); g.strokeStyle = "#cfd5da"; g.lineWidth = 1.5; rr(g, x + 22, by + 54, 44, 36, 3); g.stroke(); g.fillStyle = "#2a3036"; g.fillRect(x + 38, by + 62, 14, 20);
+        g.fillStyle = st.power ? LEDC.ok : LEDC.off; g.beginPath(); g.arc(x + 62, by + 46, 3, 0, 7); g.fill(); });
+      g.fillStyle = "#3a4148"; g.fillRect(14, h - 8, w - 28, 5); g.fillStyle = "#0b0e11"; for (let x = 18; x < w - 18; x += 6) g.fillRect(x, h - 7, 3, 3);
     }
     if (!st.power) { g.fillStyle = "rgba(0,0,0,.55)"; g.fillRect(0, 0, w, h); }
   });
@@ -257,13 +274,10 @@ function bindControls(cv) {
 function slotsOf(kind, u, pl) {   // 좌표는 장비 앞면 그림(devTexture)과 같은 픽셀 기준 (가로 640, 세로 u*40)
   const w = 640, h = u * 40, out = [];
   if (kind === "cisco") {
-    const supH = 54, psuH = 60, ioH = (h - supH * 2 - psuH - 22) / 8, cards = Math.min(8, Math.ceil(pl.total / 12));
-    let y = 8, c = 0;
-    const io = () => { const ports = c < cards ? [c * 12, Math.min(pl.total, c * 12 + 12)] : null; out.push({ key: `io${c + 1}`, type: ports ? "io" : "empty", label: ports ? `I/O ${c + 1}` : `빈 슬롯 (I/O ${c + 1})`, x: 10, y, w: w - 20, h: ioH - 4, ports }); c++; y += ioH; };
-    for (let k = 0; k < 4; k++) io();
-    for (let s = 0; s < 2; s++) { out.push({ key: `sup${s + 1}`, type: "sup", label: `슈퍼바이저 SUP${s + 1}`, x: 10, y, w: w - 20, h: supH - 6, ports: null }); y += supH; }
-    for (let k = 0; k < 4; k++) io();
-    y += 6; out.push({ key: "psu", type: "psu", label: "전원부 (PSU)", x: 12, y, w: w - 24, h: psuH - 8, ports: null });
+    const cards = Math.min(8, Math.ceil(pl.total / 12));
+    for (let c = 0; c < 8; c++) { const ports = c < cards ? [c * 12, Math.min(pl.total, c * 12 + 12)] : null; out.push({ key: `io${c + 1}`, type: ports ? "io" : "empty", label: ports ? `I/O ${c + 1}` : `빈 슬롯 (I/O ${c + 1})`, x: 10, y: 32 + c * 44, w: w - 20, h: 40, ports }); }
+    [0, 1].forEach(s => out.push({ key: `sup${s + 1}`, type: "sup", label: `슈퍼바이저 SUP${s + 1}`, x: 10 + s * 312, y: 388, w: 308, h: 52, ports: null }));
+    out.push({ key: "psu", type: "psu", label: "전원 모듈 (PSU 4개)", x: 308, y: 448, w: 320, h: 100, ports: null });
   } else {
     const A = kind === "juniper" ? { x: 220, y: 22, w: 330, h: h - 44 } : { x: 205, y: 6, w: 340, h: h - 12 }, cols = pl.cols, cw = A.w / cols, BLK = 6;
     for (let g = 0; g * BLK < cols; g++) {
