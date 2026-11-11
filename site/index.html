@@ -411,7 +411,8 @@
 <section class="tab" id="tab-term">
   <p class="note">가상 장비입니다. 실제 장비에는 접속하지 않으며, 출력은 전부 지어낸 값입니다.</p>
   <p class="note" id="termTarget" style="color:var(--in);font-size:13px"></p>
-  <div class="toolbar"><span class="seg" id="termNav"><button class="btn on" data-pane="term">터미널</button><button class="btn" data-pane="runbook">장애 매뉴얼</button><button class="btn" data-pane="design">설계도</button></span></div>
+  <div class="toolbar"><span class="seg" id="termNav"><button class="btn on" data-pane="term">터미널</button><button class="btn" data-pane="practice">연습 모드</button><button class="btn" data-pane="runbook">장애 매뉴얼</button><button class="btn" data-pane="design">설계도</button></span></div>
+  <div id="practicePane" style="display:none"></div>
   <div class="cols" id="termPane" style="grid-template-columns:2fr 1fr">
     <div>
       <div class="toolbar"><label>제조사 <select id="vendorSel"></select></label>
@@ -527,6 +528,7 @@
 <script src="design.js"></script>
 <script src="support.js"></script>
 <script src="live.js"></script>
+<script src="practice.js"></script>
 <script src="soar.js"></script>
 </body>
 </html>

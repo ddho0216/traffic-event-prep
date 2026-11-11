@@ -853,11 +853,10 @@ function quickCmds() {
     const w = tip.offsetWidth, h = tip.offsetHeight, left = r.left - w - 14 >= 8 ? r.left - w - 14 : Math.min(innerWidth - w - 8, r.right + 14);   // 목록 왼쪽(터미널 화면 위)에 띄우고, 자리가 없으면 오른쪽
     tip.style.left = left + "px"; tip.style.top = Math.max(8, Math.min(innerHeight - h - 8, r.top - 20)) + "px";
   };
-  const box = document.getElementById("qcmd");
-  box.addEventListener("mouseover", e => { const el = e.target.closest("[data-tip-t]"); if (el) show(el); });
-  box.addEventListener("mouseout", e => { if (e.target.closest("[data-tip-t]")) tip.hidden = true; });
-  box.addEventListener("focusin", e => { const el = e.target.closest("[data-tip-t]"); if (el) show(el); });
-  box.addEventListener("focusout", () => { tip.hidden = true; });
+  document.addEventListener("mouseover", e => { const el = e.target.closest && e.target.closest("[data-tip-t]"); if (el) show(el); });   // 명령 목록·연습 모드 사전 어디서든
+  document.addEventListener("mouseout", e => { if (e.target.closest && e.target.closest("[data-tip-t]")) tip.hidden = true; });
+  document.addEventListener("focusin", e => { const el = e.target.closest && e.target.closest("[data-tip-t]"); if (el) show(el); });
+  document.addEventListener("focusout", () => { tip.hidden = true; });
   window.addEventListener("scroll", () => { tip.hidden = true; }, true);
 })();
 const termHist = []; let hp = 0;
@@ -919,7 +918,7 @@ function openDeviceTerminal(devId) {   // 랙 안 장비를 누르면 그 장비
   renderDesign();
   $("#termClear").onclick = termBanner;
   // 터미널 탭 안의 보조 메뉴: 터미널 / 장애 매뉴얼 / 설계도 (한 번에 하나만 보인다)
-  window.showTermPane = p => { $("#termPane").style.display = p === "term" ? "" : "none"; $("#runbook").open = p === "runbook"; $("#designBox").open = p === "design"; $("#runbookBtn").textContent = p === "runbook" ? "장애 매뉴얼 접기" : "장애 매뉴얼 열기"; $$("#termNav button").forEach(b => b.classList.toggle("on", b.dataset.pane === p)); };
+  window.showTermPane = p => { $("#termPane").style.display = p === "term" ? "" : "none"; $("#practicePane").style.display = p === "practice" ? "" : "none"; $("#runbook").open = p === "runbook"; $("#designBox").open = p === "design"; $("#runbookBtn").textContent = p === "runbook" ? "장애 매뉴얼 접기" : "장애 매뉴얼 열기"; $$("#termNav button").forEach(b => b.classList.toggle("on", b.dataset.pane === p)); };
   $("#termNav").addEventListener("click", e => { const b = e.target.closest("button"); if (b) showTermPane(b.dataset.pane); });
   $("#runbookBtn").onclick = () => showTermPane($("#runbook").open ? "term" : "runbook");
   $("#runbook").addEventListener("toggle", () => { $("#runbookBtn").textContent = $("#runbook").open ? "장애 매뉴얼 접기" : "장애 매뉴얼 열기"; });

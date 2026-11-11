@@ -874,7 +874,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('다시 누르면 터미널로 돌아옴', !(await page.evaluate(() => document.getElementById('runbook').open)) && (await page.locator('#termOut').isVisible()));
   await page.click('#termNav [data-pane=runbook]');
   const rbTop = await page.evaluate(() => document.getElementById('runbook').getBoundingClientRect().top);
-  check('터미널 위 보조 메뉴(터미널·장애 매뉴얼·설계도)로 맨 아래까지 내려가지 않고 매뉴얼이 바로 위쪽에 열림', (await page.locator('#termNav button').count()) === 3 && rbTop < 400 && !(await page.locator('#termOut').isVisible()), String(Math.round(rbTop)));
+  check('터미널 위 보조 메뉴(터미널·연습 모드·장애 매뉴얼·설계도)로 맨 아래까지 내려가지 않고 매뉴얼이 바로 위쪽에 열림', (await page.locator('#termNav button').count()) === 4 && rbTop < 400 && !(await page.locator('#termOut').isVisible()), String(Math.round(rbTop)));
   await page.click('#termNav [data-pane=term]');
   const grp = await page.evaluate(() => ({ groups: [...document.querySelectorAll('#qcmd .qgrp h4')].map(h => h.innerText), bad: [...document.querySelectorAll('#qcmd button')].filter(b => !b.dataset.tipA || !b.dataset.tipB || !b.dataset.tipT || b.hasAttribute('title') || !b.querySelector('.why').textContent.trim()).map(b => b.dataset.c) }));
   check('명령이 목적별 묶음(1.회선 상태 확인 ~)으로 정리되고, 모든 명령에 한 줄 설명과 마우스 설명(무엇을 위해·읽는 법)이 있음', grp.groups.length >= 4 && grp.groups[0].startsWith('1. 회선 상태 확인') && grp.bad.length === 0, JSON.stringify(grp));
@@ -888,6 +888,33 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const cg = await page.evaluate(() => ({ n: document.querySelectorAll('#qcmd .qgrp').length, titles: [...document.querySelectorAll('#qcmd button')].map(b => b.dataset.tipB).join('|') }));
   check('Cisco·Huawei 장비도 같은 묶음과 설명으로 나옴', cg.n >= 3 && cg.titles.length > 20);
   await page.selectOption('#vendorSel', 'juniper');
+  // 연습 모드: 기록이 남지 않는 연습용 터미널 + 명령어 사전
+  await page.click('#termNav [data-pane=practice]');
+  check('연습 모드 화면: "어디에도 저장되지 않고 접속 계정 이름도 남지 않는다"는 안내와 명령어 사전·연습용 터미널이 보임', (await page.locator('.pr-banner').innerText()).includes('어디에도 저장되지 않고') && (await page.locator('#prLib .pr-item').count()) >= 15 && (await page.locator('#prIn').isVisible()) && !(await page.locator('#termPane').isVisible()));
+  const prRun = async c => { await page.fill('#prIn', c); await page.press('#prIn', 'Enter'); return (await page.locator('#prOut').innerText()); };
+  let po = await prRun('show chassis alarms');
+  check('연습 터미널: 프롬프트에 계정 이름(admin@) 대신 "연습@"이 쓰이고, 명령 출력이 나옴', po.includes('연습@') && !po.includes('admin@') && /alarm/i.test(po), po.slice(-200));
+  po = await prRun('show interface descriptoins');
+  check('연습 터미널: 오타를 치면 오류와 함께 "혹시 이 명령이 아닌가요?" 제안(show interfaces descriptions)이 나옴', po.includes('unknown command') && po.includes('혹시 이 명령이 아닌가요?') && po.includes('show interfaces descriptions'), po.slice(-300));
+  po = await prRun('clear log messages');
+  check('연습 터미널: 위험 명령(로그 지우기)은 아무 일도 일어나지 않고, 실제 장비라면 어떻게 되는지 알려 줌', po.includes('[연습] 위험 명령입니다') && po.includes('아무 일도 일어나지 않았고 기록도 남지 않았습니다'));
+  po = await prRun('show cli history');
+  check('연습 터미널: 명령 이력은 이 연습 화면에서 친 것만 보이고 "저장되지 않아" 사라진다고 알려 줌', po.includes('show chassis alarms') && po.includes('clear log messages') && po.includes('저장되지 않아'));
+  await page.fill('#prIn', 'show chassis env'); await page.press('#prIn', 'Tab');
+  check('Tab 키로 명령이 이어서 채워짐', (await page.inputValue('#prIn')) === 'show chassis environment');
+  await page.fill('#prIn', '');
+  const ls = await page.evaluate(() => JSON.stringify(Object.assign({}, localStorage)) + JSON.stringify(Object.assign({}, sessionStorage)));
+  check('연습 터미널에서 친 명령은 브라우저 저장소(localStorage·sessionStorage)에 남지 않음', !ls.includes('show chassis alarms') && !ls.includes('clear log messages') && !ls.includes('descriptoins'), ls.slice(0, 120));
+  await page.fill('#prSearch', '로그');
+  const sr2 = await page.evaluate(() => [...document.querySelectorAll('#prLib .pr-item')].map(x => x.dataset.cmd));
+  check('명령어 사전 검색("로그")이 로그 관련 명령만 남김', sr2.length >= 2 && sr2.every(x => /log|history|users/i.test(x)), sr2.join(' | '));
+  await page.fill('#prSearch', '');
+  await page.hover('#prLib .pr-item >> nth=2');
+  check('명령어 사전에서도 마우스를 올리면 설명 카드가 뜸', await page.evaluate(() => !document.getElementById('cmdTip').hidden && document.getElementById('cmdTip').innerText.includes('읽는 법')));
+  await page.mouse.move(5, 5);
+  const allOk = await page.evaluate(() => { const bad = [], S = PRACTICE.state; let n = 0; for (const d of DEVICES) { S.vendor = d.vendor; S.dev = d.id; for (const x of PRACTICE.libFor()) { n++; try { const r = PRACTICE.run(x.text); if (typeof r.text !== 'string' || !r.text || /undefined|NaN/.test(r.text)) bad.push(d.id + ' ' + x.text); } catch (e) { bad.push(d.id + ' ' + x.text + ' ' + e.message); } } } S.vendor = 'juniper'; S.dev = null; return { n, bad: bad.slice(0, 5) }; });
+  check('연습 모드: 120대 장비 × 사전의 모든 명령이 오류·undefined·NaN 없이 출력됨', allOk.n > 1500 && allOk.bad.length === 0, JSON.stringify(allOk));
+  await page.click('#termNav [data-pane=term]');
   // 설계도(그림)
   await page.click('#termNav [data-pane=design]');
   await page.waitForSelector('#dgView svg');   // 펼침 이벤트 뒤에 그려진다

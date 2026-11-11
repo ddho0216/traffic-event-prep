@@ -433,3 +433,12 @@ table th.c,table td.c{text-align:center}
 @media (hover:none){#cmdTip{display:none!important}}
 #cmdTip{position:fixed;z-index:95;width:340px;background:#10171d;border:1px solid var(--in);border-radius:6px;padding:12px 14px;box-shadow:0 8px 24px #000a;font-size:13px;line-height:1.6;color:var(--text);pointer-events:none}
 #cmdTip[hidden]{display:none}#cmdTip b.t{display:block;font-size:14px;margin-bottom:6px}#cmdTip .k{color:var(--in);font-weight:700;margin-top:8px;display:block}
+
+/* 연습 모드 */
+.pr-banner{margin:6px 0 12px;padding:10px 14px;border:1px solid var(--ok);border-left-width:4px;border-radius:4px;background:#0f1a14;font-size:13.5px;line-height:1.65}
+.pr-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.25fr);gap:16px;align-items:start}@media(max-width:1000px){.pr-cols{grid-template-columns:1fr}}
+.pr-lib{max-height:640px;overflow:auto;margin-top:8px}.pr-cat h4{margin:12px 0 4px;font-size:13px}.pr-cat.risk h4{color:var(--warn)}
+.pr-item{display:flex;flex-direction:column;gap:1px;width:100%;margin-bottom:3px;text-align:left;font-family:var(--mono);font-size:12px;padding:5px 8px;background:var(--panel2);border:1px solid var(--line);border-radius:3px;cursor:pointer}
+.pr-item:hover{border-color:var(--accent)}.pr-item code{font-family:var(--mono);word-break:break-all}.pr-item .why{font-family:var(--sans,inherit);font-size:11.5px;color:var(--muted)}
+.pr-cat.risk .pr-item{border-color:#54421d}
+#prOut{height:520px}.term .w{color:var(--warn)}

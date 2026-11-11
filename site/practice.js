@@ -1,0 +1,205 @@
+/* 연습 모드: 장비 명령어 사전 + 기록이 남지 않는 연습용 터미널.
+   - 여기서 친 명령은 어디에도 저장하지 않는다 (localStorage·서버 없음, 새로고침하면 사라짐). 접속 계정 이름도 쓰지 않는다 (프롬프트는 "연습").
+   - 출력은 전부 가상이고, 실제 장비의 출력과 형식·숫자가 다를 수 있다 (제가 아는 형식을 흉내 낸 것).
+   - 기존 터미널이 지원하는 명령(DEV_CMDS)은 그대로 재사용하고, 그 밖의 명령은 이 파일의 생성기로 출력한다.
+   - 위험한 명령(로그 지우기·재부팅·카운터 지우기)은 실제로 아무 일도 일어나지 않고, 실제 장비라면 어떻게 되는지만 알려 준다. */
+(function initPractice() {
+  const pane = document.getElementById("practicePane");
+  if (!pane) return;
+  const S = { vendor: "juniper", dev: null, hist: [], hp: 0 };   // 이 세션 안에서만 쓰는 상태 (저장하지 않음)
+  const pad = (s, n) => String(s).padEnd(n);
+  const nowStr = () => ymdhm(termMs());
+  const rackTemp = d => { const r = RACKS.find(x => x.id === d.rack); return r && r.temp ? r.temp[Math.min(r.temp.length - 1, Math.max(0, clamp(NOW_IDX, 0, N - 1)))] : 22; };
+  const peers = d => sortedIfs(d).filter(f => DEV[f[1]]);   // 옆 장비와 이어진 포트
+  const ifLines = (d, fn) => sortedIfs(d).map(fn).join("\n");
+  const SERIAL = d => "TEP" + [...d.id].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 99991, 7).toString().padStart(5, "0") + "X";   // 가상 일련번호
+
+  /* ---------- 생성기: 가상 출력 ---------- */
+  const OUT = {
+    jVersion: d => `Hostname: ${d.id}\nModel: (가상) ${d.role}\nJunos: 21.4R3-S2.3 (가상 버전 표기)\nJUNOS Base OS boot [21.4R3-S2.3]`,
+    jUptime: d => `Current time: ${nowStr()}:07 KST\nSystem booted: 2026-08-14 02:11:40 KST (68 days ago)\nProtocols started: 2026-08-14 02:13:05 KST (68 days ago)\nLast configured: 2026-10-12 10:42:18 KST by (가상 계정)\n 9:00PM  up 68 days, 18:49, 1 user, load averages: 0.21, 0.18, 0.15`,
+    jAlarms: d => { const t = rackTemp(d); return t >= TEMP_WARN ? `1 alarms currently active\nAlarm time               Class  Description\n${nowStr()}:00 KST  Minor  Rack inlet temperature high (${t.toFixed(1)}°C)` : "No alarms currently active"; },
+    jEnv: d => { const t = rackTemp(d); return `Class Item                           Status     Measurement\nTemp  Routing Engine                 OK         ${Math.round(t + 17)} degrees C / ${Math.round((t + 17) * 1.8 + 32)} degrees F\nTemp  FPC 0 Intake                   OK         ${t.toFixed(0)} degrees C / ${Math.round(t * 1.8 + 32)} degrees F\nFans  Fan Tray 0 Fan 1               OK         Spinning at normal speed\nFans  Fan Tray 0 Fan 2               OK         Spinning at normal speed\nPower PSU 0                          OK\nPower PSU 1                          OK`; },
+    jHardware: d => `Hardware inventory:\nItem             Version  Part number  Serial number     Description\nChassis                                ${SERIAL(d)}  (가상) ${d.role}\nRouting Engine 0                       ${SERIAL(d)}  RE\nFPC 0            REV 01   (가상)       ${SERIAL(d)}  FPC\nPower Supply 0   REV 01   (가상)       ${SERIAL(d)}  AC Power Supply\nPower Supply 1   REV 01   (가상)       ${SERIAL(d)}  AC Power Supply\nFan Tray 0                             (가상)        Fan Tray`,
+    jTerse: d => "Interface               Admin Link Proto    Local                 Remote\n" + ifLines(d, f => `${pad(f[0], 23)} ${pad(f[6], 5)} ${pad(f[5], 4)} ${f[7] ? "inet     " + pad(f[7] + "/30", 21) : ""}`.trimEnd()),
+    jLldp: d => "Local Interface    Parent Interface    Chassis Id          Port info          System Name\n" + (peers(d).map(f => `${pad(f[0], 18)} ${pad("-", 19)} ${pad("00:11:22:" + SERIAL(DEV[f[1]]).slice(3, 5) + ":aa:bb", 19)} ${pad(f[4] ? (f[4].a === d.id ? f[4].bp : f[4].ap) : "-", 18)} ${f[1]}`).join("\n") || "(이웃 없음)"),
+    jRouteSum: d => `Autonomous system number: ${64500 + (d.id.length % 20)}\nRouter ID: 10.255.${d.id.length}.1\n\ninet.0: ${40 + sortedIfs(d).length * 3} destinations, ${44 + sortedIfs(d).length * 3} routes (${40 + sortedIfs(d).length * 3} active, 0 holddown, 0 hidden)\n              Direct:     ${sortedIfs(d).filter(f => f[7]).length} routes,     ${sortedIfs(d).filter(f => f[7]).length} active\n               Local:     ${sortedIfs(d).filter(f => f[7]).length} routes,     ${sortedIfs(d).filter(f => f[7]).length} active\n                 BGP:     ${30 + sortedIfs(d).length} routes,     ${30 + sortedIfs(d).length} active`,
+    jStorage: d => "Filesystem              Size       Used      Avail  Capacity   Mounted on\n/dev/gpt/junos          2.6G       1.1G       1.3G       46%   /\ndevfs                   1.0K       1.0K         0B      100%   /dev\n/dev/md0                 1.2G       1.2G         0B     100%   /packages/mnt/os-runtime\n/dev/gpt/var             8.4G       1.6G       6.1G       21%   /var",
+    jRe: d => `Routing Engine status:\n  Temperature                 ${Math.round(rackTemp(d) + 17)} degrees C\n  CPU temperature             ${Math.round(rackTemp(d) + 19)} degrees C\n  DRAM                      4096 MB (4096 MB installed)\n  Memory utilization          38 percent\n  CPU utilization:\n    User                       3 percent\n    Idle                      95 percent\n  Model                          RE (가상)\n  Start time                     2026-08-14 02:11:40 KST\n  Uptime                         68 days, 18 hours, 49 minutes\n  Last reboot reason             Normal shutdown`,
+    jUsers: d => "USER     TTY      FROM                              LOGIN@  IDLE WHAT\n(연습)   p0       (연습 모드는 접속 기록이 없음)    9:00PM     - -cli (cli)",
+    jCliHist: () => practiceHistory(),
+    jLogCmd: () => `Oct 22 20:41:12  (가상) mgd[2201]: UI_CMDLINE_READ_LINE: User 'user_a', command 'show interfaces terse'\nOct 22 20:42:03  (가상) mgd[2201]: UI_CMDLINE_READ_LINE: User 'user_a', command 'show log messages'\nOct 22 20:55:47  (가상) mgd[2310]: UI_CMDLINE_READ_LINE: User 'user_b', command 'clear log messages'\n[연습] 위는 실제 장비가 \"누가 어떤 명령을 쳤는지\"를 남길 때의 모양을 흉내 낸 예시입니다 (user_a·user_b는 가상). 설정에 따라 이런 기록이 남을 수 있습니다. 이 연습 모드의 명령은 이렇게 남지 않습니다.`,
+    cVersion: d => `Cisco Nexus Operating System (NX-OS) Software (가상 표기)\n  system:    version 9.3(8) (가상)\n  Device name: ${d.id}\n  Hardware: (가상) ${d.role}\n  bootflash: 3 GB (가상)\nKernel uptime is 68 day(s), 18 hour(s), 49 minute(s), 12 second(s)`,
+    cInventory: d => `NAME: "Chassis", DESCR: "(가상) ${d.role}"\nPID: (가상), VID: V01, SN: ${SERIAL(d)}\n\nNAME: "Slot 1", DESCR: "(가상) 10G I/O 모듈"\nPID: (가상), VID: V01, SN: ${SERIAL(d)}`,
+    cEnv: d => `Fan:\n---------------------------------------------------\nFan             Model                Hw     Status\n---------------------------------------------------\nFan1(sys_fan1)  (가상)               --     Ok\nFan2(sys_fan2)  (가상)               --     Ok\n\nTemperature:\n--------------------------------------------------------------------\nModule   Sensor        MajorThresh   MinorThres   CurTemp     Status\n                       (Celsius)     (Celsius)    (Celsius)\n--------------------------------------------------------------------\n1        Intake        70            42           ${rackTemp(d).toFixed(0)}          Ok\n1        Exhaust       75            50           ${Math.round(rackTemp(d) + 10)}          Ok\n\nPower Supply:\nPS  Model                Power(W)   Status\n1   (가상)               650        Ok\n2   (가상)               650        Ok`,
+    cModule: d => `Mod Ports             Module-Type                      Model              Status\n--- ----- -------------------------------- ------------------ ------------\n1   ${sortedIfs(d).length}    (가상) 10G I/O 모듈              (가상)             ok\n\nMod  Sw              Hw      Slot\n---  --------------  ------  ----\n1    9.3(8)          1.0     1`,
+    cIfStatus: d => "--------------------------------------------------------------------------------\nPort          Name               Status    Vlan      Duplex  Speed   Type\n--------------------------------------------------------------------------------\n" + ifLines(d, f => `${pad(f[0], 13)} ${pad((f[1] || "").slice(0, 18), 18)} ${pad(f[5] === "up" ? "connected" : f[6] === "down" ? "disabled" : "notconnect", 9)} routed    full    10G     10Gbase-LR`),
+    cIpBrief: d => `IP Interface Status for VRF "default"(1)\nInterface            IP Address      Interface Status\n` + ifLines(d, f => `${pad(f[0], 20)} ${pad(f[7] || "unassigned", 15)} protocol-${f[5] === "up" ? "up" : "down"}/link-${f[5] === "up" ? "up" : "down"}/admin-${f[6]}`),
+    cRouteSum: d => `IP Route Table for VRF "default"\nRoute Source           Networks\nconnected              ${sortedIfs(d).filter(f => f[7]).length}\nbgp-64500              ${30 + sortedIfs(d).length}\nTotal                  ${30 + sortedIfs(d).length * 2}`,
+    cCdp: d => "Capability Codes: R - Router, S - Switch\nDevice-ID          Local Intrfce  Hldtme Capability  Platform      Port ID\n" + (peers(d).map(f => `${pad(f[1], 18)} ${pad(f[0], 14)} 150    R S        (가상)        ${f[4] ? (f[4].a === d.id ? f[4].bp : f[4].ap) : "-"}`).join("\n") || "(이웃 없음)"),
+    cClock: () => `${nowStr()}:09.812 KST (가상 시각)`,
+    cUsers: () => "NAME     LINE         TIME         IDLE          PID COMMENT\n(연습)   pts/0        Oct 22 21:00 .           (연습 모드는 접속 기록이 없음) *",
+    cCpu: d => `CPU utilization for five seconds: 3%/1%; one minute: 2%; five minutes: 2%\nPID    Runtime(ms)  Invoked   uSecs  1Sec    Process\n-----  -----------  --------  -----  ------  -----------\n1      812          91233     8      0.00%   init\n2210   5120         11230     456    0.20%   bgp`,
+    cErrCounters: d => "--------------------------------------------------------------------------------\nPort          Align-Err    FCS-Err   Xmit-Err    Rcv-Err  UnderSize OutDiscards\n--------------------------------------------------------------------------------\n" + ifLines(d, f => `${pad(f[0], 13)} ${pad(0, 12)} ${pad(f[2], 9)} ${pad(0, 11)} ${pad(f[2], 8)} ${pad(0, 10)} 0`),
+    cHistory: () => practiceHistory(),
+    hVersion: d => `Huawei Versatile Routing Platform Software (가상 표기)\nVRP (R) software, Version 5.170 (가상)\nHUAWEI (가상) uptime is 68 days, 18 hours, 49 minutes\nBKP 0 version information:\n  Device: ${d.id}`,
+    hDevice: d => `${d.id}'s Device status:\nSlot Sub Type                 Online    Power    Register     Status   Role\n-------------------------------------------------------------------------------\n0    -   (가상) ${d.role.slice(0, 14)}   Present   PowerOn  Registered   Normal   Master\n\nFan status: normal   Power status: normal`,
+    hIfBrief: d => "PHY: Physical\n*down: administratively down\nInterface                   PHY     Protocol  InUti OutUti   inErrors  outErrors\n" + ifLines(d, f => `${pad(f[0].replace("XGigabitEthernet", "XGE"), 27)} ${pad(f[6] === "down" ? "*down" : f[5], 7)} ${pad(f[5], 9)} 0%    0%   ${pad(f[2], 10)} 0`),
+    hLldp: d => "Local Intf       Neighbor Dev             Neighbor Intf             Exptime(s)\n" + (peers(d).map(f => `${pad(f[0].replace("XGigabitEthernet", "XGE"), 16)} ${pad(f[1], 24)} ${pad(f[4] ? (f[4].a === d.id ? f[4].bp : f[4].ap) : "-", 25)} 112`).join("\n") || "(이웃 없음)"),
+    hCpu: d => `CPU utilization statistics at ${nowStr()}\nSystem CPU Using Percentage : 4%\nCPU utilization for five seconds: 4%: one minute: 3%: five minutes: 3%.`,
+    hMem: d => "System Total Memory Is: 536870912 bytes\nTotal Memory Used Is: 214748364 bytes\nMemory Using Percentage Is: 40%",
+    hAlarm: d => { const t = rackTemp(d); return t >= TEMP_WARN ? `------------------------------------------------------------------------------\nSequence  AlarmId  Level  Date Time            Description\n1         0x1000   Minor  ${nowStr()}   Inlet temperature high (${t.toFixed(1)}C)` : "Info: No alarm active."; },
+    hUsers: () => "  User-Intf    Delay    Type   Network Address     AuthenStatus   AuthorcmdFlag\n+ 0   CON 0    00:00:00 (연습)                      pass           no\n(연습 모드는 접속 기록이 없음)",
+    hClock: () => `${nowStr()}:11+09:00 (가상 시각)`
+  };
+  function practiceHistory() { return S.hist.length ? S.hist.map((c, i) => `${String(i + 1).padStart(4)}  ${c}`).join("\n") + "\n[연습] 이 연습 화면에서 친 명령만 보이고, 저장되지 않아 새로고침하면 사라집니다." : "(아직 친 명령이 없습니다)"; }
+
+  /* ---------- 명령어 사전 ---------- */
+  // v: 제조사, cat: 분류, cmd: 입력 예시({port}·{ip}는 고른 장비에 맞게 채움), what: 한 줄 설명, read: 결과 읽는 법, own: 이 파일의 생성기 이름(없으면 기존 터미널이 처리), risk: 위험 명령 설명
+  const LIB = [
+    { v: "juniper", cat: "장비 상태", cmd: "show version", what: "장비 모델·OS 버전 확인", read: "Junos 버전이 같은 계열 장비와 같은지 봅니다. 업그레이드 작업 뒤에 확인합니다.", own: "jVersion" },
+    { v: "juniper", cat: "장비 상태", cmd: "show system uptime", what: "켜진 지 얼마나 됐는지", read: "최근에 재부팅했다면 uptime이 짧습니다. 장애 시각과 맞는지 봅니다.", own: "jUptime" },
+    { v: "juniper", cat: "장비 상태", cmd: "show chassis alarms", what: "장비 경보(온도·팬·전원) 확인", read: "\"No alarms currently active\"가 정상입니다. 경보가 있으면 Class(Minor/Major)와 설명을 봅니다.", own: "jAlarms" },
+    { v: "juniper", cat: "장비 상태", cmd: "show system alarms", what: "시스템 경보 확인", read: "chassis alarms와 함께 봅니다. 설정·라이선스 경고가 나옵니다.", own: "jAlarms" },
+    { v: "juniper", cat: "장비 상태", cmd: "show chassis environment", what: "온도·팬·전원 상태", read: "Status가 모두 OK이고 온도가 평소와 비슷하면 정상입니다. 입구 온도가 오르면 냉각 문제를 의심합니다.", own: "jEnv" },
+    { v: "juniper", cat: "장비 상태", cmd: "show chassis hardware", what: "장비 부품·일련번호 목록", read: "교체나 RMA(반품) 요청 때 일련번호를 확인합니다.", own: "jHardware" },
+    { v: "juniper", cat: "장비 상태", cmd: "show chassis routing-engine", what: "CPU·메모리 사용률", read: "Idle이 낮고 CPU 사용률이 높으면 과부하를 의심합니다.", own: "jRe" },
+    { v: "juniper", cat: "장비 상태", cmd: "show system storage", what: "디스크 사용량", read: "Capacity가 100%에 가까운 곳이 있는지 봅니다 (/var이 차면 로그 문제).", own: "jStorage" },
+    { v: "juniper", cat: "회선·인터페이스", cmd: "show interfaces descriptions", what: "전체 포트 상태와 설명", read: "Admin up + Link down이면 끊긴 것, Admin down이면 누가 내린 것입니다." },
+    { v: "juniper", cat: "회선·인터페이스", cmd: "show interfaces terse", what: "포트별 Up/Down과 IP를 짧게", read: "Admin/Link 칸이 up/down인지, 어느 포트에 IP가 있는지 한눈에 봅니다.", own: "jTerse" },
+    { v: "juniper", cat: "회선·인터페이스", cmd: "show interfaces diagnostics optics {port}", what: "그 포트의 광 수신값", read: "수신값이 평소보다 크게 낮으면(-9 dBm 아래) 케이블·SFP를 의심합니다." },
+    { v: "juniper", cat: "회선·인터페이스", cmd: "show interfaces extensive {port} | match CRC", what: "그 포트의 CRC 오류 수", read: "0이 아니고 계속 늘면 케이블·SFP를 의심합니다." },
+    { v: "juniper", cat: "이웃·경로", cmd: "show lldp neighbors", what: "옆에 어떤 장비가 붙어 있는지", read: "System Name과 Port info로 어느 장비의 어느 포트에 연결됐는지 알 수 있습니다.", own: "jLldp" },
+    { v: "juniper", cat: "이웃·경로", cmd: "show route summary", what: "경로 개수 요약", read: "BGP 경로 수가 평소보다 크게 줄면 연동 장애를 의심합니다.", own: "jRouteSum" },
+    { v: "juniper", cat: "이웃·경로", cmd: "show bgp summary", what: "BGP 상대(피어) 상태", read: "숫자(경로 수)가 보이면 정상, Active/Idle이면 끊긴 것입니다." },
+    { v: "juniper", cat: "이웃·경로", cmd: "show route {ip}", what: "그 IP가 지나는 회선", read: "via 뒤의 포트가 지나가는 회선입니다." },
+    { v: "juniper", cat: "이웃·경로", cmd: "ping {ip} rapid count 100", what: "상대까지 닿는지 100번 확인", read: "느낌표(!)는 응답, 점(.)은 무응답입니다. 손실 0%가 정상입니다." },
+    { v: "juniper", cat: "로그·기록", cmd: "show log messages | last 20", what: "최근 로그 20줄", read: "Down 기록의 시각이 장애 시작 시각입니다." },
+    { v: "juniper", cat: "로그·기록", cmd: "show cli history", what: "이 접속에서 친 명령 목록", read: "방금 어떤 명령을 쳤는지 되짚을 때 씁니다. 연습 모드에서는 이 연습 화면의 명령만 보입니다.", own: "jCliHist" },
+    { v: "juniper", cat: "로그·기록", cmd: "show log messages | match UI_CMDLINE_READ_LINE", what: "누가 어떤 명령을 쳤는지 남은 기록(형식 예시)", read: "실제 장비는 설정에 따라 사용자와 친 명령을 로그에 남길 수 있습니다. 그 모양을 보여 주는 가상 예시입니다.", own: "jLogCmd" },
+    { v: "juniper", cat: "로그·기록", cmd: "show system users", what: "지금 접속해 있는 사람", read: "누가 접속 중인지, 얼마나 놀고 있는지 봅니다.", own: "jUsers" },
+    { v: "juniper", cat: "설정", cmd: "show configuration interfaces {port} | display set", what: "포트 설정 확인", read: "disable이 있으면 관리자가 내려 둔 포트입니다." },
+    { v: "juniper", cat: "위험 명령", cmd: "clear log messages", what: "로그 파일 지우기", read: "", risk: "실제 장비라면 로그가 지워져서 장애 원인을 찾을 수 없게 되고, \"로그를 지웠다\"는 사실이 다른 기록에 남을 수 있습니다. 로그는 장애 원인과 작업 증거라서 함부로 지우지 않습니다." },
+    { v: "juniper", cat: "위험 명령", cmd: "clear interfaces statistics all", what: "포트 카운터(CRC 등) 0으로 되돌리기", read: "", risk: "CRC·에러 카운터가 0이 되어 장애 증거가 사라집니다. 지우기 전에 값을 캡처·기록해 둬야 합니다." },
+    { v: "juniper", cat: "위험 명령", cmd: "request system reboot", what: "장비 재부팅", read: "", risk: "실제 장비라면 \"Reboot the system? [yes,no]\"라고 한 번 묻고, yes면 장비가 꺼져 연결된 고객 회선이 모두 끊깁니다. 짝 장비(이중화)가 받는지, 작업 승인이 있는지 먼저 확인해야 합니다." },
+    { v: "cisco", cat: "장비 상태", cmd: "show version", what: "장비 모델·OS 버전과 uptime", read: "최근 재부팅 여부는 Kernel uptime으로 봅니다.", own: "cVersion" },
+    { v: "cisco", cat: "장비 상태", cmd: "show inventory", what: "부품·일련번호 목록", read: "교체·RMA 때 일련번호를 확인합니다.", own: "cInventory" },
+    { v: "cisco", cat: "장비 상태", cmd: "show environment", what: "온도·팬·전원 상태", read: "Status가 Ok이고 CurTemp가 임계값보다 낮으면 정상입니다.", own: "cEnv" },
+    { v: "cisco", cat: "장비 상태", cmd: "show module", what: "라인카드(모듈) 상태", read: "Status가 ok가 아니면 그 모듈의 포트가 영향받습니다.", own: "cModule" },
+    { v: "cisco", cat: "장비 상태", cmd: "show processes cpu", what: "CPU 사용률", read: "five seconds 값이 계속 높으면 과부하를 의심합니다.", own: "cCpu" },
+    { v: "cisco", cat: "장비 상태", cmd: "show clock", what: "장비 시각", read: "로그 시각과 맞는지 확인할 때 씁니다.", own: "cClock" },
+    { v: "cisco", cat: "회선·인터페이스", cmd: "show interfaces description", what: "전체 포트 상태와 설명", read: "Status/Protocol이 up/down인지 봅니다." },
+    { v: "cisco", cat: "회선·인터페이스", cmd: "show interface status", what: "포트 상태를 한 줄씩", read: "connected / notconnect / disabled로 구분됩니다.", own: "cIfStatus" },
+    { v: "cisco", cat: "회선·인터페이스", cmd: "show ip interface brief", what: "포트별 IP와 상태", read: "IP가 없는 포트는 unassigned로 나옵니다.", own: "cIpBrief" },
+    { v: "cisco", cat: "회선·인터페이스", cmd: "show interface counters errors", what: "포트별 에러 카운터", read: "FCS-Err가 0이 아니고 늘면 케이블·SFP를 의심합니다.", own: "cErrCounters" },
+    { v: "cisco", cat: "이웃·경로", cmd: "show cdp neighbors", what: "옆에 붙은 장비", read: "Device-ID와 Port ID로 연결 상대를 확인합니다.", own: "cCdp" },
+    { v: "cisco", cat: "이웃·경로", cmd: "show ip route summary", what: "경로 개수 요약", read: "bgp 경로 수가 크게 줄면 연동 장애를 의심합니다.", own: "cRouteSum" },
+    { v: "cisco", cat: "이웃·경로", cmd: "show bgp summary", what: "BGP 상대 상태", read: "State/PfxRcd가 숫자면 정상, Active/Idle이면 끊긴 것입니다." },
+    { v: "cisco", cat: "이웃·경로", cmd: "ping {ip} repeat 100", what: "상대까지 닿는지 100번 확인", read: "!는 응답, .는 무응답입니다." },
+    { v: "cisco", cat: "로그·기록", cmd: "show logging last 100", what: "최근 로그 100줄", read: "UPDOWN 기록의 시각이 장애 시작 시각입니다." },
+    { v: "cisco", cat: "로그·기록", cmd: "show history", what: "이 접속에서 친 명령 목록", read: "연습 모드에서는 이 연습 화면의 명령만 보입니다.", own: "cHistory" },
+    { v: "cisco", cat: "로그·기록", cmd: "show users", what: "지금 접속해 있는 사람", read: "누가 접속 중인지 봅니다.", own: "cUsers" },
+    { v: "cisco", cat: "설정", cmd: "show running-config interface {port}", what: "포트 설정 확인", read: "shutdown이 있으면 관리자가 내려 둔 포트입니다." },
+    { v: "cisco", cat: "위험 명령", cmd: "clear logging logfile", what: "로그 파일 지우기", read: "", risk: "실제 장비라면 저장된 로그가 지워져서 장애 원인을 찾기 어려워집니다. 지웠다는 사실도 기록에 남을 수 있습니다." },
+    { v: "cisco", cat: "위험 명령", cmd: "clear counters", what: "포트 카운터 0으로 되돌리기", read: "", risk: "CRC·에러 카운터가 사라져 장애 증거가 없어집니다. 먼저 값을 기록해 두세요." },
+    { v: "cisco", cat: "위험 명령", cmd: "reload", what: "장비 재부팅", read: "", risk: "실제 장비라면 \"Proceed with reload? (y/n)\"라고 묻고, y면 장비가 꺼져 연결된 회선이 모두 끊깁니다. 이중화 짝과 작업 승인을 먼저 확인합니다." },
+    { v: "huawei", cat: "장비 상태", cmd: "display version", what: "장비 OS 버전과 uptime", read: "uptime이 짧으면 최근에 재부팅한 것입니다.", own: "hVersion" },
+    { v: "huawei", cat: "장비 상태", cmd: "display device", what: "장비·카드 상태", read: "Status가 Normal이 아니면 그 카드를 확인합니다.", own: "hDevice" },
+    { v: "huawei", cat: "장비 상태", cmd: "display cpu-usage", what: "CPU 사용률", read: "five seconds 값이 계속 높으면 과부하를 의심합니다.", own: "hCpu" },
+    { v: "huawei", cat: "장비 상태", cmd: "display memory-usage", what: "메모리 사용률", read: "Using Percentage가 계속 오르면 누수를 의심합니다.", own: "hMem" },
+    { v: "huawei", cat: "장비 상태", cmd: "display alarm active", what: "지금 켜져 있는 경보", read: "\"No alarm active\"가 정상입니다.", own: "hAlarm" },
+    { v: "huawei", cat: "장비 상태", cmd: "display clock", what: "장비 시각", read: "로그 시각과 맞는지 확인할 때 씁니다.", own: "hClock" },
+    { v: "huawei", cat: "회선·인터페이스", cmd: "display interface description", what: "전체 포트 상태와 설명", read: "PHY/Protocol이 up/down인지, *down은 관리자가 내린 것입니다." },
+    { v: "huawei", cat: "회선·인터페이스", cmd: "display interface brief", what: "포트 상태와 에러 수", read: "inErrors가 0이 아니면 케이블·SFP를 의심합니다.", own: "hIfBrief" },
+    { v: "huawei", cat: "회선·인터페이스", cmd: "display transceiver interface {hwport} verbose", what: "그 포트의 광 수신값", read: "Rx Power가 평소보다 크게 낮으면 케이블·SFP를 의심합니다." },
+    { v: "huawei", cat: "이웃·경로", cmd: "display lldp neighbor brief", what: "옆에 붙은 장비", read: "Neighbor Dev와 Neighbor Intf로 연결 상대를 확인합니다.", own: "hLldp" },
+    { v: "huawei", cat: "로그·기록", cmd: "display logbuffer", what: "최근 로그", read: "Down 기록의 시각이 장애 시작 시각입니다." },
+    { v: "huawei", cat: "로그·기록", cmd: "display history-command", what: "이 접속에서 친 명령 목록", read: "연습 모드에서는 이 연습 화면의 명령만 보입니다.", own: "cHistory" },
+    { v: "huawei", cat: "로그·기록", cmd: "display users", what: "지금 접속해 있는 사람", read: "누가 접속 중인지 봅니다.", own: "hUsers" },
+    { v: "huawei", cat: "설정", cmd: "display current-configuration interface {hwport}", what: "포트 설정 확인", read: "shutdown이 있으면 관리자가 내려 둔 포트입니다." },
+    { v: "huawei", cat: "위험 명령", cmd: "reset logbuffer", what: "로그 버퍼 지우기", read: "", risk: "실제 장비라면 \"Are you sure to clear? [Y/N]\"이라고 묻고, Y면 로그가 지워져 장애 원인을 찾기 어려워집니다." },
+    { v: "huawei", cat: "위험 명령", cmd: "reset counters interface", what: "포트 카운터 0으로 되돌리기", read: "", risk: "inErrors 같은 카운터가 사라져 장애 증거가 없어집니다. 먼저 값을 기록해 두세요." },
+    { v: "huawei", cat: "위험 명령", cmd: "reboot", what: "장비 재부팅", read: "", risk: "실제 장비라면 저장 여부와 재부팅 여부를 묻고, 진행하면 장비가 꺼져 연결된 회선이 모두 끊깁니다. 이중화 짝과 작업 승인을 먼저 확인합니다." }
+  ];
+  const CATS = ["장비 상태", "회선·인터페이스", "이웃·경로", "로그·기록", "설정", "위험 명령"];
+  const dev = () => DEV[S.dev] || DEVICES.find(d => d.vendor === S.vendor);
+  const fill = (cmd, d) => {   // {port}·{ip}·{hwport}를 고른 장비에 맞게 채운다
+    const bad = d.ifs.find(f => !f[11] && (f[2] > 50 || f[3] < -9)) || d.ifs.find(f => !f[11]) || d.ifs[0], pp = d.ifs.find(f => f[8] && f[5] === "up");
+    return cmd.replace("{port}", bad ? bad[0] : "xe-0/0/0").replace("{ip}", pp ? pp[8] : "10.100.0.1").replace("{hwport}", bad ? bad[0].replace("XGigabitEthernet", "XGigabitEthernet ") : "XGigabitEthernet0/0/1");
+  };
+  const libFor = () => LIB.filter(x => x.v === S.vendor).map(x => Object.assign({}, x, { text: fill(x.cmd, dev()) }));
+
+  /* ---------- 터미널 ---------- */
+  const $o = () => document.getElementById("prOut");
+  const prompt = d => d.vendor === "juniper" ? `연습@${d.id}>` : d.vendor === "cisco" ? `${d.id}#` : `<${d.id}>`;   // 계정 이름 대신 "연습"
+  const print = html => { const t = $o(); t.insertAdjacentHTML("beforeend", html); t.scrollTop = t.scrollHeight; };
+  const lev = (a, b) => { const m = Array.from({ length: a.length + 1 }, (_, i) => [i]); for (let j = 1; j <= b.length; j++) m[0][j] = j; for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) m[i][j] = Math.min(m[i - 1][j] + 1, m[i][j - 1] + 1, m[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); return m[a.length][b.length]; };
+  const suggest = (cmd, lib) => lib.map(x => ({ x, s: lev(cmd.toLowerCase(), x.text.toLowerCase()) })).filter(o => o.s <= Math.max(6, cmd.length * 0.35)).sort((a, b) => a.s - b.s).slice(0, 3).map(o => o.x.text);
+  function run(raw) {
+    const d = dev(), cmd = raw.trim().replace(/\s+/g, " "), lib = libFor();
+    if (!cmd) return { text: "" };
+    S.hist.push(cmd); S.hp = S.hist.length;
+    if (cmd === "?" || /^help$/i.test(cmd)) return { text: "명령어를 입력하세요. 왼쪽 \"명령어 사전\"에서 골라 입력할 수도 있고, 앞부분만 치고 Tab 키를 누르면 이어서 채워 줍니다.\n예) \"show ?\" 처럼 물음표를 붙이면 그 뒤에 올 수 있는 명령을 보여 줍니다." };
+    if (/ \?$/.test(cmd)) { const pre = cmd.slice(0, -2).toLowerCase(); const m = lib.filter(x => x.text.toLowerCase().startsWith(pre + " ")); return { text: m.length ? "가능한 명령:\n" + m.map(x => "  " + x.text.slice(pre.length + 1) + "   — " + x.what).join("\n") : "(그 뒤에 올 명령이 사전에 없습니다)" }; }
+    const risk = lib.find(x => x.risk && x.text.toLowerCase() === cmd.toLowerCase());
+    if (risk) return { text: `[연습] 위험 명령입니다: ${risk.what}\n${risk.risk}\n\n연습 모드에서는 아무 일도 일어나지 않았고 기록도 남지 않았습니다.`, warn: true };
+    const own = lib.find(x => x.own && x.text.toLowerCase() === cmd.toLowerCase());
+    if (own) return { text: OUT[own.own](d) };
+    for (const [re, fn] of DEV_CMDS[d.vendor]) { const m = cmd.match(re); if (m) return { text: withTime(termMs(), () => fn(d, m)) || "(출력 없음)" }; }
+    const sg = suggest(cmd, lib);
+    return { text: VENDOR_ERR[d.vendor] + (sg.length ? "\n\n혹시 이 명령이 아닌가요?\n" + sg.map(x => "  " + x).join("\n") : "\n\n\"?\"를 입력하거나 왼쪽 명령어 사전을 보세요."), err: true };
+  }
+  function tabComplete(v) {
+    const lib = libFor(), low = v.toLowerCase(), m = lib.filter(x => x.text.toLowerCase().startsWith(low));
+    if (m.length === 1) return { value: m[0].text };
+    if (m.length > 1) { let p = m[0].text; m.forEach(x => { while (!x.text.toLowerCase().startsWith(p.toLowerCase())) p = p.slice(0, -1); }); return { value: p.length > v.length ? p : v, list: m.map(x => x.text) }; }
+    return { value: v };
+  }
+
+  /* ---------- 화면 ---------- */
+  function renderDevices() {
+    const sel = document.getElementById("prDev");
+    sel.innerHTML = DEVICES.filter(d => d.vendor === S.vendor).map(d => `<option value="${d.id}">${d.id}</option>`).join("");
+    if (!DEV[S.dev] || DEV[S.dev].vendor !== S.vendor) S.dev = sel.value; else sel.value = S.dev;
+  }
+  function renderLib() {
+    const q = document.getElementById("prSearch").value.trim().toLowerCase(), lib = libFor().filter(x => !q || (x.text + " " + x.what + " " + x.cat).toLowerCase().includes(q));
+    document.getElementById("prLib").innerHTML = CATS.map(cat => {
+      const items = lib.filter(x => x.cat === cat); if (!items.length) return "";
+      return `<div class="pr-cat${cat === "위험 명령" ? " risk" : ""}"><h4>${cat === "위험 명령" ? "⚠ 위험 명령 (연습에서는 안전)" : cat} <span class="muted">${items.length}</span></h4>` + items.map(x => `<button type="button" class="pr-item" data-cmd="${esc(x.text)}" data-tip-t="${esc(x.what)}" data-tip-a="${esc(x.risk || x.what)}"${x.read ? ` data-tip-b="${esc(x.read)}"` : ""}><code>${esc(x.text)}</code><span class="why">${esc(x.what)}</span></button>`).join("") + "</div>";
+    }).join("") || '<p class="muted">검색 결과가 없습니다.</p>';
+  }
+  function reset(keepHist) {
+    if (!keepHist) S.hist = [];
+    const d = dev();
+    document.getElementById("prOut").innerHTML = `<span class="muted">연습 모드: ${esc(d.id)} (${d.vendor}) — 실제 장비가 아닙니다. 친 명령은 저장되지 않고 접속 계정 이름도 남지 않습니다.\n"?"를 입력하면 도움말, 앞부분만 치고 Tab 키를 누르면 이어서 채워집니다.</span>\n`;
+    document.getElementById("prPrompt").textContent = prompt(d);
+  }
+  pane.innerHTML = `<div class="pr-banner"><b>연습 모드</b> — 여기서 친 명령은 <b>어디에도 저장되지 않고</b>, 접속 계정 이름도 남지 않습니다. 화면을 나가거나 새로고침하면 모두 사라집니다. 실제 장비는 설정에 따라 누가 어떤 명령을 쳤는지 로그에 남을 수 있으니, 틀려 보는 연습은 여기서 마음껏 하세요. <span class="muted">(출력은 전부 가상이고 실제 장비와 다를 수 있습니다)</span></div>
+    <div class="pr-cols">
+      <div class="card"><h3>명령어 사전 <small class="muted">(눌러서 입력창에 채우기 · 마우스를 올리면 설명)</small></h3>
+        <input type="search" id="prSearch" placeholder="명령이나 설명으로 찾기 (예: 로그, CRC, 광)" autocomplete="off" spellcheck="false" style="width:100%">
+        <div class="pr-lib" id="prLib"></div></div>
+      <div class="card"><h3>연습용 터미널</h3>
+        <div class="toolbar"><label>제조사 <select id="prVendor"><option value="juniper">Juniper</option><option value="cisco">Cisco</option><option value="huawei">Huawei</option></select></label> <label>장비 <select id="prDev"></select></label> <button class="btn" id="prClear" type="button">화면 지우기</button></div>
+        <div class="term" id="prOut"></div>
+        <div class="termin"><span class="p" id="prPrompt"></span><input type="text" id="prIn" autocomplete="off" spellcheck="false" placeholder="명령 입력 후 Enter (? 도움말 · Tab 자동 완성 · 위/아래 화살표)"></div>
+      </div></div>`;
+  const cur = devNow(); S.vendor = cur.vendor; S.dev = cur.id;
+  document.getElementById("prVendor").value = S.vendor; renderDevices(); renderLib(); reset();
+  document.getElementById("prVendor").onchange = e => { S.vendor = e.target.value; S.dev = null; renderDevices(); renderLib(); reset(true); };
+  document.getElementById("prDev").onchange = e => { S.dev = e.target.value; reset(true); renderLib(); };
+  document.getElementById("prSearch").oninput = renderLib;
+  document.getElementById("prClear").onclick = () => reset(true);
+  document.getElementById("prLib").addEventListener("click", e => { const b = e.target.closest("[data-cmd]"); if (b) { const i = document.getElementById("prIn"); i.value = b.dataset.cmd; i.focus(); } });
+  document.getElementById("prIn").addEventListener("keydown", e => {
+    const i = e.target;
+    if (e.key === "Enter") {
+      const v = i.value, r = run(v), d = dev(); i.value = "";
+      print(`<span class="p">${esc(prompt(d))}</span> <span class="c">${esc(v)}</span>\n${r.err || r.warn ? `<span class="${r.err ? "e" : "w"}">${esc(r.text)}</span>` : esc(r.text)}\n`);
+    } else if (e.key === "Tab") { e.preventDefault(); const t = tabComplete(i.value); i.value = t.value; if (t.list) print(`<span class="muted">${esc(t.list.join("\n"))}</span>\n`); }
+    else if (e.key === "ArrowUp" && S.hist.length) { S.hp = Math.max(0, S.hp - 1); i.value = S.hist[S.hp]; e.preventDefault(); }
+    else if (e.key === "ArrowDown" && S.hist.length) { S.hp = Math.min(S.hist.length, S.hp + 1); i.value = S.hist[S.hp] || ""; e.preventDefault(); }
+  });
+  window.PRACTICE = { run, tabComplete, libFor, get state() { return S; }, get lib() { return LIB; } };
+})();
