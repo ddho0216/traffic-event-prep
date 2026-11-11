@@ -1501,7 +1501,7 @@ function startScn(id, opts) {
 
 /* ---------- 서버실-3D 공용: 포트 배치, 장비 상세(포트·광케이블). 3D 화면 자체는 room3d.js ---------- */
 // 장비 크기: Cisco는 Nexus 7710(14U, 사진·메모로 추정), Juniper 6U·Huawei 2U와 포트 배치는 제가 만든 가상 그림입니다.
-const R3 = { dev: null, port: null, z: 1, focus: null };   // z: 확대 배율, focus: 다시 그린 뒤 화면 가운데에 놓을 위치(그림 좌표)   // 장비 상세(포트·광케이블) 창의 상태
+const R3 = { dev: null, port: null, z: 1, focus: null, style: "v2" };   // style: v2 = 포트 위아래 상태 칸 + 비스듬한 이름(기본), v1 = 이전 방식(휘어진 케이블 + 이름표)   // z: 확대 배율, focus: 다시 그린 뒤 화면 가운데에 놓을 위치(그림 좌표)   // 장비 상세(포트·광케이블) 창의 상태
 const RACK_U = 42, DEV_U = { cisco: 14, juniper: 6, huawei: 2 }, ROW_N = 8;   // 장비 높이는 제가 만든 가정
 const portBad = f => !f[11] && (f[2] > 50 || f[3] < -9);   // 아직 안 쓰는 회선(f[11])은 이상이 아니다
 function portPlan(d) {   // 포트를 슬롯·번호 순서대로 위치(0부터)에 놓는다. 위아래 2줄, 왼쪽부터
@@ -1513,18 +1513,18 @@ function portPlan(d) {   // 포트를 슬롯·번호 순서대로 위치(0부터
 function r3Detail() { return withTime(msOf(clamp(sr.end, 0, N - 1)), r3DetailNow); }   // 그 시각의 꺼짐 상태를 반영해서 그린다
 function r3DetailNow() {
   const d = DEV[R3.dev], rack = RACKS.find(r => r.id === d.rack), i = clamp(sr.end, 0, N - 1), dv = rack.devices.find(x => x.id === d.id), st = devState(rack, dv, i);
-  const pl = portPlan(d), PX = 26, PAD = 20, CARD = d.vendor === "cisco" ? 6 : 0, GAPW = 16, ZONE = 150, HEAD = 26;
-  const TAGW = 152, natW = PAD + (pl.cols - 1) * PX + (CARD ? Math.floor((pl.cols - 1) / CARD) * GAPW : 0) + PX + PAD, OFF = Math.max(0, (7 * TAGW + 40 - natW) / 2);   // 이름표(최대 7개)가 겹치지 않을 폭을 확보하고 포트 판은 가운데에 둔다
+  const v2 = R3.style !== "v1", pl = portPlan(d), PX = v2 ? 54 : 26, PAD = 20, CARD = d.vendor === "cisco" ? 6 : 0, GAPW = v2 ? 22 : 16, ZONE = v2 ? 178 : 150, HEAD = v2 ? 10 : 26, ROWH = 46, BH = 38, bw = v2 ? 42 : 20;
+  const TAGW = 152, natW = PAD + (pl.cols - 1) * PX + (CARD ? Math.floor((pl.cols - 1) / CARD) * GAPW : 0) + PX + PAD, OFF = v2 ? 0 : Math.max(0, (7 * TAGW + 40 - natW) / 2);   // 이름표(최대 7개)가 겹치지 않을 폭을 확보하고 포트 판은 가운데에 둔다
   const colX = c => OFF + PAD + c * PX + (CARD ? Math.floor(c / CARD) * GAPW : 0);
-  const W = natW + 2 * OFF, plateH = HEAD + 2 * 30 + PAD, H = ZONE * 2 + plateH;
-  const pos = k => ({ x: colX(Math.floor(k / 2)) + 10, row: k % 2, y: ZONE + HEAD + (k % 2) * 30 });
+  const W = natW + 2 * OFF, plateH = v2 ? HEAD + ROWH + BH + 26 : HEAD + 2 * 30 + PAD, H = ZONE * 2 + plateH;
+  const pos = k => ({ x: colX(Math.floor(k / 2)) + (v2 ? PX / 2 - 3 : 10), row: k % 2, y: ZONE + HEAD + (k % 2) * (v2 ? ROWH : 30) });
   const slot = R3.slot, inSlot = k => !slot || (k >= slot.a && k < slot.b), used = [...pl.map.keys()].sort((a, b) => a - b), cabled = used.filter(k => !pl.map.get(k)[11] && inSlot(k)), outNow = outageAt(d.id, msOf(clamp(sr.end, 0, N - 1)));   // 아직 안 쓰는 회선에는 케이블을 그리지 않는다
   const sel = R3.port != null && pl.map.has(R3.port) ? R3.port : null;
   const peerOf = f => { if (f[10]) return { dev: f[1], port: "", kind: `고객 회선 (홈 ${f[10].home})`, gbps: f[9] }; const lk = f[4]; return { dev: f[1], port: lk ? (lk.a === d.id ? lk.bp : lk.ap) : "", kind: lk ? lk.kind : "", gbps: lk ? lk.gbps : "" }; };
   let svg = "", tags = "", plate = "";
   for (let k = 0; k < pl.total; k++) { const p = pos(k), f = pl.map.get(k);
-    plate += `<button class="pt${f ? (portBad(f) ? " x" : f[5] === "down" ? " d" : " u") : ""}${k === sel ? " sel" : ""}${inSlot(k) ? "" : " dim"}" data-i="${k}" style="left:${p.x - 10}px;top:${p.y}px" title="포트 ${k}${f ? " → " + f[1] : " (비어 있음)"}">${k}</button>`; }
-  [0, 1].forEach(rw => {   // rw 0 = 위줄(케이블 위로), 1 = 아래줄(케이블 아래로)
+    plate += `<button class="pt${v2 ? " v2" : ""}${f ? (portBad(f) ? " x" : f[5] === "down" ? " d" : " u") : ""}${k === sel ? " sel" : ""}${inSlot(k) ? "" : " dim"}" data-i="${k}" style="left:${p.x - bw / 2}px;top:${p.y}px" title="포트 ${k}${f ? " → " + f[1] : " (비어 있음)"}">${k}</button>`; }
+  if (!v2) [0, 1].forEach(rw => {   // rw 0 = 위줄(케이블 위로), 1 = 아래줄(케이블 아래로)
     const mine = cabled.filter(k => k % 2 === rw);
     const want = mine.filter(k => k === sel || portBad(pl.map.get(k)));
     (mine.length <= 6 ? mine : want).forEach(k => { if (!want.includes(k)) want.push(k); });
@@ -1538,15 +1538,30 @@ function r3DetailNow() {
       tags += `<div class="ctag${bad ? " x" : ""}${k === sel ? " sel" : ""}" data-i="${k}" title="눌러서 이 포트 보기" style="left:${tx - 72}px;top:${up ? ty - 46 : ty + 2}px"><b>${esc(pe.dev)}</b> ${esc(pe.port === "-" ? "" : pe.port)}<br><span>${esc(pe.kind || "외부 연결")}${pe.gbps ? " · " + pe.gbps + "G" : ""} · 수신 ${f[3].toFixed(1)} dBm${f[2] ? " · CRC " + f[2] : ""}</span></div>`;
     });
   });
+  /* v2: 포트 바로 위(윗줄)·아래(아랫줄)에 같은 위치로 상태 칸이 붙고, 상대 이름은 비스듬히 읽는다. 선은 포트에서 칸까지 짧은 직선뿐이라 겹치지 않는다 */
+  let v2html = "";
+  if (v2) {
+    const topBox = ZONE + HEAD - 46, botBox = ZONE + HEAD + ROWH + BH + 24, short = s => { const t = String(s || ""); return t.length > 12 ? t.slice(0, 11) + "…" : t; };
+    let lines = "";
+    cabled.forEach(k => {
+      const f = pl.map.get(k), p = pos(k), up = k % 2 === 0, bad = portBad(f), on = k === sel, pe = peerOf(f), cls = `${bad ? " x" : ""}${on ? " sel" : ""}`;
+      lines += `<line x1="${p.x}" x2="${p.x}" y1="${up ? topBox + 22 : p.y + BH}" y2="${up ? p.y : botBox}" stroke="${on ? "#2c6ef2" : bad ? "#e5604d" : "#7d868e"}" stroke-width="${on ? 2.6 : 1.4}"/>`;
+      v2html += `<div class="stbox${cls}" data-i="${k}" style="left:${p.x - 13}px;top:${up ? topBox : botBox}px" title="${esc(`${f[0]} → ${pe.dev} ${pe.port || ""} · 수신 ${f[3].toFixed(2)} dBm${f[2] ? " · CRC " + f[2] : ""}`)}">${k}</div>`;
+      const txt = `${short(pe.dev)} ${f[3].toFixed(1)}${f[2] ? " · CRC " + f[2] : ""}`;
+      v2html += up ? `<div class="stlab up${cls}" data-i="${k}" style="left:${p.x - 3}px;top:${topBox - 24}px">${esc(txt)}</div>` : `<div class="stlab dn${cls}" data-i="${k}" style="left:${p.x + 3}px;top:${botBox + 28}px">${esc(txt)}</div>`;
+    });
+    svg += lines;
+  }
+  const pinfo = v2 && sel != null ? (() => { const f = pl.map.get(sel), pe = peerOf(f); return `<div class="pinfo"><b>포트 ${sel} · 선택됨</b> <span>이름</span><b>${esc(f[0])}</b> <span>연결 상대</span><b>${esc(pe.dev)}${pe.port && pe.port !== "-" ? " " + esc(pe.port) : ""}</b> <span>종류</span><b>${esc(pe.kind || "외부 연결")}${pe.gbps ? " · " + pe.gbps + "G" : ""}</b> <span>수신</span><b class="${f[3] < -9 ? "crit-t" : ""}">${f[3].toFixed(2)} dBm</b> <span>CRC</span><b class="${f[2] > 50 ? "crit-t" : ""}">${f[2]}</b> <span>상태</span><b>${f[11] === "unused" ? "미사용 (Link down)" : f[11] === "off" ? "미사용 (Admin down)" : f[6] === "down" ? "Admin down" : f[5] === "down" ? "Link down" : "Up"}</b></div>`; })() : "";
   const rows = used.filter(inSlot).map(k => { const f = pl.map.get(k), pe = peerOf(f);
     return `<tr class="click${k === sel ? " on" : ""}" data-i="${k}"><td>${f[0]}</td><td>${esc(pe.dev)}${pe.port && pe.port !== "-" ? " " + esc(pe.port) : ""}</td><td>${esc(pe.kind || "외부 연결")}</td><td class="n">${pe.gbps}</td><td class="n ${f[3] < -9 ? "crit-t" : ""}">${f[3].toFixed(2)}</td><td class="n ${f[2] > 50 ? "crit-t" : ""}">${f[2]}</td><td class="${f[5] === "down" && !f[11] ? "crit-t" : "muted"}">${f[11] === "unused" ? "미사용 (Link down)" : f[11] === "off" ? "미사용 (Admin down)" : f[6] === "down" ? "Admin down" : f[5] === "down" ? "Link down" : "Up"}</td></tr>`; }).join("");
   const label = { ok: "정상", warn: "주의", crit: "장애", off: "꺼짐" };
   $("#r3Detail").hidden = false;
-  $("#r3DBody").innerHTML = `<div class="dhd"><b>${d.id}</b>${slot ? `<span class="tag ok">칸: ${esc(slot.label)}</span><button class="btn sm" id="r3SlotAll" type="button">장비 전체 보기</button>` : ""}<span class="tag">${{ juniper: "Juniper", cisco: "Cisco", huawei: "Huawei" }[d.vendor]}</span><span class="muted">${esc(d.role)} · ${d.rack} · 입구 ${rack.temp[i].toFixed(1)}°C</span>${ledHtml(st)}<span class="muted">전원 ${st.power ? "켜짐" : "꺼짐"} · 상태 ${label[st.status]} · 팬 ${label[st.fan]}</span>${outNow ? `<span class="tag crit">전원 꺼짐${outNow.why ? ": " + esc(outNow.why) : ""}</span>` : ""}<span class="sp"></span><button class="btn" id="r3DTerm">이 장비 터미널 열기</button><button class="btn" id="r3DClose">닫기</button></div>` +
-    `<p class="note">노란 선이 꽂혀 있는 광케이블(가상, 단일모드로 가정)이고 빨간 선은 광 수신이 약하거나 CRC 오류가 많은 포트입니다. 회색 포트는 아직 쓰지 않는 회선(Down)이라 케이블을 그리지 않았습니다. 위줄 포트의 케이블은 위로, 아래줄은 아래로 나갑니다. 포트를 누르면 표시됩니다.</p>` +
+  $("#r3DBody").innerHTML = `<div class="dhd"><b>${d.id}</b>${slot ? `<span class="tag ok">칸: ${esc(slot.label)}</span><button class="btn sm" id="r3SlotAll" type="button">장비 전체 보기</button>` : ""}<span class="tag">${{ juniper: "Juniper", cisco: "Cisco", huawei: "Huawei" }[d.vendor]}</span><span class="muted">${esc(d.role)} · ${d.rack} · 입구 ${rack.temp[i].toFixed(1)}°C</span>${ledHtml(st)}<span class="muted">전원 ${st.power ? "켜짐" : "꺼짐"} · 상태 ${label[st.status]} · 팬 ${label[st.fan]}</span>${outNow ? `<span class="tag crit">전원 꺼짐${outNow.why ? ": " + esc(outNow.why) : ""}</span>` : ""}<span class="sp"></span><button class="btn" id="r3DTerm">이 장비 터미널 열기</button><span class="tag" title="포트 표시 방식 버전">표시 ${v2 ? "v2" : "v1"}</span><button class="btn sm" id="r3Style" type="button" title="이전 방식(v1)과 새 방식(v2)을 바꿔 봅니다">${v2 ? "v1 방식으로 보기" : "v2 방식으로 보기"}</button><button class="btn" id="r3DClose">닫기</button></div>` +
+    (v2 ? `<p class="note">포트 위(윗줄)·아래(아랫줄)의 칸이 그 포트의 연결입니다: 초록 = 연결됨, 빨강 = 광 수신이 약하거나 CRC 오류가 많음. 회색 포트는 아직 쓰지 않는 회선(Down)이라 칸이 없습니다. 이름은 \"상대 · 수신 dBm\" 순서이고, 포트나 칸을 누르면 아래 정보 줄과 표에 자세히 나옵니다.</p>` : `<p class="note">노란 선이 꽂혀 있는 광케이블(가상, 단일모드로 가정)이고 빨간 선은 광 수신이 약하거나 CRC 오류가 많은 포트입니다. 회색 포트는 아직 쓰지 않는 회선(Down)이라 케이블을 그리지 않았습니다. 위줄 포트의 케이블은 위로, 아래줄은 아래로 나갑니다. 포트를 누르면 표시됩니다.</p>`) +
     `<div class="dzoom"><button class="btn sm" id="r3ZIn" type="button">＋ 확대</button><button class="btn sm" id="r3ZOut" type="button">－ 축소</button><button class="btn sm" id="r3ZFit" type="button">전체 맞춤</button><span class="muted">포트를 누르면 가운데로 확대됩니다. 마우스로 끌어서 옮기고, 휠로 확대·축소합니다. (${Math.round(R3.z * 100)}%)</span></div>` +
-    `<div class="dscroll"><div class="dsizer${R3.z > 1 ? " pad" : ""}" style="width:${W * R3.z}px;height:${H * R3.z}px"><div class="dwrap" style="width:${W}px;height:${H}px;transform:scale(${R3.z});transform-origin:0 0"><svg width="${W}" height="${H}">${svg}</svg>` +
-    `<div class="plate ${d.vendor}" style="left:${OFF}px;top:${ZONE}px;width:${natW}px;height:${plateH}px"><span class="pl">${d.id} · ${d.vendor === "cisco" ? "Cisco Nexus 7710 (추정)" : d.vendor === "juniper" ? "Juniper" : "Huawei"}</span></div>${plate}${tags}</div></div></div>` +
+    `${pinfo}<div class="dscroll"><div class="dsizer${R3.z > 1 ? " pad" : ""}" style="width:${W * R3.z}px;height:${H * R3.z}px"><div class="dwrap" style="width:${W}px;height:${H}px;transform:scale(${R3.z});transform-origin:0 0"><svg width="${W}" height="${H}">${svg}</svg>` +
+    `<div class="plate ${d.vendor}${v2 ? " v2" : ""}" style="left:${OFF}px;top:${ZONE}px;width:${natW}px;height:${plateH}px"><span class="pl">${d.id} · ${d.vendor === "cisco" ? "Cisco Nexus 7710 (추정)" : d.vendor === "juniper" ? "Juniper" : "Huawei"}</span></div>${plate}${tags}${v2html}</div></div></div>` +
     `<div class="card" style="padding:0;margin-top:10px;max-height:240px;overflow:auto"><table><tr><th>포트</th><th>연결 상대</th><th>종류</th><th class="n">Gbps</th><th class="n">수신 dBm</th><th class="n">CRC</th><th>상태</th></tr>${rows || `<tr><td colspan="6" class="muted">연결된 포트가 없습니다.</td></tr>`}</table></div>`;
   const sc = document.querySelector("#r3DBody .dscroll");
   if (sc) {
@@ -1568,12 +1583,13 @@ function r3Close() { R3.dev = null; $("#r3Detail").hidden = true; }
     if (ev.target.id === "r3Detail" || ev.target.id === "r3DClose") { r3Close(); return; }
     if (ev.target.id === "r3DTerm") { openDeviceTerminal(R3.dev); return; }
     if (ev.target.id === "r3SlotAll") { R3.slot = null; R3.port = null; r3Detail(); return; }
+    if (ev.target.id === "r3Style") { R3.style = R3.style === "v1" ? "v2" : "v1"; R3.z = 1; r3Detail(); return; }
     if (ev.target.id === "r3ZIn" || ev.target.id === "r3ZOut") { const sc = document.querySelector("#r3DBody .dscroll"); { const o = r3Origin(sc); r3Zoom(R3.z * (ev.target.id === "r3ZIn" ? 1.3 : 1 / 1.3), (sc.scrollLeft + sc.clientWidth / 2 - o.x) / R3.z, (sc.scrollTop + sc.clientHeight / 2 - o.y) / R3.z); }; return; }
     if (ev.target.id === "r3ZFit") { R3.z = 1; R3.focus = null; r3Detail(); const sc = document.querySelector("#r3DBody .dscroll"); if (sc) { sc.scrollLeft = 0; sc.scrollTop = 0; } return; }
     if (R3.dragged) { R3.dragged = false; return; }   // 끌어서 옮긴 직후의 클릭은 포트 선택이 아니다
     const pt = ev.target.closest("[data-i]"); if (pt) {
       const k = +pt.dataset.i; R3.port = k; const p = R3.pos(k);
-      if (pt.closest(".dwrap")) r3Zoom(Math.max(R3.z, 1.6), p.x, p.y + 10); else r3Detail();   // 포트를 누르면 가운데로 확대
+      if (pt.closest(".dwrap")) r3Zoom(Math.max(R3.z, R3.style === "v1" ? 1.6 : 1.2), p.x, p.y + 10); else r3Detail();   // 포트를 누르면 가운데로 확대
     }
   });
   const dv = $("#r3Detail"); let drag = null;

@@ -540,19 +540,29 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('#glSlotPorts');
   const sd = await page.evaluate(() => ({ vis: !document.getElementById('r3Detail').hidden, head: document.querySelector('#r3DBody .dhd').innerText, rows: document.querySelectorAll('#r3DBody table tr[data-i]').length, dim: document.querySelectorAll('#r3DBody .pt.dim').length, all: document.querySelectorAll('#r3DBody .pt').length }));
   check('버튼을 누르면 포트·광케이블 자세히 창이 열리고 "칸: I/O 2" 표시, 표에는 그 칸의 포트(최대 12개)만 나오고 나머지 포트는 흐리게 보임', sd.vis && sd.head.includes('칸: I/O 2') && sd.rows > 0 && sd.rows <= 12 && sd.dim === sd.all - 12, JSON.stringify(sd));
-  const tagOv = await page.evaluate(() => { const rows = {}; document.querySelectorAll('#r3DBody .ctag').forEach(e => { const r = e.getBoundingClientRect(); (rows[Math.round(r.top / 20)] = rows[Math.round(r.top / 20)] || []).push(r); }); let bad = 0, n = 0; Object.values(rows).forEach(a => { a.sort((x, y) => x.left - y.left); for (let i = 1; i < a.length; i++) { n++; if (a[i].left < a[i - 1].right - 1) bad++; } }); return { bad, n, tags: document.querySelectorAll('#r3DBody .ctag').length }; });
-  check('포트 케이블 이름표(칸을 골랐을 때 줄마다 6개 안팎)가 서로 겹치지 않아 글자가 다 보임', tagOv.tags >= 4 && tagOv.n >= 3 && tagOv.bad === 0, JSON.stringify(tagOv));
+  // 포트 표시 v2(기본): 포트 위·아래 상태 칸이 포트와 같은 위치에 있고, 누르면 정보 줄에 자세히 나옴
+  const v2 = await page.evaluate(() => { const bx = [...document.querySelectorAll('#r3DBody .stbox')], pts = Object.fromEntries([...document.querySelectorAll('#r3DBody .pt')].map(e => [e.dataset.i, e.getBoundingClientRect()])); let off = 0; bx.forEach(e => { const r = e.getBoundingClientRect(), p = pts[e.dataset.i], k = +e.dataset.i; if (Math.abs((r.left + r.width / 2) - (p.left + p.width / 2)) > 1.5) off++; if (k % 2 === 0 ? r.bottom > p.top : r.top < p.bottom) off += 100; }); return { boxes: bx.length, off, labs: document.querySelectorAll('#r3DBody .stlab').length, tags: document.querySelectorAll('#r3DBody .ctag').length, ver: document.querySelector('#r3DBody .dhd .tag:nth-last-of-type(1)').textContent }; });
+  check('포트 표시 v2: 연결된 포트마다 상태 칸이 포트와 같은 가로 위치에 있고(윗줄은 위, 아랫줄은 아래), 비스듬한 이름이 같은 수만큼 있으며 옛 이름표는 없음', v2.boxes >= 8 && v2.off === 0 && v2.labs === v2.boxes && v2.tags === 0, JSON.stringify(v2));
+  await page.locator('#r3DBody .stbox >> nth=3').click();
+  const v2s = await page.evaluate(() => ({ sel: R3.port, info: (document.querySelector('#r3DBody .pinfo') || {}).textContent, on: document.querySelectorAll('#r3DBody .stbox.sel, #r3DBody .stlab.sel, #r3DBody .pt.sel').length, row: document.querySelector('#r3DBody tr.on') ? document.querySelector('#r3DBody tr.on').dataset.i : null }));
+  check('상태 칸을 누르면 그 포트가 선택되어 칸·이름·포트가 강조되고, 정보 줄(연결 상대·수신 dBm·CRC·상태)과 아래 표의 줄이 함께 나옴', v2s.sel != null && v2s.on === 3 && /포트 \d+ · 선택됨/.test(v2s.info) && v2s.info.includes('dBm') && v2s.info.includes('CRC') && String(v2s.row) === String(v2s.sel), JSON.stringify(v2s));
+  // v1(이전 방식)도 전환 버튼으로 볼 수 있음: 이름표가 서로 겹치지 않고 누르면 맨 앞으로 나옴
+  await page.click('#r3Style');
+  const tagOv = await page.evaluate(() => { const rows = {}; document.querySelectorAll('#r3DBody .ctag').forEach(e => { const r = e.getBoundingClientRect(); (rows[Math.round(r.top / 20)] = rows[Math.round(r.top / 20)] || []).push(r); }); let bad = 0, n = 0; Object.values(rows).forEach(a => { a.sort((x, y) => x.left - y.left); for (let i = 1; i < a.length; i++) { n++; if (a[i].left < a[i - 1].right - 1) bad++; } }); return { bad, n, tags: document.querySelectorAll('#r3DBody .ctag').length, ver: document.querySelector('#r3DBody .dhd .tag:nth-last-of-type(1)').textContent }; });
+  check('"v1 방식으로 보기"를 누르면 이전 방식(휘어진 케이블 + 이름표)으로 돌아가고 표시가 v1로 바뀌며, 이름표는 서로 겹치지 않음', tagOv.tags >= 4 && tagOv.n >= 3 && tagOv.bad === 0 && tagOv.ver.includes('v1'), JSON.stringify(tagOv));
   const tagPick = await page.evaluate(() => { const e = document.querySelectorAll('#r3DBody .ctag')[2]; return { i: e.dataset.i, z0: getComputedStyle(e).zIndex }; });
   await page.locator('#r3DBody .ctag >> nth=2').click();
   const tagAfter = await page.evaluate(() => { const e = document.querySelector('#r3DBody .ctag.sel'); return e ? { i: e.dataset.i, z: getComputedStyle(e).zIndex, sel: R3.port } : null; });
-  check('이름표를 누르면 그 포트가 선택되고 이름표가 맨 앞(z-index 6)으로 나옴', tagAfter && tagAfter.i === tagPick.i && +tagAfter.sel === +tagPick.i && +tagAfter.z === 6 && +tagPick.z0 === 1, JSON.stringify([tagPick, tagAfter]));
+  check('v1: 이름표를 누르면 그 포트가 선택되고 이름표가 맨 앞(z-index 6)으로 나옴', tagAfter && tagAfter.i === tagPick.i && +tagAfter.sel === +tagPick.i && +tagAfter.z === 6 && +tagPick.z0 === 1, JSON.stringify([tagPick, tagAfter]));
+  await page.click('#r3Style');   // 다시 v2(기본)로
+
   await page.click('#r3SlotAll');
   const sa = await page.evaluate(() => ({ rows: document.querySelectorAll('#r3DBody table tr[data-i]').length, dim: document.querySelectorAll('#r3DBody .pt.dim').length, head: document.querySelector('#r3DBody .dhd').innerText }));
   check('"장비 전체 보기"를 누르면 모든 포트가 다시 나옴', sa.rows > sd.rows && sa.dim === 0 && !sa.head.includes('칸:'));
   // 포트를 누르면 가운데로 확대, 끌면 옮겨짐, 휠로 확대·축소
   await page.locator('#r3DBody .pt[data-i="4"]').click();
   const pz = await page.evaluate(() => { const sc = document.querySelector('#r3DBody .dscroll'), pt = document.querySelector('#r3DBody .pt[data-i="4"]'), a = sc.getBoundingClientRect(), b = pt.getBoundingClientRect(); return { z: R3.z, sel: R3.port, dx: Math.abs((b.left + b.width / 2) - (a.left + a.width / 2)), dy: Math.abs((b.top + b.height / 2) - (a.top + a.height / 2)), w: a.width }; });
-  check('포트를 누르면 1.6배 이상 확대되고 그 포트가 보이는 영역 가운데에 놓임', pz.z >= 1.6 && pz.sel === 4 && pz.dx < 30 && pz.dy < 40, JSON.stringify(pz));
+  check('포트를 누르면 확대되고(v2는 1.2배 이상) 그 포트가 보이는 영역 가운데에 놓임', pz.z >= 1.2 && pz.sel === 4 && pz.dx < 30 && pz.dy < 40, JSON.stringify(pz));
   const dbox = await page.locator('#r3DBody .dscroll').boundingBox(), l0 = await page.evaluate(() => document.querySelector('#r3DBody .dscroll').scrollLeft);
   await page.mouse.move(dbox.x + dbox.width / 2 + 100, dbox.y + 8); await page.mouse.down(); await page.mouse.move(dbox.x + dbox.width / 2 - 120, dbox.y + 8, { steps: 6 }); await page.mouse.up();
   const l1 = await page.evaluate(() => ({ l: document.querySelector('#r3DBody .dscroll').scrollLeft, sel: R3.port }));

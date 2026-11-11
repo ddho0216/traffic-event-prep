@@ -461,3 +461,13 @@ nav.tabs .grpbtn{cursor:default}nav.tabs .grpbtn:hover{color:var(--text)}
 /* 포트 케이블 이름표: 마우스를 올리거나 누르면 맨 앞으로 나와 글자가 다 보인다 */
 .ctag:hover,.ctag.sel{z-index:6;width:auto;min-width:144px;max-width:300px;box-shadow:0 4px 14px #000a;border-color:var(--accent)}
 .ctag.sel{border-color:#fff}
+
+/* 포트 표시 v2: 포트 위·아래 상태 칸 + 비스듬한 이름 */
+.pt.v2{width:42px;height:38px;font:700 14px var(--mono);border-radius:3px}
+.stbox{position:absolute;width:26px;height:22px;border:1px solid #0f1418;border-radius:2px;background:#2f9a5b;color:#fff;font:700 12px/20px var(--mono);text-align:center;cursor:pointer}
+.stbox.x{background:#e5484d}.stbox.sel{outline:3px solid #2c6ef2;z-index:4}
+.stlab{position:absolute;height:16px;line-height:16px;white-space:nowrap;font-size:12.5px;color:#cfd8df;cursor:pointer}
+.stlab.up{transform-origin:0 100%;transform:rotate(-58deg)}.stlab.dn{transform-origin:0 0;transform:rotate(58deg)}
+.stlab.x{color:#ff8d92}.stlab.sel{color:#fff;font-weight:700}.stlab:hover{color:#fff;z-index:5}
+.pinfo{margin:6px 0;padding:8px 12px;border:1px solid var(--accent);border-radius:4px;background:var(--info-bg);font-size:13px}.pinfo span{color:var(--muted);margin:0 4px 0 10px}.pinfo b:first-child{margin-right:6px}
+.plate.v2 .pl{top:auto;bottom:5px;left:12px}
