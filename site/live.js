@@ -39,11 +39,11 @@
     const DUE_H = 48;   // 블랙홀은 바로 풀지 않고 24~48시간 유지한 뒤 푼다 (현장 원칙). 이 시나리오는 48시간 뒤로 알림을 설정한다
     const dueOf = () => parseT("2026-10-29T" + fmt(S.t)) + DUE_H * 3600000;
     const dueStr = ms => `${ymdhm(ms).slice(5, 10).replace("-", "/")} ${ymdhm(ms).slice(11)}`;
-    function check() {
-      const m = cur(), atk = atkRaw(m);
+    function check() {   // 블랙홀을 걸면 공격이 버려져 링크가 평소로 돌아온다. 링크 in이 평소 범위로 돌아온 것을 확인하면 안정화로 본다 (공격이 끝나기를 기다리지 않는다)
+      const m = cur(), v = valueIn(m);
       if (S.bh == null || S.checked != null) return;
-      if (atk > 0.1) { addLog(`정상화 확인: 아직 공격 중 (유입 ${gb(atk)}Gbps)`); E("lvSendMsg").textContent = `아직 공격이 이어지는 중입니다 (유입 ${gb(atk)}Gbps). 줄어든 뒤 다시 확인하세요`; return; }
-      S.checked = S.t; addLog("정상화 확인 · 공격 종료 (블랙홀은 24~48시간 유지)", true); todo(); fill();
+      if (v >= 5) { addLog(`정상화 확인: 링크 in이 아직 평소 범위가 아님 (${gb(v)}G)`); E("lvSendMsg").textContent = `링크 in이 아직 평소 범위가 아닙니다 (${gb(v)}G). 블랙홀이 적용되기까지 1~2분 걸립니다. 잠시 뒤 다시 확인하세요`; return; }
+      S.checked = S.t; addLog("정상화 확인 · 링크 in 평소 범위 복귀 (블랙홀로 공격이 버려지는 중, 블랙홀은 24~48시간 유지)", true); todo(); fill();
     }
     function setReminder() {
       if (!done("fin") || S.rem != null) return;
@@ -110,9 +110,9 @@
             done("way") ? "" : `<span class="lv-opts"><button class="btn sm" data-a="clean" ${can ? "" : "disabled"}>클린존 우회</button><button class="btn sm" data-a="bh" ${can ? "" : "disabled"}>블랙홀</button><button class="btn sm" data-a="wait" ${can ? "" : "disabled"}>더 지켜보기</button></span>`],
           ["act", "차단 실행 · 상위 연동망 요청", done("act") ? `차단 ${fmt(S.bh)} · 요청 ${fmt(S.upstream)}` : "블랙홀 명령을 넣고 상위 연동망에 요청합니다",
             done("act") ? "" : `<span class="lv-opts"><button class="btn sm" data-a="exec" ${can && S.bh == null ? "" : "disabled"}>블랙홀 실행 (가상)</button><button class="btn sm" data-a="up" ${S.bh != null && S.upstream == null ? "" : "disabled"}>연동망 요청</button></span>`],
-          ["fin", "정상화 확인 · 완료 문자", done("fin") ? `완료 문자 ${fmt(S.done.fin)} (블랙홀은 유지)` : S.checked != null ? "정상화를 확인했습니다. 완료 문자를 보냅니다 (블랙홀은 그대로 둡니다)" : "블랙홀은 바로 풀지 않고 24~48시간 유지합니다. 공격이 끝나 버려지는 양이 0이 되면 정상화를 확인하고 완료 문자를 보냅니다",
+          ["fin", "정상화 확인 · 완료 문자", done("fin") ? `완료 문자 ${fmt(S.done.fin)} (블랙홀은 유지)` : S.checked != null ? "링크가 평소로 돌아온 것을 확인했습니다. 바로 완료 문자를 보냅니다 (블랙홀은 그대로 둡니다)" : "블랙홀을 걸면 공격이 버려져서 링크가 곧 평소로 돌아옵니다. 링크 in이 평소 범위로 돌아온 것을 확인하면 안정화로 보고 바로 완료 문자를 보냅니다. 공격이 끝나기를 기다리지 않고, 블랙홀은 24~48시간 유지합니다",
             done("fin") || S.checked != null ? "" : `<button class="btn sm" data-a="check" ${S.bh != null ? "" : "disabled"}>정상화 확인</button>`],
-          ["rem", `블랙홀 해제 알림 설정 (${DUE_H}시간 뒤)`, done("rem") ? `설정함 · ${dueStr(S.rem)} 해제 예정 (알림 > 내 업무에서 확인)` : `블랙홀은 24~48시간 뒤에 풉니다. 해제할 때가 되면 알림을 받도록 설정합니다. 설정하면 알림(종 모양)의 "내 업무"에서 확인해 보실 수 있습니다`,
+          ["rem", `블랙홀 해제 알림 설정 (${DUE_H}시간 뒤)`, done("rem") ? `설정함 · ${dueStr(S.rem)} 해제 예정 (알림 > 내 업무에서 확인)` : `블랙홀은 24~48시간 뒤에 풉니다. 해제할 때가 되면 알림을 받도록 설정합니다. 설정하면 알림(종 모양)의 "내 업무"에서 확인해 보실 수 있습니다. 해제하기 전에는 공격이 끝났는지, 같은 고객의 다른 IP로 옮겨 가지 않았는지 확인합니다`,
             done("rem") ? "" : `<button class="btn sm" data-a="rem" ${done("fin") ? "" : "disabled"}>${DUE_H}시간 뒤 알림 설정</button>`]
         ];
       },
@@ -130,7 +130,7 @@
       draft(stage) {
         const m = cur(), atk = S.bh != null && S.rel == null && atkRaw(m) > 0 ? atkRaw(m) : atkRaw(Math.min(m, ATK_END - 1)), acts = S.log.filter(x => x.act).map(x => ({ t: fmt(x.m), txt: x.text }));
         const cause = (stage === "발생" ? "국제망 DDoS 공격 (확인 중)" : "국제망 DDoS 공격") + (S.saved && stage !== "발생" ? ` · 출발지 상위 ${S.saved.top.split(", ")[0]} 등` : "");
-        const impact = stage === "발생" ? "파악중" : stage === "경과" ? (S.bh != null && S.rel == null ? "대상 IP 접속 불가(블랙홀 중)" : "파악중") : (S.bh != null ? `대상 IP 접속 불가 (블랙홀 ${fmt(S.bh)}부터 유지 중, 24~48시간 뒤 해제 예정)` : "영향 없음");
+        const impact = stage === "발생" ? "파악중" : stage === "경과" ? (S.bh != null && S.rel == null ? "대상 IP 접속 불가(블랙홀 중)" : "파악중") : (S.bh != null ? `대상 IP 1개 접속 불가 (블랙홀 ${fmt(S.bh)}부터 유지 중, 24~48시간 뒤 해제 예정), 고객의 다른 IP·이중화 경로는 영향 없음` : "영향 없음");
         return smsNotice({ stage, center: "분당", title: "DDoS 공격 수신", target: `${DEV}(10.0.0.1)`, from: `10/29 ${fmt(ONSET)}`, to: stage === "완료" ? `10/29 ${fmt(S.t)}` : "", cause, attack: `TCP (${gb(atk)} Gbps / ${(atk * 1e9 / (PKT * 8) / 1e6).toFixed(1)} Mpps)`, actions: stage === "발생" ? [] : acts, impact, voc: stage === "발생" ? "파악중" : "없음" });
       },
       stageOk: st => ({ 발생: true, 경과: done("sms"), 완료: S.checked != null })[st],
@@ -152,6 +152,7 @@
           ["알림 → 차단", S.bh == null ? "차단 안 함" : `${(S.bh - ALERT).toFixed(1)}분`],
           ["블랙홀", S.bh == null ? "-" : `${fmt(S.bh)}부터 유지 중 (바로 풀지 않고 24~48시간 유지)`],
           ["클린존 가입 확인", S.victim ? "확인함" : "확인 안 함 (차단 전에 확인하는 순서입니다)"],
+          ["고객 영향", "대상 IP 1개만 접속 불가 (고객이 여러 IP를 쓰고 이중화되어 있어 서비스 전체는 아님, 가정)"],
           ["블랙홀 해제 알림", S.rem ? `${dueStr(S.rem)}에 해제 확인 (알림 > 내 업무)` : "설정 안 함 (해제 시점을 놓칠 수 있습니다)"],
           ["사건 기록 저장", S.saved ? `#${S.saved.id} 저장함` : "안 함 (끝난 뒤에는 값을 다시 볼 수 없습니다)"],
           ["문자 순서", `발생${S.sent.경과 != null ? " → 경과" : ""} → 완료`]

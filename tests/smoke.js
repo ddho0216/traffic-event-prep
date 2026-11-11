@@ -205,7 +205,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('정상화를 확인해도 블랙홀은 그대로 유지됨 (경로가 계속 Discard)', (await lv()).term.split('show route 198.51.100.77').pop().includes('Discard') && (await page.locator('#lvAlert').innerText()).includes('블랙홀은 유지 중'));
   await page.click('#lvStage [data-st=완료]');
   const dn = await page.inputValue('#lvDraft');
-  check('완료 문자: 시작~끝 일시, 직접 한 조치 시간표(블랙홀 차단·연동망 요청), 블랙홀이 유지 중(24~48시간 뒤 해제 예정)이라고 서비스영향에 적힘, 해제 조치는 없음', /■ 일시 : 10\/29 03:20 ~ 10\/29 03:4\d/.test(dn) && dn.includes('블랙홀 차단') && dn.includes('65535:666') && !dn.includes('블랙홀 해제') && /블랙홀 03:2\d부터 유지 중, 24~48시간 뒤 해제 예정/.test(dn) && dn.includes('_완료]'));
+  check('완료 문자: 시작~끝 일시, 직접 한 조치 시간표(블랙홀 차단·연동망 요청), 블랙홀이 유지 중(24~48시간 뒤 해제 예정)이라고 서비스영향에 적힘, 해제 조치는 없음', /■ 일시 : 10\/29 03:20 ~ 10\/29 03:4\d/.test(dn) && dn.includes('블랙홀 차단') && dn.includes('65535:666') && !dn.includes('블랙홀 해제') && /대상 IP 1개 접속 불가 \(블랙홀 03:2\d부터 유지 중, 24~48시간 뒤 해제 예정\), 고객의 다른 IP·이중화 경로는 영향 없음/.test(dn) && dn.includes('_완료]'));
   await page.click('#lvSend');
   await page.keyboard.press('Escape');
   check('완료 문자를 보내도 대응이 끝나지 않고(결과 창 없음) 7번 알림 설정이 열림', !(await page.evaluate(() => !document.getElementById('lvResult').hidden)) && (await page.locator('#lvTodo [data-a=rem]').isEnabled()) && (await page.locator('#lvProg').innerText()).includes('6 / 7'));
@@ -226,12 +226,16 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('보는 시각이 해제 예정 시각(48시간 뒤)을 지나면 알림 배지 숫자가 1 늘고, 경고 이력과 내 업무에 "해제 알림 · 확인 필요"가 나옴', +badge1 === +badge0 + 1 && alertTxt.includes('해제 알림') && alertTxt.includes('설정 후 48시간이 지났습니다') && (await page.locator('#taskTbl').innerText()).includes('해제 확인 필요'), badge0 + ' -> ' + badge1);
   await page.evaluate(() => { state.end = NOW_IDX; renderTasks(); localStorage.removeItem('reminders'); renderTasks(); });
   await page.keyboard.press('Escape'); await page.evaluate(() => { document.getElementById('notif').hidden = true; });
-  // 공격이 끝나기 전에 정상화를 확인하려 하면 아직 공격 중이라고 알려 준다. 문자를 늦게 보내면 기한 초과
+  // 블랙홀을 걸면 공격이 끝나기를 기다리지 않고 링크가 평소로 돌아온 것을 확인해 바로 완료 문자를 보낸다. 문자를 늦게 보내면 기한 초과
   await page.evaluate(() => LIVE.reset(false));
-  await page.evaluate(() => LIVE.jump(25)); await page.click('#lvAck'); await page.click('#lvTodo [data-a=bh]'); await page.click('#lvTodo [data-a=exec]');
+  await page.evaluate(() => LIVE.jump(25)); await page.click('#lvAck');
+  check('블랙홀을 걸기 전에는 "정상화 확인"이 막혀 있음', await page.locator('#lvTodo [data-a=check]').isDisabled());
+  await page.click('#lvTodo [data-a=bh]'); await page.click('#lvTodo [data-a=exec]');
+  await page.click('#lvTodo [data-a=check]');
+  check('블랙홀 직후(링크 in이 아직 내려오기 전)에 정상화 확인을 누르면 "아직 평소 범위가 아닙니다"라고 알려 줌', (await page.locator('#lvSendMsg').innerText()).includes('아직 평소 범위가 아닙니다') && (await page.locator('#lvStage [data-st=완료]').isDisabled()));
   await page.evaluate(() => LIVE.advance(3)); const low = parseFloat((await lv()).now);
   await page.click('#lvTodo [data-a=check]');
-  check('공격이 끝나기 전에 "정상화 확인"을 누르면 아직 공격 중이라고 알려 주고 6번 단계는 그대로이며, 블랙홀 덕분에 in은 평소 값', (await page.locator('#lvSendMsg').innerText()).includes('아직 공격이 이어지는 중') && low < 5 && (await page.locator('#lvStage [data-st=완료]').isDisabled()), String(low));
+  check('블랙홀 뒤 링크 in이 평소로 돌아오면(공격은 아직 이어지는 중) 바로 정상화 확인이 되고 완료 문자를 보낼 수 있음', low < 5 && (await page.locator('#lvCompSub').innerText()).includes('블랙홀로 버려지는 양') && !(await page.locator('#lvStage [data-st=완료]').isDisabled()) && (await page.locator('#lvTodo').innerText()).includes('링크가 평소로 돌아온 것을 확인했습니다'), String(low));
   await page.evaluate(() => LIVE.reset(false));
   await page.evaluate(() => LIVE.jump(33)); await page.click('#lvAck'); await page.click('#lvSend');
   check('발생 문자를 8분 뒤에 보내면 "기한 초과"로 표시됨', (await lv()).timer.includes('기한 초과'));
