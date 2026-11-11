@@ -876,11 +876,17 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const rbTop = await page.evaluate(() => document.getElementById('runbook').getBoundingClientRect().top);
   check('터미널 위 보조 메뉴(터미널·장애 매뉴얼·설계도)로 맨 아래까지 내려가지 않고 매뉴얼이 바로 위쪽에 열림', (await page.locator('#termNav button').count()) === 3 && rbTop < 400 && !(await page.locator('#termOut').isVisible()), String(Math.round(rbTop)));
   await page.click('#termNav [data-pane=term]');
-  const grp = await page.evaluate(() => ({ groups: [...document.querySelectorAll('#qcmd .qgrp h4')].map(h => h.innerText), bad: [...document.querySelectorAll('#qcmd button')].filter(b => !b.title.includes('무엇을 위해') || !b.title.includes('읽는 법') || !b.querySelector('.why').innerText.trim()).map(b => b.dataset.c) }));
+  const grp = await page.evaluate(() => ({ groups: [...document.querySelectorAll('#qcmd .qgrp h4')].map(h => h.innerText), bad: [...document.querySelectorAll('#qcmd button')].filter(b => !b.dataset.tipA || !b.dataset.tipB || !b.dataset.tipT || b.hasAttribute('title') || !b.querySelector('.why').textContent.trim()).map(b => b.dataset.c) }));
   check('명령이 목적별 묶음(1.회선 상태 확인 ~)으로 정리되고, 모든 명령에 한 줄 설명과 마우스 설명(무엇을 위해·읽는 법)이 있음', grp.groups.length >= 4 && grp.groups[0].startsWith('1. 회선 상태 확인') && grp.bad.length === 0, JSON.stringify(grp));
+  await page.hover('#qcmd button >> nth=1');
+  const tp = await page.evaluate(() => ({ vis: !document.getElementById('cmdTip').hidden, txt: document.getElementById('cmdTip').innerText, cmdVisible: getComputedStyle(document.querySelector('#qcmd .why')).display, note: document.querySelector('#qcmd + p.note').textContent }));
+  check('명령에 마우스를 올리면 바로 설명 카드(무엇을 위해·읽는 법)가 뜨고, 명령 아래 한 줄 설명·묶음 설명은 평소에 숨겨져 있음', tp.vis && tp.txt.includes('무엇을 위해') && tp.txt.includes('읽는 법') && tp.cmdVisible === 'none', JSON.stringify(tp));
+  check('명령 목록 아래 안내문은 "누르면 입력창에 채워집니다."만 남음', tp.note === '누르면 입력창에 채워집니다.', tp.note);
+  await page.mouse.move(5, 5);
+  check('마우스를 치우면 설명 카드가 사라짐', await page.evaluate(() => document.getElementById('cmdTip').hidden));
   await page.selectOption('#vendorSel', 'cisco');
-  const cg = await page.evaluate(() => ({ n: document.querySelectorAll('#qcmd .qgrp').length, titles: [...document.querySelectorAll('#qcmd button')].map(b => b.title).join('|') }));
-  check('Cisco·Huawei 장비도 같은 묶음과 설명으로 나옴', cg.n >= 3 && cg.titles.includes('읽는 법'));
+  const cg = await page.evaluate(() => ({ n: document.querySelectorAll('#qcmd .qgrp').length, titles: [...document.querySelectorAll('#qcmd button')].map(b => b.dataset.tipB).join('|') }));
+  check('Cisco·Huawei 장비도 같은 묶음과 설명으로 나옴', cg.n >= 3 && cg.titles.length > 20);
   await page.selectOption('#vendorSel', 'juniper');
   // 설계도(그림)
   await page.click('#termNav [data-pane=design]');

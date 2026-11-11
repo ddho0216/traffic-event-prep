@@ -427,3 +427,9 @@ table th.c,table td.c{text-align:center}
 #evList .evgo{color:var(--muted);white-space:nowrap}#evList tr.sel .evgo{color:var(--in);font-weight:700}
 .evsel{margin:0 0 12px;padding:9px 14px;border:1px solid var(--in);border-left-width:4px;border-radius:4px;background:#12201f;scroll-margin-top:8px}
 .evsel.flash{animation:evflash 1s ease}@keyframes evflash{0%{background:#2a5a55}100%{background:#12201f}}
+
+/* 명령 목록: 설명은 마우스를 올리면 카드로 보이고, 터치 기기에서만 아래 한 줄 설명을 보여 준다 */
+@media (hover:hover){.qcmd .why,.qcmd .gdesc{display:none}}
+@media (hover:none){#cmdTip{display:none!important}}
+#cmdTip{position:fixed;z-index:95;width:340px;background:#10171d;border:1px solid var(--in);border-radius:6px;padding:12px 14px;box-shadow:0 8px 24px #000a;font-size:13px;line-height:1.6;color:var(--text);pointer-events:none}
+#cmdTip[hidden]{display:none}#cmdTip b.t{display:block;font-size:14px;margin-bottom:6px}#cmdTip .k{color:var(--in);font-weight:700;margin-top:8px;display:block}

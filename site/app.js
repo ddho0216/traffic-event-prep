@@ -840,9 +840,26 @@ function quickCmds() {
   const cmds = [...new Set(list)];   // 포트가 하나뿐인 장비는 같은 명령이 두 번 나오지 않게
   $("#qcmd").innerHTML = CMD_GROUPS.map(([title, desc], g) => {
     const mine = cmds.filter(c => cmdInfo(c)[1] === g); if (!mine.length) return "";
-    return `<div class="qgrp"><h4 title="${esc(desc)}">${title} <i class="help" aria-hidden="true">?</i></h4><p class="gdesc">${esc(desc)}</p>` + mine.map(c => { const x = cmdInfo(c); return `<button data-c="${esc(c)}" title="${esc(`무엇을 위해: ${x[3]}\n읽는 법: ${x[4]}`)}"><code>${esc(c)}</code><span class="why">${esc(x[2])}</span></button>`; }).join("") + "</div>";
+    return `<div class="qgrp"><h4 data-tip-t="${esc(title.replace(/^\d+\.\s*/, ""))}" data-tip-a="${esc(desc)}">${title} <i class="help" aria-hidden="true">?</i></h4><p class="gdesc">${esc(desc)}</p>` + mine.map(c => { const x = cmdInfo(c); return `<button data-c="${esc(c)}" data-tip-t="${esc(x[2])}" data-tip-a="${esc(x[3])}" data-tip-b="${esc(x[4])}"><code>${esc(c)}</code><span class="why">${esc(x[2])}</span></button>`; }).join("") + "</div>";
   }).join("");
 }
+/* 명령 설명 카드: 마우스를 올리면 바로 뜬다 (브라우저 기본 말풍선은 1초쯤 늦게 떠서 쓰지 않는다). 터치 기기는 CSS가 명령 아래 한 줄 설명을 보여 준다 */
+(function initCmdTip() {
+  const tip = document.createElement("div"); tip.id = "cmdTip"; tip.hidden = true; document.body.appendChild(tip);
+  const show = el => {
+    const r = el.getBoundingClientRect();
+    tip.innerHTML = `<b class="t">${esc(el.dataset.tipT)}</b><span class="k">${el.dataset.tipB ? "무엇을 위해" : "설명"}</span>${esc(el.dataset.tipA)}${el.dataset.tipB ? `<span class="k">읽는 법</span>${esc(el.dataset.tipB)}` : ""}`;
+    tip.hidden = false;
+    const w = tip.offsetWidth, h = tip.offsetHeight, left = r.left - w - 14 >= 8 ? r.left - w - 14 : Math.min(innerWidth - w - 8, r.right + 14);   // 목록 왼쪽(터미널 화면 위)에 띄우고, 자리가 없으면 오른쪽
+    tip.style.left = left + "px"; tip.style.top = Math.max(8, Math.min(innerHeight - h - 8, r.top - 20)) + "px";
+  };
+  const box = document.getElementById("qcmd");
+  box.addEventListener("mouseover", e => { const el = e.target.closest("[data-tip-t]"); if (el) show(el); });
+  box.addEventListener("mouseout", e => { if (e.target.closest("[data-tip-t]")) tip.hidden = true; });
+  box.addEventListener("focusin", e => { const el = e.target.closest("[data-tip-t]"); if (el) show(el); });
+  box.addEventListener("focusout", () => { tip.hidden = true; });
+  window.addEventListener("scroll", () => { tip.hidden = true; }, true);
+})();
 const termHist = []; let hp = 0;
 function termPrint(html) { const t = $("#termOut"); t.insertAdjacentHTML("beforeend", html); t.scrollTop = t.scrollHeight; }
 function termBanner() {
