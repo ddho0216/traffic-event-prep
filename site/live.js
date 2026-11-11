@@ -1,14 +1,14 @@
-/* 실시간 대응 (시험판): 가상 시계가 흐르는 동안 알림을 직접 확인하고, 조회·판단·조치를 직접 눌러 진행한다.
+/* 내가 대응 · 자동 대응 (시험판): 가상 시계가 흐르는 동안 알림을 직접 확인하고, 조회·판단·조치를 직접 눌러 진행한다.
    여러 시나리오를 담는 구조: 공통 부분(시계·그래프·알림 줄·해야 할 일·터미널·문자·결과)은 이 파일 위쪽에 있고,
    시나리오마다 달라지는 부분(값·단계·명령·문자)은 아래 SCEN 안에 시나리오별로 있다.
    모든 수치·IP·절차는 가상이고, DDoS의 클린존 가입 여부와 차단 절차는 제가 정한 가정이다. */
-(function initLive() {
-  const root = document.getElementById("tab-live");
-  if (!root) return;
+/* 같은 코드로 화면 둘을 만든다: 내가 대응(P="lv", 사람이 누른다)과 자동 대응(P="av", 규칙표대로 스스로 진행한다) */
+function makeLive(root, P, AGENT) {
+  if (!root) return null;
   const pad = n => String(n).padStart(2, "0");
   const noise = m => { const x = Math.sin(m * 12.9898 + 78.233) * 43758.5453; return x - Math.floor(x); };
   const gb = v => v.toFixed(1);
-  const E = id => document.getElementById(id);
+  const E = id => document.getElementById(P + id.slice(2));   // 화면마다 id 앞글자가 다르다 (lv… / av…)
   let S, SC, timer = null, lastMin = -1;
   const fmt = m => { const x = SC.clock0 + Math.floor(m); return `${pad(Math.floor(x / 60) % 24)}:${pad(x % 60)}`; };
   const cur = () => Math.floor(S.t);
@@ -158,6 +158,20 @@
           ["문자 순서", `발생${S.sent.경과 != null ? " → 경과" : ""} → 완료`]
         ];
       },
+      auto: {
+        trigger: `${UPL} in이 평소(약 3.3G)의 2배를 넘으면 급증으로 보고, 3분 뒤 알림이 뜨면 바로 시작합니다. (기준 값은 제가 정한 가정)`,
+        guards: ["이벤트 일정이 있는 시간이면 차단하지 않고 사람에게 넘김", "클린존 가입 고객사면 블랙홀 대신 우회", "블랙홀은 공격받는 IP 1개(/32)에만 적용", "링크가 평소 범위로 돌아온 것을 확인하기 전에는 완료 문자를 보내지 않음", "블랙홀은 스스로 풀지 않고, 48시간 뒤 사람에게 해제 알림만 남김"],
+        limit: "블랙홀을 걸면 그 IP의 정상 접속도 함께 끊깁니다. 실제 현장이라면 이 단계만큼은 사람 확인을 거치게 둘지 정해야 합니다. 여기서는 규칙이 끝까지 가는 모습을 보여 드리려고 자동으로 두었습니다.",
+        steps: {
+          ev: { rule: "알림 수신 → 이벤트 일정 조회", tool: "이벤트 일정표 조회", why: () => "10/29 03시대에 일정 없음 → 정상 증가가 아님" },
+          ip: { rule: "일정 없음 → 대상 IP의 고객사·공격량 조회, 구성을 기록에 저장", tool: "IP 대장 조회 · 트래픽 구성 통계", why: () => `${VICTIM} = 가상물산 · TCP SYN 95% · ${gb(atkRaw(cur()))} Gbps`, after: () => SC.save() },
+          sms: { rule: "대상 파악 완료 → 발생 문자 (기한 8분)", tool: "문자 양식 자동 채움 · 발송", why: () => `알림 후 ${(S.done.sms - ALERT).toFixed(1)}분에 발송 (기한 8분)` },
+          way: { rule: "클린존 가입 → 우회 / 미가입 → 블랙홀", tool: "클린존 가입 명단 조회", pick: () => ["bh"], why: () => "가상물산은 클린존 미가입 (가정) → 블랙홀" },
+          act: { rule: "블랙홀로 결정 → 장비에 /32 discard 설정 → 상위 연동망에 요청", tool: "장비 명령 (set … discard, commit) · 연동망 요청", why: () => `차단 ${fmt(S.bh)}${S.upstream != null ? ` · 연동망 요청 ${fmt(S.upstream)}` : ""}`, mid: true },
+          fin: { rule: "링크 in이 5G 아래로 내려옴 → 정상화 확인 → 완료 문자", tool: "그래프 값 읽기 · 문자 발송", ready: () => S.checked != null || valueIn(cur()) < 5, waitText: "블랙홀이 적용되어 링크가 평소로 돌아오기를 기다리는 중", why: () => `링크 in ${gb(valueIn(cur()))}G (평소 범위) 확인 후 완료 문자` },
+          rem: { rule: "완료 문자 발송 → 48시간 뒤 해제 알림 등록", tool: "알림(내 업무) 등록", why: () => "블랙홀은 24~48시간 유지한 뒤 사람이 풉니다" }
+        }
+      },
       note: "가상 시나리오의 결과입니다. 기준(8분 등)은 현장에서 들은 값이고, 클린존·차단 절차는 제가 정한 가정입니다."
     };
   })();
@@ -286,6 +300,22 @@
           ["문자 순서", `발생${S.sent.경과 != null ? " → 경과" : ""} → 완료 (복구 확인 ${done("rec") ? "후" : "전"})`]
         ];
       },
+      auto: {
+        trigger: `${ID}(${DV} ${PORT})가 Link down이 되고 3분 뒤 알림이 뜨면 바로 시작합니다.`,
+        guards: ["우리 쪽 확인(광값·CRC·ping)을 끝낸 뒤에만 연동망에 문의", "연동망 회신을 받기 전에는 원인을 정하지 않음", "장비 설정은 바꾸지 않음 (조회 명령만 실행)", "그래프가 돌아오고 광값·ping을 다시 확인하기 전에는 완료 문자를 보내지 않음"],
+        limit: "일시적인 오류와 광 케이블·SFP 고장은 연동망 회신(모두 없음)과 광값(빛 없음)이 똑같이 나와서 규칙만으로는 구분하지 못합니다. 이럴 때는 안전한 쪽인 현장 교체 요청을 고릅니다.",
+        steps: {
+          ip: { rule: "알림 수신 → 어느 장비·회선인지 확인", tool: CMDS.ip, why: () => `${DV} ${PORT}: Admin up / Link down` },
+          tr: { rule: "회선 확인 → 다운 전·후 트래픽 읽기", tool: "그래프 값 읽기", why: () => `${gb(val(dS - 5))}G → ${gb(val(dS))}G` },
+          sms: { rule: "회선·트래픽 파악 완료 → 발생 문자 (기한 8분)", tool: "문자 양식 자동 채움 · 발송", why: () => `알림 후 ${(S.done.sms - ALERT).toFixed(1)}분에 발송 (기한 ${DEADLINE}분)` },
+          opt: { rule: "발생 문자 뒤 → 광값·CRC 확인", tool: "show interfaces diagnostics optics / extensive", why: () => "광 수신 -40 dBm → 빛이 안 들어옴" },
+          ping: { rule: "광값 확인 → ARP·ping 확인", tool: "show arp / ping", why: () => "ARP 없음, ping 100% 손실" },
+          ask: { rule: "우리 쪽 확인 끝 → 연동망에 3가지 문의", tool: "연동망 문의 (가상 요청)", why: () => `NOC 작업: ${CAUSE[S.cause].noc.split(" · ")[0]} · 구간: ${CAUSE[S.cause].seg.split(" · ")[0]} · 보안: ${CAUSE[S.cause].sec.split(" · ")[0]}` },
+          cause: { rule: "회신에 작업·이슈 있음 → 복구 대기 / 3가지 모두 없음 + 빛 없음 → 현장 교체 요청", tool: "회신 내용 + 광값으로 판단", pick: () => /^있음/.test(CAUSE[S.cause].noc) || /^있음/.test(CAUSE[S.cause].seg) ? ["wait"] : ["fix"], why: () => S.fix === "교체" ? "문의 3가지 모두 '없음'이고 빛이 안 들어옴 → 현장 교체 요청" : "상대 구간 작업이 있었음 → 끝나면 자동 복구되므로 대기", mid: true },
+          rec: { rule: "그래프가 돌아옴 → 광값·ping 다시 확인", tool: "show interfaces diagnostics optics / ping", waitText: "회선이 복구되기를 기다리는 중", why: () => "광값 정상, ping 0% 손실" },
+          fin: { rule: "복구 확인 → 완료 문자", tool: "문자 양식 자동 채움 · 발송", why: () => "복구를 확인한 뒤에 발송" }
+        }
+      },
       note: "가상 데이터(사이트의 안산 업링크 다운 구간)로 만든 결과입니다. 복구 원인과 문의 회신은 제가 만든 가상 사례입니다."
     };
   })();
@@ -410,6 +440,22 @@
           ["문자 순서", `발생${S.sent.경과 != null ? " → 경과" : ""} → 완료 (회복 확인 ${done("rec") ? "후" : "전"})`]
         ];
       },
+      auto: {
+        trigger: `${ID} 트래픽이 전날 같은 시각보다 크게 줄고, 3분 뒤 알림이 뜨면 바로 시작합니다. (기준 값은 제가 정한 가정)`,
+        guards: ["경기 일정이 있는 시간이면 정상 하락일 수 있어 사람에게 넘김", "우리 쪽 광값·CRC를 먼저 확인한 뒤에만 상대 사업자에 문의", "회신을 받은 뒤에만 고객사에 안내", "장비 설정은 바꾸지 않음 (조회 명령만 실행)", "회복을 확인하기 전에는 완료 문자를 보내지 않음"],
+        limit: "상대 사업자에게 묻고 답을 받는 일은 실제로는 전화·메신저라서 자동화하기 어렵습니다. 여기서는 가상 회신으로 대신했습니다.",
+        steps: {
+          ev: { rule: "알림 수신 → 경기 일정 조회", tool: "이벤트 일정표 조회", why: () => "해당 시간 경기 일정 없음 → 하프타임 같은 정상 하락이 아님" },
+          tr: { rule: "일정 없음 → 전날 같은 시각과 비교", tool: "그래프 값 읽기", why: () => `전날 ${gb(prev(dS) || 0)}G → ${gb(val(dS))}G` },
+          intl: { rule: "급감 확인 → 다른 회선으로 우회했는지 확인", tool: `${INTL} 그래프`, why: () => "해외 연동 회선이 늘어남 → 일부가 우회 중" },
+          opt: { rule: "우회 확인 → 우리 쪽 포트 광값·CRC 확인", tool: "show interfaces diagnostics optics / extensive", why: () => "광값 정상, CRC 증가 없음 → 우리 쪽 문제 아님" },
+          sms: { rule: "우리 쪽 확인 완료 → 발생 문자 (기한 8분)", tool: "문자 양식 자동 채움 · 발송", why: () => `알림 후 ${(S.done.sms - ALERT).toFixed(1)}분에 발송 (기한 ${DEADLINE}분)` },
+          ask: { rule: "우리 쪽 문제 아님 → 상대 IX 사업자에 3가지 문의", tool: "상대 사업자 문의 (가상 요청)", why: () => `NOC 작업: ${REPLY.noc.split(" · ")[0]} · 구간: ${REPLY.seg.split(" · ")[0]} · 보안: ${REPLY.sec.split(" · ")[0]}` },
+          notice: { rule: "회신 받음 → 영향 고객사에 상황 안내", tool: "고객사 연락처 조회 · 안내 메일", why: () => `${cust().join("·") || "영향 고객사"}에 안내`, mid: true },
+          rec: { rule: "그래프가 돌아옴 → 광값·우회 회선 다시 확인", tool: "그래프 · show interfaces diagnostics optics", waitText: "상대 사업자 복구로 트래픽이 돌아오기를 기다리는 중", why: () => "그래프와 광값 정상, 우회 회선도 평소로 돌아옴" },
+          fin: { rule: "회복 확인 → 완료 문자 · 복구 안내", tool: "문자·메일 발송", why: () => "회복을 확인한 뒤에 발송" }
+        }
+      },
       note: "가상 데이터(사이트의 국내 연동 급감 구간)로 만든 결과입니다. 상대 IX 사업자의 회신 내용은 제가 만든 가상 사례입니다."
     };
   })();
@@ -522,37 +568,55 @@
           ["문자 순서", S.sent.경과 != null ? "발생 → 경과 → 완료" : "발생 → 완료 (복구 직후에는 '경과'로 먼저 알립니다)"]
         ];
       },
+      auto: {
+        trigger: `${D1}이 응답하지 않고, 3분 뒤 알림이 뜨면 바로 시작합니다.`,
+        guards: ["고객 영향이 없어도 장비가 꺼진 것은 반드시 알림 (발생 문자)", "전원 모듈 교체는 사람이 하므로 요청(티켓)만 올림", "한 대로 버티는 동안 짝 장비를 따로 확인", "두 장비와 짝 연결이 모두 정상인 것을 확인하기 전에는 완료 문자를 보내지 않음"],
+        limit: "전원 모듈 교체처럼 손으로 해야 하는 일은 자동화할 수 없습니다. 자동 대응은 확인·보고·요청까지만 합니다.",
+        steps: {
+          ip: { rule: "알림 수신 → 꺼진 장비에 접속 시도", tool: `${D1} ${CMDS.desc}`, why: () => `${D1} 응답 없음 (전원 꺼짐)` },
+          partner: { rule: "접속 안 됨 → 짝 장비에서 같은 명령", tool: `${D2} ${CMDS.desc}`, why: () => `${D2}의 고객 회선은 그대로 Up, 짝 연결만 Down` },
+          tr: { rule: "짝 장비 정상 → 꺼지기 전·후 트래픽 비교", tool: "그래프 값 읽기", why: () => "꺼지기 5분 전과 5분 뒤가 거의 같음 → 고객 영향 없음" },
+          sms: { rule: "영향 없음 확인 → 발생 문자 (기한 8분)", tool: "문자 양식 자동 채움 · 발송", why: () => `알림 후 ${(S.done.sms - ALERT).toFixed(1)}분에 발송 (기한 ${DEADLINE}분)` },
+          report: { rule: "발생 문자 뒤 → 조장 보고 · 전원 모듈 교체 요청", tool: "보고 · 교체 요청(티켓)", why: () => "교체는 사람이 해야 해서 요청만 올림", mid: true },
+          watch: { rule: "한 대로 버티는 중 → 짝 장비 ping 확인", tool: `${D2} ping`, why: () => `${D2} ping 정상` },
+          rec: { rule: "전원이 돌아옴 → 회선 목록 다시 확인", tool: `${D1} ${CMDS.desc}`, waitText: "전원 모듈 교체로 장비가 켜지기를 기다리는 중", why: () => `${D1} 회선 목록이 다시 Up` },
+          all: { rule: "복구 3분 뒤 → 두 장비·짝 연결 전체 확인", tool: `${D1}·${D2} ${CMDS.desc}`, waitText: "복구 직후라 잠시 뒤 전체 상태를 확인하려고 기다리는 중", why: () => "두 장비와 짝 연결 모두 정상" },
+          fin: { rule: "전체 정상 확인 → 완료 문자", tool: "문자 양식 자동 채움 · 발송", why: () => "전체 정상을 확인한 뒤에 발송" }
+        }
+      },
       note: "가상 데이터(사이트의 장비 꺼짐 구간)로 만든 결과입니다. 꺼진 원인과 교체 일정은 제가 만든 가정입니다."
     };
   })();
 
   /* ================= 공통 화면 ================= */
-  root.innerHTML = `
-<div class="lv-bar"><h2><span id="lvTitle"></span> <span class="tag warn">시험판</span></h2>
+  root.innerHTML = (`
+<div class="lv-bar"><h2><span id="lvTitle"></span> <span class="tag warn">시험판</span>${AGENT ? ' <span class="tag">자동 대응 · 규칙 기반 (AI 호출 없음)</span>' : ' <span class="tag">내가 대응</span>'}</h2>
   <span class="muted" id="lvSub"></span>
-  <span class="seg"><button class="btn primary" type="button">내가 대응</button><button class="btn" type="button" disabled title="다음 단계에서 만듭니다">자동 대응(에이전트)</button></span>
+  ${AGENT ? '<span class="seg" id="lvScen"></span>' : ""}
   <span class="lv-ctl"><button class="btn primary" id="lvPlay" type="button">▶ 시작</button><button class="btn" id="lvStep" type="button" title="가상 시계를 1분 앞으로">+1분</button>
     <select id="lvSpeed" aria-label="속도"><option value="6">느리게 (1분=6초)</option><option value="3" selected>보통 (1분=3초)</option><option value="1">빠르게 (1분=1초)</option></select>
     <button class="btn" id="lvReset" type="button">처음부터</button></span>
   <span class="lv-clock"><span class="muted">가상 시각</span> <b class="mono" id="lvClock"></b></span></div>
 <div class="lv-alert idle" id="lvAlert"></div>
 <div class="lv-grid">
+  ${AGENT ? '<div class="card lv-how"><h3>자동 대응이 움직이는 방법 <span class="muted">사람이 하던 순서를 규칙표로 옮겨 그대로 실행합니다. ▶ 시작을 누르면 알림이 뜬 뒤부터 스스로 진행합니다</span></h3><div id="lvHow"></div></div>' : ""}
   <div class="card lv-graph"><h3 id="lvGraphH"></h3><div id="lvChart"></div></div>
   <div class="card lv-term"><h3 id="lvTermH"></h3>
     <pre id="lvTermOut"></pre>
-    <div class="lv-termin"><span class="mono" id="lvPrompt"></span><input type="text" id="lvTermIn" autocomplete="off" spellcheck="false" placeholder="명령 입력 후 Enter (help)"></div>
+    <div class="lv-termin"><span class="mono" id="lvPrompt"></span><input type="text" id="lvTermIn" autocomplete="off" spellcheck="false" placeholder="${AGENT ? "자동 대응이 넣는 명령이 위에 나옵니다" : "명령 입력 후 Enter (help)"}" ${AGENT ? "disabled" : ""}></div>
     <div class="lv-q" id="lvQ"></div></div>
   <div class="card lv-comp"><h3><span id="lvCardTitle"></span> <span class="muted" id="lvCompSub"></span><span class="lv-save"><span class="tag ok" id="lvSaved" hidden></span><button class="btn primary sm" id="lvSave" type="button">기록에 저장</button></span></h3><div id="lvComp"></div></div>
-  <div class="card lv-log"><h3>내 기록</h3><div id="lvLog" class="lv-logl"></div></div>
-  <div class="card lv-todo"><h3>지금 해야 할 일 <span class="tag" id="lvProg"></span></h3><div id="lvTodo"></div></div>
+  <div class="card lv-log"><h3>${AGENT ? "자동 대응 기록" : "내 기록"}</h3><div id="lvLog" class="lv-logl"></div></div>
+  <div class="card lv-todo"><h3>${AGENT ? "진행 상황과 근거" : "지금 해야 할 일"} <span class="tag" id="lvProg"></span></h3><div id="lvTodo"></div></div>
   <div class="card lv-sms"><div class="lv-timer" id="lvTimer"></div>
     <h3>문자 초안 <span class="seg" id="lvStage"></span></h3>
     <textarea id="lvDraft" rows="9" spellcheck="false"></textarea>
     <div class="toolbar" style="margin-top:6px"><button class="btn primary" id="lvSend" type="button">보내기</button><button class="btn" id="lvFill" type="button" title="지금 시각·상황에 맞춰 문자 내용을 처음부터 다시 만듭니다. 직접 고친 내용은 사라집니다.">초안 다시 만들기</button><span class="muted" id="lvSendMsg"></span></div></div>
 </div>
-<div class="scnpop" id="lvResult" hidden><div class="scnpop-box" role="dialog" aria-modal="true" style="width:min(560px,100%)"><h3>대응 결과</h3><div id="lvResBody"></div><div class="scnpop-foot"><span class="sp"></span><button class="btn primary" id="lvResClose" type="button">닫기</button></div></div></div>`;
+<div class="scnpop" id="lvResult" hidden><div class="scnpop-box" role="dialog" aria-modal="true" style="width:min(560px,100%)"><h3>${AGENT ? "자동 대응 결과" : "대응 결과"}</h3><div id="lvResBody"></div><div class="scnpop-foot"><span class="sp"></span><button class="btn primary" id="lvResClose" type="button">닫기</button></div></div></div>`).replace(/id="lv/g, `id="${P}`);
+  if (AGENT) { root.classList.add("lv-agent"); ["lvSend", "lvFill", "lvSave"].forEach(k => { E(k).style.display = "none"; }); E("lvDraft").readOnly = true; }
   const wrap = document.querySelector(".scn-wrap");   // 시나리오 목록은 이 화면에 있다 (관제 화면에서는 뺐다)
-  if (wrap) { const bar = root.querySelector(".lv-bar"); bar.insertBefore(wrap, bar.querySelector(".seg")); }
+  if (wrap && !AGENT) { const bar = root.querySelector(".lv-bar"); bar.insertBefore(wrap, bar.querySelector(".lv-ctl")); }
 
   /* ----- 기록·터미널 ----- */
   const addLog = (text, act) => { S.log.push({ m: S.t, text, act: !!act }); renderLog(); };
@@ -565,11 +629,11 @@
     const out = SC.run(c); if (out) term(out);
   }
   E("lvTermIn").addEventListener("keydown", e => { if (e.key === "Enter") { const v = e.target.value; e.target.value = ""; run(v); } });
-  E("lvQ").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; if (b.dataset.dev) { setDev(b.dataset.dev); term(`${b.dataset.dev}에 접속합니다 (가상)`); } else run(b.dataset.c); });
+  E("lvQ").addEventListener("click", e => { const b = e.target.closest("button"); if (!b || AGENT) return; if (b.dataset.dev) { setDev(b.dataset.dev); term(`${b.dataset.dev}에 접속합니다 (가상)`); } else run(b.dataset.c); });
 
   /* ----- 그리기 ----- */
   function paintChart() { const c = SC.chart(); E("lvChart").innerHTML = c.svg; E("lvNow").textContent = c.now; E("lvNow").className = "tag " + (c.bad ? "bad" : "ok"); }
-  function paintAlert() { const [cls, html] = SC.alertBar(); const el = E("lvAlert"); el.className = "lv-alert " + cls; el.innerHTML = html; }
+  function paintAlert() { const [cls, html] = SC.alertBar(); const el = E("lvAlert"); el.className = "lv-alert " + cls; el.innerHTML = AGENT ? html.replace(/<button class="btn" id="lvAck"[^>]*>[^<]*<\/button>/, '<span class="muted" style="margin-left:auto">자동 대응이 곧 확인합니다</span>').replace("내가 확인", "자동 확인") : html; }
   function paintCard() { const c = SC.card(); E("lvCompSub").textContent = c.sub || ""; E("lvComp").innerHTML = c.html; }
   function timerBar() {
     const el = E("lvTimer"), left = SC.alertAt + SC.deadline - S.t;
@@ -579,16 +643,16 @@
     el.className = "lv-timer " + (late ? "late" : left < 2 ? "warn" : "");
     el.innerHTML = `<span>발생 문자 기한 (${SC.deadline}분)</span><b class="mono">${Math.floor(s / 60)}:${pad(s % 60)} ${late ? "초과" : "남음"}</b><div class="pb"><i style="width:${Math.max(0, Math.min(100, (1 - left / SC.deadline) * 100))}%"></i></div>`;
   }
-  function paint() { E("lvClock").textContent = `${SC.date} ${fmt(S.t)}`; E("lvSub").textContent = SC.sub(); paintChart(); paintAlert(); paintCard(); timerBar(); }
+  function paint() { E("lvClock").textContent = `${SC.date} ${fmt(S.t)}`; E("lvSub").textContent = AGENT ? SC.sub().replace("내가 확인", "자동 확인") : SC.sub(); paintChart(); paintAlert(); paintCard(); timerBar(); }
   function mark(k) { S.done[k] = S.t; todo(); }
   function todo() {
     const rows = SC.rows(), n = Object.keys(S.done).length;
     E("lvProg").textContent = `${n} / ${rows.length}`;
     const first = rows.findIndex(r => !done(r[0]));
-    E("lvTodo").innerHTML = rows.map((r, i) => `<div class="lv-step"><div class="lv-d ${done(r[0]) ? "done" : i === first ? "now" : ""}">${done(r[0]) ? "✓" : i + 1}</div><div><div class="t">${r[1]}${r[0] === "sms" && !done("sms") && alerted() && S.t - SC.alertAt > SC.deadline - 2 ? ' <span class="tag bad">기한 임박</span>' : ""}</div><div class="s">${r[2]}</div>${r[3] ? `<div class="lv-act">${r[3]}</div>` : ""}</div></div>`).join("");
-    timerBar(); stageBtns();
+    E("lvTodo").innerHTML = rows.map((r, i) => `<div class="lv-step"><div class="lv-d ${done(r[0]) ? "done" : i === first ? "now" : ""}">${done(r[0]) ? "✓" : i + 1}</div><div><div class="t">${r[1]}${r[0] === "sms" && !done("sms") && alerted() && S.t - SC.alertAt > SC.deadline - 2 ? ' <span class="tag bad">기한 임박</span>' : ""}</div><div class="s">${r[2]}</div>${AGENT ? agentLine(r[0], i === first) : r[3] ? `<div class="lv-act">${r[3]}</div>` : ""}</div></div>`).join("");
+    timerBar(); stageBtns(); if (AGENT) renderHow();
   }
-  E("lvTodo").addEventListener("click", e => { const b = e.target.closest("button[data-a]"); if (b && !b.disabled) SC.act(b.dataset.a); });
+  E("lvTodo").addEventListener("click", e => { const b = e.target.closest("button[data-a]"); if (b && !b.disabled && !AGENT) SC.act(b.dataset.a); });
   E("lvSave").onclick = () => { if (SC.save) SC.save(); };
 
   /* ----- 문자 ----- */
@@ -608,7 +672,16 @@
   /* ----- 끝 ----- */
   function finish() {
     S.finished = true; stop(); addLog("대응 끝");
-    E("lvResBody").innerHTML = `<table class="kv2">${SC.finishRows().map(r => `<tr><th>${r[0]}</th><td>${esc(r[1])}</td></tr>`).join("")}</table><p class="note">${SC.note}</p>`;
+    const used = S.done.sms != null ? +(S.done.sms - SC.alertAt).toFixed(1) : null, total = +(S.t - SC.alertAt).toFixed(1), last = store.get("live:last", {});
+    if (!AGENT) { last[SC.id] = { sms: used, total }; store.set("live:last", last); }
+    let fr = SC.finishRows();
+    if (AGENT) {
+      const me = last[SC.id];
+      fr = fr.map(r => [r[0].replace("내가 ", "자동 ").replace("내 조치", "자동 조치"), r[1]]).concat([
+        ["자동 대응이 걸린 시간", `발생 문자 ${used == null ? "안 보냄" : used + "분"} · 끝까지 ${total}분 (알림 기준)`],
+        ["내가 대응했을 때 (최근 기록)", me ? `발생 문자 ${me.sms == null ? "안 보냄" : me.sms + "분"} · 끝까지 ${me.total}분` : "아직 없음 ('내가 대응'에서 같은 시나리오를 끝내면 여기에 비교됩니다)"]]);
+    }
+    E("lvResBody").innerHTML = `<table class="kv2">${fr.map(r => `<tr><th>${r[0]}</th><td>${esc(r[1])}</td></tr>`).join("")}</table>${AGENT && SC.auto.limit ? `<p class="note"><b>자동화의 한계</b> ${esc(SC.auto.limit)}</p>` : ""}<p class="note">${SC.note}</p>`;
     E("lvResult").hidden = false; E("lvPlay").textContent = "▶ 다시"; stageBtns();
   }
   E("lvResClose").onclick = () => { E("lvResult").hidden = true; };
@@ -619,6 +692,7 @@
     if (S.t >= SC.end) { stop(); return; }
     S.t = Math.min(SC.end, S.t + dt); const mm = cur();
     if (mm !== lastMin) { lastMin = mm; paint(); todo(); } else { E("lvClock").textContent = `${SC.date} ${fmt(S.t)}`; timerBar(); }
+    if (AGENT) agentStep();
   }
   function loop() { if (timer) return; timer = setInterval(() => { if (root.classList.contains("on")) tick(0.25 / speed); }, 250); S.running = true; E("lvPlay").textContent = "⏸ 일시정지"; }
   function stop() { if (timer) clearInterval(timer); timer = null; if (S) S.running = false; E("lvPlay").textContent = S && S.finished ? "▶ 다시" : "▶ 계속"; }
@@ -626,24 +700,72 @@
   E("lvStep").onclick = () => tick(1);
   E("lvSpeed").onchange = e => { speed = +e.target.value; S.speed = speed; };
   E("lvReset").onclick = () => reset(false);
-  root.addEventListener("click", e => { if (e.target.id === "lvAck" && S.ack == null) { S.ack = S.t; addLog(`알림 확인 (알림 후 ${(S.t - SC.alertAt).toFixed(1)}분)`); fill(); paint(); todo(); } });
+  root.addEventListener("click", e => { if (!AGENT && e.target.id === "lvAck" && S.ack == null) { S.ack = S.t; addLog(`알림 확인 (알림 후 ${(S.t - SC.alertAt).toFixed(1)}분)`); fill(); paint(); todo(); } });
+
+  /* ----- 자동 대응 (규칙 기반): 사람이 누르던 단계를 규칙표(SC.auto.steps) 순서대로 대신 실행한다. AI 호출은 없다 -----
+     0.3분(가상)마다 "아직 안 끝난 첫 단계"를 찾는다 → 조건이 맞으면 그 단계의 행동을 하나 실행하고, 맞지 않으면 기다린다. */
+  const BEAT = 0.3;
+  const AG_LIST = [["ddos", null, "DDoS 공격 수신"], ["linkDown", { cause: "work" }, "회선 다운 · 상대 작업"], ["linkDown", { cause: "fiber" }, "회선 다운 · 광 고장"], ["drop", null, "트래픽 급감"], ["redundancy", null, "이중화"]];
+  function agentSend(st) { S.stage = st; fill(); S.sent[st] = S.t; addLog(`${st} 문자 발송 (자동 · 가상)`); E("lvSendMsg").textContent = `${st} 문자를 자동으로 보냈습니다 (${fmt(S.t)})`; SC.onSend(st); }
+  function agentNote(key, did) { const p = SC.auto.steps[key] || {}; S.ag.did[key] = { did, why: p.why ? p.why() : "" }; }
+  function agentStep() {
+    if (!AGENT || S.finished || !alerted() || S.t < S.ag.next) return;
+    S.ag.next = S.t + BEAT;
+    if (S.ack == null) { S.ack = S.t; addLog("알림 수신 → 자동 대응 시작"); fill(); paint(); todo(); return; }
+    if (S.ag.mid) { S.ag.mid = false; if (S.sent.경과 == null && SC.stageOk("경과")) { agentSend("경과"); todo(); return; } }
+    const r = SC.rows().find(x => !done(x[0])); if (!r) return;
+    const key = r[0], p = SC.auto.steps[key] || {}, wait = () => { const w = p.waitText || "조건이 맞을 때까지 기다리는 중"; if (S.ag.wait !== w) { S.ag.wait = w; todo(); } };
+    if (p.ready && !p.ready()) return wait();
+    const btns = [...String(r[3] || "").matchAll(/<button[^>]*data-a="([^"]+)"([^>]*)>([^<]*)</g)].filter(m => !m[2].includes("disabled")).map(m => [m[1], m[3]]);
+    const b = p.pick ? btns.find(x => p.pick().includes(x[0])) : btns[0];
+    S.ag.wait = "";
+    if (b) { SC.act(b[0]); agentNote(key, b[1]); }
+    else if (key === "sms") { agentSend("발생"); agentNote(key, "발생 문자 발송"); }
+    else if (key === "fin" && SC.stageOk("완료")) { agentNote(key, "완료 문자 발송"); agentSend("완료"); }
+    else return wait();
+    if (done(key)) { if (p.mid) S.ag.mid = true; if (p.after) p.after(); }
+    if (!S.finished) todo();
+  }
+  function agentLine(key, isNow) {
+    const d = S.ag.did[key], p = SC.auto.steps[key] || {};
+    if (d && done(key)) return `<div class="lv-why"><b>근거</b> ${esc(d.why)} <span class="muted">· 한 일: ${esc(d.did)}</span></div>`;
+    if (isNow && S.ack != null) return `<div class="lv-why now"><b>규칙</b> ${esc(p.rule || "")}${S.ag.wait ? ` <span class="muted">· ${esc(S.ag.wait)}</span>` : ""}</div>`;
+    return "";
+  }
+  function renderHow() {
+    const a = SC.auto, rows = SC.rows(), first = rows.findIndex(r => !done(r[0]));
+    const st = (k, i) => done(k) ? `<span class="tag ok">완료 ${fmt(S.done[k])}</span>` : i === first && S.ack != null && !S.finished ? (S.ag.wait ? '<span class="tag warn">기다리는 중</span>' : '<span class="tag bad">진행 중</span>') : '<span class="tag">대기</span>';
+    E("lvHow").innerHTML = `<div class="lv-howg"><div>
+      <h4>① 무엇을 보고 시작하나</h4><p>${esc(a.trigger)}</p>
+      <h4>③ 안전장치 <span class="muted">이럴 땐 하지 않거나 사람에게 넘깁니다</span></h4><ul>${a.guards.map(g => `<li>${esc(g)}</li>`).join("")}</ul>
+      <h4>④ 자동화한 방법</h4><p>'내가 대응'에서 사람이 누르던 단계를 그대로 규칙표(조건 → 행동)로 옮겼습니다. 0.3분(가상)마다 아직 안 끝난 첫 단계를 찾아, 조건이 맞으면 실행하고 맞지 않으면 기다립니다. 정해 둔 규칙만 따르고 AI는 부르지 않아서, 같은 상황이면 항상 같은 결과가 나옵니다.</p>
+    </div><div>
+      <h4>② 규칙표 <span class="muted">사람이 하던 순서 그대로</span></h4>
+      <table class="lv-rule"><tr><th>#</th><th>단계</th><th>조건 → 행동</th><th>쓰는 것</th><th>상태</th></tr>${rows.map((r, i) => { const p = a.steps[r[0]] || {}; return `<tr class="${i === first && S.ack != null && !S.finished ? "now" : ""}"><td>${i + 1}</td><td>${r[1]}</td><td>${esc(p.rule || "")}</td><td class="muted">${esc(p.tool || "")}</td><td>${st(r[0], i)}</td></tr>`; }).join("")}</table>
+    </div></div>`;
+  }
+  function renderScen() { E("lvScen").innerHTML = AG_LIST.map((x, i) => `<button class="btn${x[0] === SC.id && (!x[1] || x[1].cause === S.cause) ? " primary" : ""}" data-i="${i}" type="button">${x[2]}</button>`).join(""); }
+  if (AGENT) E("lvScen").addEventListener("click", e => { const b = e.target.closest("button[data-i]"); if (b) { const x = AG_LIST[+b.dataset.i]; loadPub(x[0], x[1]); } });
 
   /* ----- 시나리오 불러오기 ----- */
   function load(id, opts) {
-    stop(); SC = SCEN[id] || SCEN.ddos; S = Object.assign({ t: SC.start, running: false, speed, ack: null, done: {}, log: [], sent: {}, stage: "발생", finished: false, term: [] }, SC.init(opts));
+    stop(); SC = SCEN[id] || SCEN.ddos; S = Object.assign({ t: SC.start, running: false, speed, ack: null, done: {}, log: [], sent: {}, stage: "발생", finished: false, term: [] }, SC.init(opts)); if (AGENT) S.ag = { next: 0, did: {}, mid: false, wait: "" };
     lastMin = -1; E("lvResult").hidden = true;
     E("lvTitle").textContent = SC.name;
-    E("lvGraphH").innerHTML = `${esc(SC.linkTitle)} <span class="muted">${esc(SC.linkDesc)}</span><span class="tag" id="lvNow"></span>`;
+    E("lvGraphH").innerHTML = `${esc(SC.linkTitle)} <span class="muted">${esc(SC.linkDesc)}</span><span class="tag" id="${P}Now"></span>`;
     E("lvQ").innerHTML = (SC.devs || []).map(d => `<button class="btn sm" data-dev="${d}">${d}</button>`).join("") + SC.termQuick.map(q => `<button class="btn sm" data-c="${esc(q[1])}">${esc(q[0])}</button>`).join("");
     setDev(devNow());
     E("lvCardTitle").textContent = SC.cardTitle; E("lvSave").hidden = !SC.cardSave; E("lvSaved").hidden = true; E("lvSave").textContent = "기록에 저장";
     E("lvStage").innerHTML = SC.stages.map((s, i) => `<button class="btn${i === 0 ? " primary" : ""}" data-st="${s}" type="button">${s}</button>`).join("");
     E("lvTermOut").textContent = ""; E("lvSendMsg").textContent = ""; E("lvPlay").textContent = "▶ 시작";
-    term(SC.intro); fill(); renderLog(); paint(); todo();
+    term(SC.intro); fill(); renderLog(); paint(); todo(); if (AGENT) renderScen();
   }
   function reset(autoplay) { load(SC.id, SC.lastOpts); if (autoplay) loop(); }
   const origLoad = load;
   const loadPub = (id, opts) => { origLoad(id, opts); if (SCEN[id]) SCEN[id].lastOpts = opts; };
-  window.LIVE = { get state() { return S; }, get scenario() { return SC; }, advance: m => { let n = Math.round(m * 4); while (n-- > 0) tick(0.25); }, jump: m => { S.t = Math.min(SC.end, m); lastMin = -1; tick(0); }, reset, load: loadPub, consts: { get alertAt() { return SC.alertAt; } } };
+  const api = { get state() { return S; }, get scenario() { return SC; }, advance: m => { let n = Math.round(m * 4); while (n-- > 0) tick(0.25); }, jump: m => { S.t = Math.min(SC.end, m); lastMin = -1; tick(0); }, reset, load: loadPub, consts: { get alertAt() { return SC.alertAt; } } };
   SC = SCEN.ddos; loadPub("ddos");
-})();
+  return api;
+}
+window.LIVE = makeLive(document.getElementById("tab-live"), "lv", false);
+window.AUTO = makeLive(document.getElementById("tab-soar"), "av", true);

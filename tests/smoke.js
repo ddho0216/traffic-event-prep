@@ -73,7 +73,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.setViewportSize({ width: 1600, height: 900 });
 
   // 탭 순서와 센터 선택: 센터 선택은 관제·서버실에서만 보이고, 두 화면이 같은 센터로 동기화된다
-  check('위 메뉴: 관제 / 서버실▾ / 장비 터미널 / 대응▾ / 이벤트 대비 기록 / 고객 지원▾ (하위 메뉴: 서버실·서버실 3D / 실시간 대응·자동 대응 / 문자 전파·방문 신청·장비 반출입·월간 자료)', JSON.stringify(await page.locator('#tabs > button, #tabs > .tabgrp > .grpbtn').allTextContents()) === JSON.stringify(['관제', '서버실', '장비 터미널', '대응', '이벤트 대비 기록', '고객 지원']) && JSON.stringify(await page.locator('#tabs .tabgrp:nth-of-type(1) .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D']) && JSON.stringify(await page.locator('#tabs .tabgrp .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D', '실시간 대응 시험판', '자동 대응 시험판', '문자 전파', '방문 신청', '장비 반출입', '월간 자료']));
+  check('위 메뉴: 관제 / 서버실▾ / 장비 터미널 / 대응▾ / 이벤트 대비 기록 / 고객 지원▾ (하위 메뉴: 서버실·서버실 3D / 내가 대응·자동 대응 / 문자 전파·방문 신청·장비 반출입·월간 자료)', JSON.stringify(await page.locator('#tabs > button, #tabs > .tabgrp > .grpbtn').allTextContents()) === JSON.stringify(['관제', '서버실', '장비 터미널', '대응', '이벤트 대비 기록', '고객 지원']) && JSON.stringify(await page.locator('#tabs .tabgrp:nth-of-type(1) .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D']) && JSON.stringify(await page.locator('#tabs .tabgrp .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D', '내가 대응 시험판', '자동 대응 시험판', '문자 전파', '방문 신청', '장비 반출입', '월간 자료']));
   const sub0 = await page.locator('#tabs .tabgrp >> nth=2 >> .submenu').isVisible();
   await page.hover('#tabs .tabgrp >> nth=2 >> .grpbtn');
   const sub1 = await page.locator('#tabs .tabgrp >> nth=2 >> .submenu').isVisible();
@@ -448,18 +448,17 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('사전 계획의 "평소 최대"는 이벤트 전날까지의 데이터로만 계산됨 (개회식은 9/10~9/18 안의 날, 결승은 그 전날까지)', asof.every(x => Math.abs(x.want - x.got) < 1e-9) && asof[0].days >= 8, JSON.stringify(asof));
   await page.selectOption('#evSel', { index: 0 });
   check('이벤트 정보 줄에 "그때 가진 데이터: 09/10 ~ 09/18 (9일치, 이 이벤트 전날까지만 사용)"이 보임', (await page.locator('#evInfo').innerText()).includes('그때 가진 데이터: 09/10 ~ 09/18 (9일치, 이 이벤트 전날까지만 사용)'));
-  // 자동 대응(시험판): 규칙대로 경로가 나뉘고, 권한 없는 승인은 막히고, 한도·재시도가 동작함
+  // 자동 대응(시험판): '내가 대응'과 같은 화면·같은 시나리오를 규칙표대로 스스로 끝까지 진행한다
   await goTab('soar');
-  await page.click('#soRun');
-  const so1 = await page.evaluate(() => Object.fromEntries(SOAR.state.rows.map(r => [r.a.id, r.route + '/' + r.status])));
-  check('자동 대응: 중복은 건너뜀, 경기 중 증가는 오탐 종료, 클린존 가입은 우회(재시도 후 조치됨), 미가입은 승인 대기', so1['INC-102'] === '중복 건너뜀/종료' && so1['INC-103'] === '오탐 종료/종료' && so1['INC-104'] === '클린존 우회/조치됨' && ['INC-101', 'INC-105', 'INC-106'].every(k => so1[k] === '블랙홀 승인 필요/승인 대기'), JSON.stringify(so1));
-  await page.click('[data-d=승인][data-id=INC-101]');
-  check('자동 대응: 신입이 승인을 눌러도 실행되지 않고 "권한 없음" 기록만 남음', (await page.evaluate(() => SOAR.state.rows[0].status)) === '승인 대기' && (await page.evaluate(() => SOAR.state.log.some(l => l.text.includes('권한 없음')))));
-  await page.click('#soRole [data-r=조장]');
-  for (const id of ['INC-101', 'INC-105', 'INC-106']) await page.click(`[data-d=승인][data-id=${id}]`);
-  const so2 = await page.evaluate(() => Object.fromEntries(SOAR.state.rows.map(r => [r.a.id, r.status])));
-  check('자동 대응: 조장 승인 → 블랙홀은 동시 2건까지(3번째는 한도 초과), 연동망 요청은 2번 실패 후 성공(조치됨)·계속 실패하면 일부 실패', so2['INC-101'] === '조치됨' && so2['INC-105'] === '일부 실패' && so2['INC-106'] === '한도 초과', JSON.stringify(so2));
-  check('자동 대응: 담당자 확인이 필요한 건에 일부 실패·한도 초과 2건이 보임', (await page.locator('.so-chk').count()) === 2);
+  const au0 = await page.evaluate(() => ({ how: document.querySelector('#avHow').textContent, rules: document.querySelectorAll('#avHow .lv-rule tr').length - 1, scen: [...document.querySelectorAll('#avScen button')].map(b => b.textContent), termOff: document.querySelector('#avTermIn').disabled, sendHidden: getComputedStyle(document.querySelector('#avSend')).display === 'none', btns: document.querySelectorAll('#avTodo button').length, old: !!document.querySelector('#soRun') }));
+  check('자동 대응 화면: 움직이는 방법 카드(시작 조건·규칙표 7줄·안전장치·자동화한 방법)가 있고, 시나리오 5개를 고를 수 있으며, 사람이 누르는 버튼(단계 버튼·보내기·터미널 입력)은 없음. 예전 승인 화면은 없음', au0.how.includes('무엇을 보고 시작하나') && au0.how.includes('안전장치') && au0.how.includes('자동화한 방법') && au0.how.includes('AI는 부르지 않아서') && au0.rules === 7 && au0.scen.length === 5 && au0.termOff && au0.sendHidden && au0.btns === 0 && !au0.old, JSON.stringify(au0).slice(0, 300));
+  const au1 = await page.evaluate(() => { AUTO.load('ddos'); AUTO.advance(1.5); const before = AUTO.state.ack; AUTO.advance(6); const s = AUTO.state; return { before, ack: s.ack, done: Object.keys(s.done), bh: s.bh != null, now: document.querySelectorAll('#avHow .lv-rule tr.now').length, why: [...document.querySelectorAll('#avTodo .lv-why')].map(e => e.textContent).join(' | '), term: document.querySelector('#avTermOut').textContent, log: document.querySelector('#avLog').textContent }; });
+  check('자동 대응(DDoS): 알림이 뜨기 전에는 아무것도 하지 않고, 알림 뒤에는 스스로 일정 조회 → 대상 파악 → 발생 문자 → 블랙홀 판단·실행 순서로 진행하며 단계마다 근거와 실행한 명령이 남음', au1.before == null && au1.ack != null && ['ev', 'ip', 'sms', 'way'].every(k => au1.done.includes(k)) && au1.bh && au1.why.includes('클린존 미가입') && au1.term.includes('discard') && au1.log.includes('자동 대응 시작'), JSON.stringify(au1).slice(0, 400));
+  const au2 = await page.evaluate(() => { const out = []; for (const [id, o] of [['ddos', null], ['linkDown', { cause: 'work' }], ['linkDown', { cause: 'fiber' }], ['drop', null], ['redundancy', null]]) { AUTO.load(id, o); const sc = AUTO.scenario; AUTO.advance(sc.end - sc.start + 2); const s = AUTO.state; out.push({ id, fin: s.finished, all: Object.keys(s.done).length === sc.rows().length, sent: Object.keys(s.sent).join(), sms: s.done.sms - sc.alertAt, fix: s.fix || '', res: document.querySelector('#avResBody').textContent }); } return out; });
+  check('자동 대응: 시나리오 5개 모두 끝까지 진행(모든 단계 완료, 발생 → 경과 → 완료 문자)하고 발생 문자는 기한 8분 안에 나감', au2.every(x => x.fin && x.all && x.sent === '발생,경과,완료' && x.sms <= 8), JSON.stringify(au2.map(x => [x.id, x.fin, x.all, x.sent, x.sms])));
+  check('자동 대응(회선 다운): 회신에 상대 작업이 있으면 복구 대기, 모두 없음이고 빛이 없으면 현장 교체 요청으로 갈림', au2[1].fix === '대기' && au2[2].fix === '교체', au2[1].fix + '/' + au2[2].fix);
+  check('자동 대응 결과에 걸린 시간·내가 대응 기록과의 비교·자동화의 한계가 나옴', au2.every(x => x.res.includes('자동 대응이 걸린 시간') && x.res.includes('내가 대응했을 때') && x.res.includes('자동화의 한계')), au2[0].res.slice(0, 200));
+  await page.evaluate(() => { document.querySelector('#avResult').hidden = true; AUTO.load('ddos'); });
   // 다크 모드 켜고 끄기: 기본은 켬, 끄면 밝은 화면, 고른 값은 새로고침해도 유지
   const th = await ctx.newPage(); await th.goto(url, { waitUntil: 'load' });
   const lum = () => th.evaluate(() => { const m = getComputedStyle(document.body).backgroundColor.match(/\d+/g).map(Number); return (m[0] + m[1] + m[2]) / 3; });
@@ -476,8 +475,8 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('다시 누르면 다크 모드가 켜짐', (await th.evaluate(() => document.documentElement.dataset.theme)) === 'dark' && (await th.locator('#themeBtn').getAttribute('aria-label')) === '다크 모드 켬');
   const pos = await th.evaluate(() => { const t = document.getElementById('themeBtn').getBoundingClientRect(), b = document.getElementById('bell').getBoundingClientRect(), bt = document.getElementById('themeBtn').textContent.trim(); return { adj: Math.abs(t.right - b.left) < 14 && Math.abs(t.top - b.top) < 3 && Math.abs(t.height - b.height) < 2, left: t.right <= b.left, bt }; });
   check('다크 모드 버튼은 글자 없이 아이콘(해·달)만 있고 알림 종 바로 옆(같은 높이)에 있음', pos.adj && pos.left && pos.bt === '', JSON.stringify(pos));
-  const betaChk = await th.evaluate(() => { const g = document.querySelector('#tabs .tabgrp:nth-of-type(2) .grpbtn'); const items = [...document.querySelectorAll('#tabs .submenu button[data-tab=live], #tabs .submenu button[data-tab=soar]')]; return { grp: g.textContent.trim(), betaInGrp: !!g.querySelector('.beta'), items: items.map(i => !!i.querySelector('.beta')) }; });
-  check('위 메뉴의 "대응"에는 시험판 표시가 없고, 하위 메뉴의 "실시간 대응"·"자동 대응" 옆에 시험판이 붙어 있음', betaChk.grp === '대응' && !betaChk.betaInGrp && betaChk.items.every(Boolean) && betaChk.items.length === 2, JSON.stringify(betaChk));
+  const betaChk = await th.evaluate(() => { const g = document.querySelector('#tabs .tabgrp:nth-of-type(2) .grpbtn'); const items = [...document.querySelectorAll('#tabs .submenu button[data-tab=live], #tabs .submenu button[data-tab=soar]')]; return { grp: g.textContent.trim(), betaInGrp: !!g.querySelector('.beta'), items: items.map(i => !!i.querySelector('.beta')), names: items.map(i => i.firstChild.textContent.trim()) }; });
+  check('위 메뉴의 "대응"에는 시험판 표시가 없고, 하위 메뉴는 "내가 대응"·"자동 대응" 둘이며 옆에 시험판이 붙어 있음', betaChk.grp === '대응' && !betaChk.betaInGrp && betaChk.items.every(Boolean) && betaChk.items.length === 2 && betaChk.names.join() === '내가 대응,자동 대응', JSON.stringify(betaChk));
   await th.hover('#tabs .tabgrp:has(button[data-tab=soar]) .grpbtn');
   const alignChk = await th.evaluate(() => [...document.querySelectorAll('#tabs .submenu button[data-tab=live], #tabs .submenu button[data-tab=soar]')].map(b => { const r = b.getBoundingClientRect(), q = b.querySelector('.beta').getBoundingClientRect(); return Math.abs((r.top + r.height / 2) - (q.top + q.height / 2)); }));
   check('"시험판" 표시가 메뉴 글자 줄의 세로 가운데에 맞음 (오차 2px 이하)', alignChk.every(d => d <= 2), alignChk.join());
@@ -590,7 +589,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('서버실-3D: "전원·냉방 설비" 버튼이 UPS·분전반·항온항습기(3개)를 보여 주고 UPS 설명이 오른쪽에 나옴', fc.fac === 'UPS-A' && fc.n === 3 && fc.tx > 4 && fc.panel.includes('무정전전원장치') && fc.panel.includes('가상'), JSON.stringify(fc));
   await page.click('#glFit'); await flyDone();
   const vr = await page.evaluate(() => document.querySelector('#appVer').textContent);
-  check('화면 위에 버전 표시(v2.12.3)가 있음', vr === 'v2.12.3', vr);
+  check('화면 위에 버전 표시(v2.13.0)가 있음', vr === 'v2.13.0', vr);
   await page.mouse.move(cv.x + 300, cv.y + 300); await page.mouse.down(); await page.mouse.move(cv.x + 420, cv.y + 300, { steps: 5 }); await page.mouse.up();
   const az = await page.evaluate(() => G.cs.az);
   check('서버실-3D: 드래그하면 시점이 회전하고 좌우 70도를 넘지 않음', Math.abs(az) > 5 && Math.abs(az) <= 70, az);
