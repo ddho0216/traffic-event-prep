@@ -84,6 +84,16 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.hover('#tabs .tabgrp >> nth=2 >> .grpbtn');
   await page.click('#tabs .tabgrp >> nth=2 >> .submenu button[data-tab=gear]');
   check('고객 지원 하위 메뉴에서 장비 반출입을 누르면 그 화면이 열리고 위 메뉴(고객 지원)가 강조됨', (await page.locator('#tab-gear').isVisible()) && (await page.evaluate(() => document.querySelectorAll('#tabs .tabgrp')[2].classList.contains('on'))));
+  // 묶음 메뉴 이름(서버실·대응·고객 지원)은 눌러도 이동하지 않고 하위 메뉴만 열림
+  await goTab('monitor');
+  const tab0 = await page.evaluate(() => document.querySelector('section.tab.on').id);
+  await page.mouse.move(5, 5);
+  for (const idx of [0, 1, 2]) { await page.click(`#tabs .tabgrp >> nth=${idx} >> .grpbtn`); }
+  const grpNav = await page.evaluate(() => ({ tab: document.querySelector('section.tab.on').id, hasData: [...document.querySelectorAll('#tabs .grpbtn')].some(b => b.dataset.tab), open: [...document.querySelectorAll('#tabs .tabgrp.open')].length }));
+  check('묶음 메뉴 이름(서버실·대응·고객 지원)을 눌러도 화면이 이동하지 않음 (data-tab 없음), 누르면 그 묶음의 하위 메뉴만 열리고 다른 묶음은 닫힘', grpNav.tab === tab0 && !grpNav.hasData && grpNav.open === 1, JSON.stringify(grpNav));
+  await page.click('#tabs .tabgrp >> nth=2 >> .submenu button[data-tab=sms]');
+  check('하위 메뉴를 누르면 그 화면으로 이동하고 열려 있던 묶음이 닫힘', (await page.evaluate(() => document.querySelector('section.tab.on').id)) === 'tab-sms' && (await page.evaluate(() => document.querySelectorAll('#tabs .tabgrp.open').length)) === 0);
+  await page.mouse.move(5, 5);
   // 문자 전파: 단계별 양식 → 초안 수정 → 휴대폰 미리보기
   await goTab('sms');
   const sm0 = await page.inputValue('#smDraft');
@@ -205,7 +215,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('정상화를 확인해도 블랙홀은 그대로 유지됨 (경로가 계속 Discard)', (await lv()).term.split('show route 198.51.100.77').pop().includes('Discard') && (await page.locator('#lvAlert').innerText()).includes('블랙홀은 유지 중'));
   await page.click('#lvStage [data-st=완료]');
   const dn = await page.inputValue('#lvDraft');
-  check('완료 문자: 시작~끝 일시, 직접 한 조치 시간표(블랙홀 차단·연동망 요청), 블랙홀이 유지 중(24~48시간 뒤 해제 예정)이라고 서비스영향에 적힘, 해제 조치는 없음', /■ 일시 : 10\/29 03:20 ~ 10\/29 03:4\d/.test(dn) && dn.includes('블랙홀 차단') && dn.includes('65535:666') && !dn.includes('블랙홀 해제') && /대상 IP 1개 접속 불가 \(블랙홀 03:2\d부터 유지 중, 24~48시간 뒤 해제 예정\), 고객의 다른 IP·이중화 경로는 영향 없음/.test(dn) && dn.includes('_완료]'));
+  check('완료 문자: 시작~끝 일시, 직접 한 조치 시간표(블랙홀 차단·연동망 요청), 블랙홀이 유지 중(24~48시간 뒤 해제 예정)이라고 서비스영향에 "일부 IP 접속 영향"으로 적힘, 해제 조치는 없음', /■ 일시 : 10\/29 03:20 ~ 10\/29 03:4\d/.test(dn) && dn.includes('블랙홀 차단') && dn.includes('65535:666') && !dn.includes('블랙홀 해제') && /서비스영향 : 일부 IP 접속 영향 \(대상 IP 블랙홀 03:2\d부터 유지 중, 24~48시간 뒤 해제 예정\)/.test(dn) && !dn.includes('이중화 경로는 영향 없음') && dn.includes('_완료]'));
   await page.click('#lvSend');
   await page.keyboard.press('Escape');
   check('완료 문자를 보내도 대응이 끝나지 않고(결과 창 없음) 7번 알림 설정이 열림', !(await page.evaluate(() => !document.getElementById('lvResult').hidden)) && (await page.locator('#lvTodo [data-a=rem]').isEnabled()) && (await page.locator('#lvProg').innerText()).includes('6 / 7'));
@@ -408,7 +418,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('일정 표에서 다른 이벤트(개회식)를 누르면 선택 표시와 안내 줄이 바뀌고 안내 줄이 깜빡임', cue2.banner.includes('선택한 이벤트 · 개회식') && cue2.sel.includes('▶ 개회식') && cue2.flash, JSON.stringify(cue2));
   await page.selectOption('#evSel', { label: (await page.locator('#evSel option').allTextContents()).find(x => x.startsWith('축구 결승')) });
   const nt = await page.evaluate(() => ({ tabs: [...document.querySelectorAll('#evNoticeTabs button')].map(b => b.textContent), text: document.getElementById('evNotice').value, copy: document.getElementById('evCopy').textContent }));
-  check('통보문은 고객사마다 버튼으로 나뉘고, 고른 고객사 한 통만 보이며(구분선 없음) 제목 줄이 없고 "안녕하십니까 TEP IDC 담당자 ㅇㅇㅇ입니다."로 시작', nt.tabs.length >= 1 && !nt.text.includes('--------') && !nt.text.includes('제목:') && nt.text.startsWith('안녕하십니까 TEP IDC 담당자 ㅇㅇㅇ입니다.') && nt.text.includes('이용 회선에서') && nt.text.endsWith('추가로 필요한 사항이 있을시 회신 부탁드립니다.\n감사합니다.') && nt.copy.includes(nt.tabs[0]), JSON.stringify([nt.tabs, nt.copy]));
+  check('통보문은 고객사마다 버튼으로 나뉘고, 고른 고객사 한 통만 보이며(구분선 없음) "제목:" 글자 없이 [TEP IDC]로 시작하는 이메일 제목 줄 다음에 "안녕하십니까 TEP IDC 담당자 ㅇㅇㅇ입니다."가 나옴', nt.tabs.length >= 1 && !nt.text.includes('--------') && !nt.text.includes('제목:') && /^\[TEP IDC\] .+ 대비 트래픽 분산 안내\n\n안녕하십니까 TEP IDC 담당자 ㅇㅇㅇ입니다\.\n/.test(nt.text) && nt.text.includes('이용 회선에서') && nt.text.endsWith('추가로 필요한 사항이 있을시 회신 부탁드립니다.\n감사합니다.') && nt.copy.includes(nt.tabs[0]), JSON.stringify([nt.tabs, nt.copy]));
   if (nt.tabs.length > 1) { await page.click('#evNoticeTabs button >> nth=1'); const t2 = await page.inputValue('#evNotice'); check('다른 고객사 버튼을 누르면 그 고객사 통보문으로 바뀜', t2 !== nt.text && t2.includes(nt.tabs[1])); }
   const tabBefore = await page.evaluate(() => document.querySelector('#tabs button.on').dataset.tab);
   await page.click('#evGo');
@@ -755,7 +765,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const fsx = require('fs'), siteDir = require('path').resolve(__dirname, '../site'), png = f => fsx.readFileSync(siteDir + '/' + f).subarray(0, 8).toString('hex') === '89504e470d0a1a0a';
   check('탭 아이콘(로고): svg·32px png·아이패드용 아이콘이 연결되어 있고 파일이 올바름', icons.includes('favicon.svg') && icons.includes('favicon-32.png') && icons.includes('apple-touch-icon.png') && fsx.readFileSync(siteDir + '/favicon.svg', 'utf8').includes('<svg') && png('favicon-32.png') && png('apple-touch-icon.png'), icons.join(','));
   const mails = await page.evaluate(() => [(ev => evNoticeList(ev, evCalc(ev))[0].text)(DATA.events.find(e => e.name === '축구 결승')), replyText(parseMail(SAMPLE_MAIL))].map(x => x.split('\n')[0]));
-  check('다른 메일에도 회사 이름이 붙음 (경기 사전 안내는 "안녕하십니까 TEP IDC 담당자", 방문 회신은 제목 [TEP IDC])', mails[0].startsWith('안녕하십니까 TEP IDC 담당자') && mails[1].includes('[TEP IDC]'), mails.join(' | '));
+  check('다른 메일에도 회사 이름이 붙음 (경기 사전 안내·방문 회신 모두 "제목:" 글자 없이 [TEP IDC]로 시작)', mails[0].startsWith('[TEP IDC] ') && !mails[0].includes('제목:') && mails[1].startsWith('[TEP IDC] 방문 등록 완료') && !mails[1].includes('제목'), mails.join(' | '));
   const scenarios = [['calm', '평일 오후 7시', 4, ['그래프 15개 확인', '서버실 확인', '이상 없음']], ['drop', '트래픽 급감', 6, ['급감', 'IDC_B_FS2_INTL1', '광값', '예시미디어', '회복']],
     ['redundancy', '이중화로 무사히 넘기기', 8, ['이중화', '전원 꺼짐', '트래픽은 거의 그대로', '고객 영향 없음']], ['linkDown', '업링크 회선 다운', 9, ['Admin', '트래픽(전/후)', '광값', 'ping', '연동망', '원인 확인', '회복']], ['ddos', 'DDoS 공격 수신', 10, ['DDoS', '공격량', '클린존', '블랙홀', '정상화', '해제']], ['surge', '트래픽 폭주', 7, ['사전 연락', '분산', '하이드레이션', '경고선 80%', '사후 정리', 'TEP IDC']], ['temp', '서버실 온도 변화', 7, ['온도 경고', '빨강 깜박임', '터미널', '냉각 복구', '-40.00 dBm']]];
   for (const [id, name, n, words] of scenarios) {

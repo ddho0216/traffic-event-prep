@@ -114,7 +114,14 @@ function showTab(name) {
   if (name === "term" && typeof termSync === "function") termSync();
   try { history.replaceState(null, "", "#" + name); } catch (e) { /* 무시 */ }
 }
-$("#tabs").addEventListener("click", e => { const b = e.target.closest("button"); if (b) { showTab(b.dataset.tab); if (document.activeElement) document.activeElement.blur(); } });
+const closeGroups = () => $$("#tabs .tabgrp.open").forEach(o => o.classList.toggle("open", false));
+$("#tabs").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.classList.contains("grpbtn")) { const g = b.parentElement, open = !g.classList.contains("open"); closeGroups(); g.classList.toggle("open", open); return; }   // 묶음 이름(서버실·대응·고객 지원)은 이동하지 않는다: 하위 메뉴를 고른다 (터치에서는 눌러서 열기)
+  closeGroups();
+  showTab(b.dataset.tab); if (document.activeElement) document.activeElement.blur();
+});
+document.addEventListener("click", e => { if (!e.target.closest("#tabs")) closeGroups(); });
 
 /* ---------- 1. 관제 ---------- */
 const NOW_IDX = idxOf(parseT("2026-10-22T21:00"));   // 가상 "현재" 시각: 평소 저녁
@@ -509,7 +516,7 @@ function evNoticeList(ev, calc) {   // 고객사마다 따로 보내는 통보�
       const to = m.best ? `${m.best.c.l.id}${CENTER(m.best.c.l.id) !== CENTER(m.r.l.id) ? " (" + CENTER(m.best.c.l.id) + ", 협의 후 진행)" : ""}` : "(여유 회선 없음, 별도 협의)";
       return `- ${m.r.l.id}: 예상 최대 ${m.r.exp.toFixed(0)}Gbps (용량 대비 ${(m.r.util * 100).toFixed(0)}%)\n  조치: 해당 시간대 일부(약 ${Math.max(1, Math.ceil(m.need))}Gbps)를 ${to}로 보내겠습니다.`;
     }).join("\n");
-    return { name: c.name, text: `안녕하십니까 ${COMPANY} 담당자 ㅇㅇㅇ입니다.\n${c.name} 이용 회선에서 ${when} ${ev.name}${euro(ev.name)} 트래픽 증가가 예상되어 미리 안내드립니다.\n\n${lines}\n\n서비스 중단 없이 진행할 예정이며, 종료 후 원복하고 결과를 안내드리겠습니다.\n추가로 필요한 사항이 있을시 회신 부탁드립니다.\n감사합니다.` };
+    return { name: c.name, text: `[${COMPANY}] ${when} ${ev.name} 대비 트래픽 분산 안내\n\n안녕하십니까 ${COMPANY} 담당자 ㅇㅇㅇ입니다.\n${c.name} 이용 회선에서 ${when} ${ev.name}${euro(ev.name)} 트래픽 증가가 예상되어 미리 안내드립니다.\n\n${lines}\n\n서비스 중단 없이 진행할 예정이며, 종료 후 원복하고 결과를 안내드리겠습니다.\n추가로 필요한 사항이 있을시 회신 부탁드립니다.\n감사합니다.` };
   }).filter(Boolean);
 }
 function evNoticeText(ev, calc) { return evNoticeList(ev, calc).map(x => x.text).join("\n\n--------------------------------\n\n"); }   // 한 번에 모아 볼 때(시나리오 안내 등)만 쓴다
@@ -644,7 +651,7 @@ function vWho() {
   return known;
 }
 function replyText(r) {
-  return `제목: [${COMPANY}] 방문 등록 완료 - ${r.name}님 ${r.when.slice(0, 10)}\n\n${r.org} ${r.name}님, 안녕하세요.\n요청하신 방문이 아래와 같이 등록되었습니다.\n\n- 방문예정일시: ${r.when.replace("T", " ")}\n- 방문센터: ${r.center}\n- 방문장소: ${r.place}\n- 방문목적: ${r.purpose}\n- 주차: ${r.park ? "등록 완료" : "해당 없음"}\n- 서버실 출입키: ${r.key ? "사전 준비 완료 (방문 시 수령)" : "해당 없음"}\n\n방문 당일 신분증을 지참해 주세요.\n감사합니다. (가상 메일)`;
+  return `[${COMPANY}] 방문 등록 완료 - ${r.name}님 ${r.when.slice(0, 10)}\n\n${r.org} ${r.name}님, 안녕하세요.\n요청하신 방문이 아래와 같이 등록되었습니다.\n\n- 방문예정일시: ${r.when.replace("T", " ")}\n- 방문센터: ${r.center}\n- 방문장소: ${r.place}\n- 방문목적: ${r.purpose}\n- 주차: ${r.park ? "등록 완료" : "해당 없음"}\n- 서버실 출입키: ${r.key ? "사전 준비 완료 (방문 시 수령)" : "해당 없음"}\n\n방문 당일 신분증을 지참해 주세요.\n감사합니다. (가상 메일)`;
 }
 function renderVisits() {
   const v = store.get("visits", []);

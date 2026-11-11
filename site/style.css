@@ -453,3 +453,7 @@ table th.c,table td.c{text-align:center}
 }
 #themeBtn{margin-left:0}#themeBtn+#bell{margin-left:-10px}
 :root[data-theme="light"] #themeBtn .ico-moon,:root:not([data-theme="light"]) #themeBtn .ico-sun{display:none}
+
+/* 묶음 이름은 이동하지 않는 메뉴 이름: 눌러서도 하위 메뉴가 열린다(터치용) */
+nav.tabs .tabgrp.open .submenu{opacity:1;visibility:visible;transform:none;transition-delay:0s}
+nav.tabs .grpbtn{cursor:default}nav.tabs .grpbtn:hover{color:var(--text)}

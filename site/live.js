@@ -130,7 +130,7 @@
       draft(stage) {
         const m = cur(), atk = S.bh != null && S.rel == null && atkRaw(m) > 0 ? atkRaw(m) : atkRaw(Math.min(m, ATK_END - 1)), acts = S.log.filter(x => x.act).map(x => ({ t: fmt(x.m), txt: x.text }));
         const cause = (stage === "발생" ? "국제망 DDoS 공격 (확인 중)" : "국제망 DDoS 공격") + (S.saved && stage !== "발생" ? ` · 출발지 상위 ${S.saved.top.split(", ")[0]} 등` : "");
-        const impact = stage === "발생" ? "파악중" : stage === "경과" ? (S.bh != null && S.rel == null ? "대상 IP 접속 불가(블랙홀 중)" : "파악중") : (S.bh != null ? `대상 IP 1개 접속 불가 (블랙홀 ${fmt(S.bh)}부터 유지 중, 24~48시간 뒤 해제 예정), 고객의 다른 IP·이중화 경로는 영향 없음` : "영향 없음");
+        const impact = stage === "발생" ? "파악중" : stage === "경과" ? (S.bh != null && S.rel == null ? "일부 IP 접속 영향 (대상 IP 블랙홀 중)" : "파악중") : (S.bh != null ? `일부 IP 접속 영향 (대상 IP 블랙홀 ${fmt(S.bh)}부터 유지 중, 24~48시간 뒤 해제 예정)` : "영향 없음");
         return smsNotice({ stage, center: "분당", title: "DDoS 공격 수신", target: `${DEV}(10.0.0.1)`, from: `10/29 ${fmt(ONSET)}`, to: stage === "완료" ? `10/29 ${fmt(S.t)}` : "", cause, attack: `TCP (${gb(atk)} Gbps / ${(atk * 1e9 / (PKT * 8) / 1e6).toFixed(1)} Mpps)`, actions: stage === "발생" ? [] : acts, impact, voc: stage === "발생" ? "파악중" : "없음" });
       },
       stageOk: st => ({ 발생: true, 경과: done("sms"), 완료: S.checked != null })[st],
@@ -152,7 +152,7 @@
           ["알림 → 차단", S.bh == null ? "차단 안 함" : `${(S.bh - ALERT).toFixed(1)}분`],
           ["블랙홀", S.bh == null ? "-" : `${fmt(S.bh)}부터 유지 중 (바로 풀지 않고 24~48시간 유지)`],
           ["클린존 가입 확인", S.victim ? "확인함" : "확인 안 함 (차단 전에 확인하는 순서입니다)"],
-          ["고객 영향", "대상 IP 1개만 접속 불가 (고객이 여러 IP를 쓰고 이중화되어 있어 서비스 전체는 아님, 가정)"],
+          ["서비스영향 문구", "일부 IP 접속 영향 (블랙홀 대상 IP 1개). 서비스영향은 문제가 있을 때만 적습니다 (고객 전화·다운 등)"],
           ["블랙홀 해제 알림", S.rem ? `${dueStr(S.rem)}에 해제 확인 (알림 > 내 업무)` : "설정 안 함 (해제 시점을 놓칠 수 있습니다)"],
           ["사건 기록 저장", S.saved ? `#${S.saved.id} 저장함` : "안 함 (끝난 뒤에는 값을 다시 볼 수 없습니다)"],
           ["문자 순서", `발생${S.sent.경과 != null ? " → 경과" : ""} → 완료`]
