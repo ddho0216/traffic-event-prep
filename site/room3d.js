@@ -382,21 +382,9 @@ function buildRack(r, k, i, sel) {
 /* ---------- 전원·냉방 설비 (UPS·배터리·분전반·항온항습기): 랙 줄 오른쪽 끝에 놓는 가상 설비. 데이터 없음 ---------- */
 const FAC = [
   { id: "UPS-A", type: "ups", name: "무정전전원장치 (UPS)", w: 1.3, h: 1.9, d: 0.85, why: "정전이 나면 배터리로 전기를 끊김 없이 이어 주고, 평소에는 들어오는 전기를 안정시켜 줍니다. 큰 본체와 좁은 보조 캐비닛 두 짝으로 된 모양을 참고해 그린 가상 모델입니다.", rows: [["입력", "정상 (가상)"], ["부하", "58% (가상)"], ["배터리", "100% 충전 (가상)"], ["버틸 수 있는 시간", "약 12분 (가상)"]] },
-  { id: "BATT-1", type: "batt", name: "배터리 캐비닛 1", w: 0.8, h: 1.9, d: 0.9, why: "UPS에 붙은 배터리 보관함입니다. 정전 때 발전기가 켜질 때까지 서버 전원을 버텨 줍니다.", rows: [["배터리", "12V 납축전지 18개 (가상)"], ["상태", "정상 (가상)"], ["교체 주기", "보통 3~5년 (일반 상식)"]] },
-  { id: "BATT-2", type: "batt", name: "배터리 캐비닛 2", w: 0.8, h: 1.9, d: 0.9, why: "UPS에 붙은 배터리 보관함입니다. 1번과 함께 쓰는 짝입니다.", rows: [["배터리", "12V 납축전지 18개 (가상)"], ["상태", "정상 (가상)"], ["교체 주기", "보통 3~5년 (일반 상식)"]] },
   { id: "DB-1", type: "panel", name: "분전반 (배전반)", w: 1.5, h: 1.7, d: 0.6, why: "UPS에서 나온 전기를 각 열의 PDU로 나누어 보내는 차단기함입니다. 문 네 짝에 환기창과 빗장, 오른쪽에 제어창이 있는 모양을 참고해 그린 가상 모델입니다.", rows: [["문", "네 짝 (가상)"], ["입력", "3상 380V (가상)"], ["상태", "정상 (가상)"]] },
   { id: "CRAC-1", type: "crac", name: "항온항습기 (CRAC)", w: 1.3, h: 1.9, d: 0.8, why: "서버실의 온도와 습도를 맞추는 에어컨입니다. 아래 메쉬로 따뜻한 공기를 빨아들이고, 윗면 송풍구로 찬 바람을 내보냅니다. 송풍구 네 개 달린 모양을 참고해 그린 가상 모델입니다.", rows: [["설정 온도", "23°C (가상)"], ["습도", "45% (가상)"], ["상태", "가동 중 (가상)"]] },
 ];
-function facTex(a) {   // 배터리 캐비닛 앞면 (칸마다 12V 배터리 셋)
-  return canvasTex(256, 512, (g, w, h) => {
-    g.fillStyle = "#2a3138"; g.fillRect(0, 0, w, h); g.strokeStyle = "#0c0f12"; g.lineWidth = 4; g.strokeRect(2, 2, w - 4, h - 4);
-    for (let s = 0; s < 4; s++) {
-      const y = 24 + s * 118; g.fillStyle = "#12171b"; g.fillRect(14, y, w - 28, 108);
-      for (let b = 0; b < 3; b++) { const x = 20 + b * 74; g.fillStyle = grad(g, y, y + 100, "#2c4a7a", "#1b2f50"); g.fillRect(x, y + 10, 68, 88); g.fillStyle = "#c9ced3"; g.fillRect(x + 8, y + 4, 14, 8); g.fillRect(x + 46, y + 4, 14, 8); g.fillStyle = "#e5604d"; g.fillRect(x + 46, y + 2, 14, 3); g.fillStyle = "#cfd8df"; g.font = "bold 13px monospace"; g.textAlign = "center"; g.fillText("12V", x + 34, y + 62); }
-    }
-    g.fillStyle = "#3fd07a"; g.beginPath(); g.arc(w - 22, 14, 6, 0, 7); g.fill();
-  });
-}
 function facDist(halfW, min) { const vf = G.cam.fov * Math.PI / 180, hf = 2 * Math.atan(Math.tan(vf / 2) * G.cam.aspect); return Math.max(min, halfW / Math.tan(hf / 2)); }
 function facX0() { const n = G.rowRacks ? G.rowRacks.length : 8; return (n - 1) * (SC.RW + SC.GAP) + SC.RW / 2 + 0.7; }
 function facSpan() { let x = 0; FAC.forEach(a => { x += a.w + 0.08; }); return x - 0.08; }
@@ -495,12 +483,7 @@ function buildDB(a, x) {   // 연회색 네 짝 문, 환기창, 빗장, 오른�
 function buildFacilities() {
   const g = new THREE.Group(); let x = facX0();
   FAC.forEach(a => {
-    if (a.type === "ups" || a.type === "panel" || a.type === "crac") { g.add({ ups: buildUPS, panel: buildDB, crac: buildCRAC }[a.type](a, x)); x += a.w + 0.08; return; }
-    const side = dark(0x20272d), front = new THREE.MeshStandardMaterial({ map: facTex(a), roughness: 0.7, metalness: 0.2 });
-    const m = new THREE.Mesh(new THREE.BoxGeometry(a.w, a.h, a.d), [side, side, side, side, front, side]);
-    const z = a.type === "panel" ? SC.RD / 2 - a.d / 2 - 0.02 : 0;   // 분전반은 얇아서 앞면을 다른 설비와 비슷하게 맞춘다
-    m.position.set(x + a.w / 2, SC.BASE / 2 + a.h / 2, z); m.userData = { kind: "fac", id: a.id, name: a.name };
-    G.ray.push(m); g.add(m); x += a.w + 0.08;
+    g.add({ ups: buildUPS, panel: buildDB, crac: buildCRAC }[a.type](a, x)); x += a.w + 0.08;
   });
   const lb = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.22), new THREE.MeshBasicMaterial({ map: canvasTex(400, 56, (c, w, h) => { c.fillStyle = "#1b2229"; rr(c, 2, 2, w - 4, h - 4, 8); c.fill(); c.fillStyle = "#cfd8df"; c.font = "bold 22px sans-serif"; c.textAlign = "center"; c.fillText("전원·냉방 설비 (가상)", w / 2, 37); }), transparent: true }));
   lb.position.set(facX0() + facSpan() / 2, 2.2, SC.RD / 2 - 0.02); g.add(lb);
