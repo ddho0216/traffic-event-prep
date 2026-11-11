@@ -586,11 +586,11 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('서버실-3D: 확대 버튼이 카메라를 가깝게 함', d1 < d0, `${d0} -> ${d1}`);
   await page.click('#glFit'); await flyDone(); check('서버실-3D: 화면 맞춤으로 처음 거리로 돌아옴', Math.abs((await page.evaluate(() => G.cs.dist)) - d0) < 0.05);
   await page.click('#glPower'); await flyDone();
-  const fc = await page.evaluate(() => ({ fac: G.fac && G.fac.id, n: G.ray.filter(m => m.userData.kind === 'fac').length, tx: G.cs.tx, panel: document.querySelector('#glDetail').textContent }));
+  const fc = await page.evaluate(() => ({ fac: G.fac && G.fac.id, n: new Set(G.ray.filter(m => m.userData.kind === 'fac').map(m => m.userData.id)).size, tx: G.cs.tx, panel: document.querySelector('#glDetail').textContent }));
   check('서버실-3D: "전원·냉방 설비" 버튼이 UPS·배터리 2·분전반·항온항습기(5개)를 보여 주고 UPS 설명이 오른쪽에 나옴', fc.fac === 'UPS-A' && fc.n === 5 && fc.tx > 4 && fc.panel.includes('무정전전원장치') && fc.panel.includes('가상'), JSON.stringify(fc));
   await page.click('#glFit'); await flyDone();
   const vr = await page.evaluate(() => document.querySelector('#appVer').textContent);
-  check('화면 위에 버전 표시(v2.12.0)가 있음', vr === 'v2.12.0', vr);
+  check('화면 위에 버전 표시(v2.12.1)가 있음', vr === 'v2.12.1', vr);
   await page.mouse.move(cv.x + 300, cv.y + 300); await page.mouse.down(); await page.mouse.move(cv.x + 420, cv.y + 300, { steps: 5 }); await page.mouse.up();
   const az = await page.evaluate(() => G.cs.az);
   check('서버실-3D: 드래그하면 시점이 회전하고 좌우 70도를 넘지 않음', Math.abs(az) > 5 && Math.abs(az) <= 70, az);

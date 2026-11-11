@@ -384,7 +384,7 @@ const FAC = [
   { id: "UPS-A", type: "ups", name: "무정전전원장치 (UPS)", w: 0.8, h: 1.9, d: 0.9, why: "정전이 나면 배터리로 전기를 끊김 없이 이어 주고, 평소에는 들어오는 전기를 안정시켜 줍니다.", rows: [["입력", "정상 (가상)"], ["부하", "58% (가상)"], ["배터리", "100% 충전 (가상)"], ["버틸 수 있는 시간", "약 12분 (가상)"]] },
   { id: "BATT-1", type: "batt", name: "배터리 캐비닛 1", w: 0.8, h: 1.9, d: 0.9, why: "UPS에 붙은 배터리 보관함입니다. 정전 때 발전기가 켜질 때까지 서버 전원을 버텨 줍니다.", rows: [["배터리", "12V 납축전지 18개 (가상)"], ["상태", "정상 (가상)"], ["교체 주기", "보통 3~5년 (일반 상식)"]] },
   { id: "BATT-2", type: "batt", name: "배터리 캐비닛 2", w: 0.8, h: 1.9, d: 0.9, why: "UPS에 붙은 배터리 보관함입니다. 1번과 함께 쓰는 짝입니다.", rows: [["배터리", "12V 납축전지 18개 (가상)"], ["상태", "정상 (가상)"], ["교체 주기", "보통 3~5년 (일반 상식)"]] },
-  { id: "DB-1", type: "panel", name: "분전반 (배전반)", w: 0.7, h: 1.5, d: 0.3, why: "UPS에서 나온 전기를 각 열의 PDU로 나누어 보내는 차단기함입니다.", rows: [["차단기", "A·B 두 계통 (가상)"], ["상태", "정상 (가상)"]] },
+  { id: "DB-1", type: "panel", name: "분전반 (배전반)", w: 0.7, h: 1.9, d: 0.7, why: "UPS에서 나온 전기를 각 열의 PDU로 나누어 보내는 차단기함입니다. 데이터센터용 분전반(ABB 안내서의 제품 사진)을 보고 모양을 참고해 직접 그린 가상 모델이며, 문을 열어 내부 차단기가 보이게 했습니다.", rows: [["구성", "위·아래 두 칸, 소형 차단기 72개 (가상)"], ["입력", "3상 380V (가상)"], ["상태", "정상 (가상)"]] },
   { id: "CRAC-1", type: "crac", name: "항온항습기 (CRAC)", w: 1.0, h: 1.9, d: 0.9, why: "서버실의 온도와 습도를 맞추는 에어컨입니다. 차가운 바람을 만들어 랙 앞쪽으로 보냅니다.", rows: [["설정 온도", "23°C (가상)"], ["습도", "45% (가상)"], ["상태", "가동 중 (가상)"]] },
 ];
 function facTex(a) {
@@ -404,10 +404,6 @@ function facTex(a) {
         for (let b = 0; b < 3; b++) { const x = 20 + b * 74; g.fillStyle = grad(g, y, y + 100, "#2c4a7a", "#1b2f50"); g.fillRect(x, y + 10, 68, 88); g.fillStyle = "#c9ced3"; g.fillRect(x + 8, y + 4, 14, 8); g.fillRect(x + 46, y + 4, 14, 8); g.fillStyle = "#e5604d"; g.fillRect(x + 46, y + 2, 14, 3); g.fillStyle = "#cfd8df"; g.font = "bold 13px monospace"; g.textAlign = "center"; g.fillText("12V", x + 34, y + 62); }
       }
       g.fillStyle = "#3fd07a"; g.beginPath(); g.arc(w - 22, 14, 6, 0, 7); g.fill();
-    } else if (a.type === "panel") {
-      g.fillStyle = "#8f979e"; g.fillRect(16, 20, w - 32, h - 40);
-      for (let r = 0; r < 12; r++) for (let c = 0; c < 4; c++) { const x = 28 + c * 50, y = 44 + r * 36; g.fillStyle = "#1b2127"; rr(g, x, y, 38, 26, 3); g.fill(); g.fillStyle = r % 5 === 4 ? "#39444d" : "#3fd07a"; g.fillRect(x + 6, y + 6, 26, 6); }
-      tag("분전반", 6, true);
     } else {
       g.fillStyle = "#9aa3ab"; for (let y = 120; y < 470; y += 10) g.fillRect(24, y, w - 48, 5);
       g.fillStyle = "#06120c"; rr(g, 60, 36, w - 120, 50, 5); g.fill(); g.fillStyle = "#3fd07a"; g.font = "bold 18px monospace"; g.textAlign = "center"; g.fillText("23.0C  45%", w / 2, 68);
@@ -418,9 +414,61 @@ function facTex(a) {
 function facX0() { const n = G.rowRacks ? G.rowRacks.length : 8; return (n - 1) * (SC.RW + SC.GAP) + SC.RW / 2 + 0.7; }
 function facSpan() { let x = 0; FAC.forEach(a => { x += a.w + 0.08; }); return x - 0.08; }
 function facCenterX(a) { let x = facX0(); for (const q of FAC) { if (q === a) return x + q.w / 2; x += q.w + 0.08; } return x; }
+
+function buildPanelBoard(a, x) {   // 문이 열린 분전반: 받침대·몸체·표시창·차단기 줄·열린 문(창 구멍, 빗장, 경첩)을 부품으로 만든다
+  const g = new THREE.Group(), w = a.w, h = a.h, d = a.d, F = d / 2;
+  g.position.set(x + w / 2, 0.05, SC.RD / 2 - d / 2);
+  const M = (c, r, m) => new THREE.MeshStandardMaterial({ color: c, roughness: r == null ? 0.6 : r, metalness: m == null ? 0.4 : m });
+  const hit = { kind: "fac", id: a.id, name: a.name };
+  const box = (sx, sy, sz, px, py, pz, mat, ud) => { const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat); m.position.set(px, py, pz); if (ud) { m.userData = ud; G.ray.push(m); } g.add(m); return m; };
+  box(w - 0.05, 0.12, d - 0.07, 0, 0.06, -0.01, M(0x0b0d0f, 0.9, 0.1), hit);   // 받침대
+  box(w, h - 0.12, d, 0, 0.12 + (h - 0.12) / 2, 0, M(0x17191c, 0.5, 0.5), hit);   // 몸체
+  // 맨 위 칸: 표시창과 주 차단기 둘
+  box(w - 0.1, 0.26, 0.02, 0, h - 0.27, F + 0.008, M(0x0e1012, 0.7, 0.3));
+  const disp = new THREE.Mesh(new THREE.PlaneGeometry(0.26, 0.14), new THREE.MeshBasicMaterial({ map: canvasTex(208, 112, (c, cw, ch) => { c.fillStyle = "#06120c"; c.fillRect(0, 0, cw, ch); c.strokeStyle = "#1f6b3f"; c.lineWidth = 4; c.strokeRect(3, 3, cw - 6, ch - 6); c.fillStyle = "#3fd07a"; c.font = "bold 34px monospace"; c.textAlign = "center"; c.fillText("380V", cw / 2, 44); c.fillText("62.4A", cw / 2, 82); c.font = "13px monospace"; c.fillText("L1  L2  L3   OK", cw / 2, 104); }) }));
+  disp.position.set(0, h - 0.27, F + 0.0195); g.add(disp);
+  [-1, 1].forEach(s => { box(0.07, 0.11, 0.035, s * 0.255, h - 0.27, F + 0.02, M(0x2a2e33, 0.5, 0.4)); box(0.025, 0.045, 0.02, s * 0.255, h - 0.27, F + 0.045, M(0xd9dde1, 0.4, 0.2)); });
+  // 가운데·아래 두 칸: 차단기 줄 (기둥 둘 × 18개)
+  const bodyM = M(0xdfe3e6, 0.5, 0.1), togM = M(0x1d2125, 0.5, 0.2), togOn = M(0xe5604d, 0.5, 0.2);
+  const pitch = 0.0335, per = 18;
+  [[0.24, 0.66], [0.94, 0.66]].forEach(([y0, ph], pi) => {
+    const yc = y0 + ph / 2 + 0.12 - 0.12;
+    box(w - 0.12, ph, 0.016, 0, yc, F + 0.006, M(0x20252a, 0.6, 0.3), hit);   // 안쪽 덮개판
+    box(0.2, ph - 0.04, 0.008, -0.12, yc, F + 0.016, M(0x50585f, 0.5, 0.6));   // 모선(구리·철 띠)
+    const bg = new THREE.BoxGeometry(0.075, 0.029, 0.034), tg = new THREE.BoxGeometry(0.026, 0.012, 0.014);
+    const bi = new THREE.InstancedMesh(bg, bodyM, per * 2), ti = new THREE.InstancedMesh(tg, togM, per * 2 - 2), to = new THREE.InstancedMesh(tg, togOn, 2), o = new THREE.Object3D();
+    let n = 0, m = 0, q = 0;
+    for (let col = 0; col < 2; col++) for (let k = 0; k < per; k++) {
+      const px = -0.2 + col * 0.088, py = yc + (k - (per - 1) / 2) * pitch;
+      o.position.set(px, py, F + 0.032); o.updateMatrix(); bi.setMatrixAt(n++, o.matrix);
+      o.position.set(px - 0.004, py, F + 0.054); o.updateMatrix(); if (k === per - 1 && pi === 1) to.setMatrixAt(q++, o.matrix); else ti.setMatrixAt(m++, o.matrix);
+    }
+    ti.count = m; to.count = q; [bi, ti, to].forEach(t => { t.instanceMatrix.needsUpdate = true; g.add(t); });
+    // 회로 안내표(종이)와 감전 주의 스티커
+    const card = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.2), new THREE.MeshBasicMaterial({ map: canvasTex(150, 200, (c, cw, ch) => { c.fillStyle = "#eceff1"; c.fillRect(0, 0, cw, ch); c.fillStyle = "#2a3138"; c.font = "bold 13px sans-serif"; c.textAlign = "left"; c.fillText(pi ? "분전반 DB-1 하단" : "분전반 DB-1 상단", 8, 18); c.fillRect(8, 24, cw - 16, 1.5); c.font = "11px monospace"; for (let r = 0; r < 12; r++) c.fillText(`${String(r * 3 + 1).padStart(2, "0")}  ${r % 4 === 3 ? "SPARE" : "RACK PDU"}`, 8, 42 + r * 13); c.fillStyle = "#b8bec4"; c.fillRect(8, 192, cw - 16, 1); }) }));
+    card.position.set(0.2, yc + ph / 2 - 0.13, F + 0.016); g.add(card);
+    const warn = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.05), new THREE.MeshBasicMaterial({ map: canvasTex(100, 50, (c, cw, ch) => { c.fillStyle = "#fff"; c.fillRect(0, 0, cw, ch); c.fillStyle = "#d62828"; c.fillRect(0, 0, cw, 16); c.fillStyle = "#fff"; c.font = "bold 12px sans-serif"; c.textAlign = "center"; c.fillText("DANGER", cw / 2, 13); c.fillStyle = "#222"; c.font = "10px sans-serif"; c.fillText("감전 주의", cw / 2, 34); c.fillText("380V", cw / 2, 46); }) }));
+    warn.position.set(0.2, yc - 0.03, F + 0.016); g.add(warn);
+  });
+  // 경첩 셋
+  [0.25, 0.95, 1.6].forEach(y => box(0.016, 0.07, 0.016, -w / 2 - 0.004, y, F + 0.012, M(0xb9c0c6, 0.3, 0.8)));
+  // 열린 문: 왼쪽 경첩을 축으로 앞쪽으로 활짝 열려 있다 (안쪽 면이 보임)
+  const dw = w - 0.02, dh = h - 0.16, hinge = new THREE.Group();
+  hinge.position.set(-w / 2 + 0.005, 0.14, F + 0.014); hinge.rotation.y = -Math.PI * 0.58; g.add(hinge);
+  const sh = new THREE.Shape(); sh.moveTo(0, 0); sh.lineTo(dw, 0); sh.lineTo(dw, dh); sh.lineTo(0, dh); sh.lineTo(0, 0);
+  const hole = new THREE.Path(); hole.moveTo(0.14, dh - 0.32); hole.lineTo(0.38, dh - 0.32); hole.lineTo(0.38, dh - 0.14); hole.lineTo(0.14, dh - 0.14); hole.lineTo(0.14, dh - 0.32); sh.holes.push(hole);
+  const door = new THREE.Mesh(new THREE.ExtrudeGeometry(sh, { depth: 0.025, bevelEnabled: false }), M(0x1a1c1f, 0.5, 0.5)); door.userData = hit; G.ray.push(door); hinge.add(door);
+  const plane = (pw, ph, px, py, tex) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), new THREE.MeshBasicMaterial({ map: tex })); m.position.set(px, py, -0.001); m.rotation.y = Math.PI; hinge.add(m); };
+  plane(0.12, 0.16, dw - 0.1, dh - 0.26, canvasTex(120, 160, (c, cw, ch) => { c.fillStyle = "#eceff1"; c.fillRect(0, 0, cw, ch); c.fillStyle = "#2a3138"; c.font = "bold 12px sans-serif"; c.fillText("점검 시 주의", 8, 18); c.font = "10px sans-serif"; ["1. 전원 차단 확인", "2. 잠금·표지 부착", "3. 검전 후 작업", "4. 복구 후 보고"].forEach((t, k) => c.fillText(t, 8, 40 + k * 16)); }));
+  plane(0.1, 0.05, 0.16, 0.5, canvasTex(100, 50, (c, cw, ch) => { c.fillStyle = "#f2c230"; c.fillRect(0, 0, cw, ch); c.fillStyle = "#111"; c.font = "bold 14px sans-serif"; c.textAlign = "center"; c.fillText("고압 주의", cw / 2, 30); }));
+  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, dh - 0.3, 8), M(0xc9ced3, 0.3, 0.9)); rod.position.set(dw - 0.035, dh / 2, -0.012); hinge.add(rod);
+  [0.1, dh - 0.12].forEach(y => { const lt = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, 0.02), M(0xc9ced3, 0.3, 0.9)); lt.position.set(dw - 0.035, y, -0.014); hinge.add(lt); });
+  return g;
+}
 function buildFacilities() {
   const g = new THREE.Group(); let x = facX0();
   FAC.forEach(a => {
+    if (a.type === "panel") { g.add(buildPanelBoard(a, x)); x += a.w + 0.08; return; }
     const side = dark(0x20272d), front = new THREE.MeshStandardMaterial({ map: facTex(a), roughness: 0.7, metalness: 0.2 });
     const m = new THREE.Mesh(new THREE.BoxGeometry(a.w, a.h, a.d), [side, side, side, side, front, side]);
     const z = a.type === "panel" ? SC.RD / 2 - a.d / 2 - 0.02 : 0;   // 분전반은 얇아서 앞면을 다른 설비와 비슷하게 맞춘다
