@@ -459,6 +459,9 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('자동 대응(회선 다운): 회신에 상대 작업이 있으면 복구 대기, 모두 없음이고 빛이 없으면 현장 교체 요청으로 갈림', au2[1].fix === '대기' && au2[2].fix === '교체', au2[1].fix + '/' + au2[2].fix);
   check('자동 대응 결과에 걸린 시간·내가 대응 기록과의 비교·자동화의 한계가 나옴', au2.every(x => x.res.includes('자동 대응이 걸린 시간') && x.res.includes('내가 대응했을 때') && x.res.includes('자동화의 한계')), au2[0].res.slice(0, 200));
   await page.evaluate(() => { document.querySelector('#avResult').hidden = true; AUTO.load('ddos'); });
+  const barPos = []; for (let i = 0; i < 5; i++) { await page.click(`#avScen button >> nth=${i}`); barPos.push(await page.evaluate(() => ['#avPlay', '#avClock', '#avScen', '#avHow .lv-rule th:nth-child(3)', '#avHow .lv-rule th:nth-child(5)'].map(q => { const r = document.querySelector(q).getBoundingClientRect(); return Math.round(r.left) + ',' + Math.round(r.top); }).join('|'))); }
+  check('자동 대응: 시나리오를 바꿔도(제목 길이가 달라도) 시작 버튼·시계·시나리오 버튼·규칙표 칸의 위치가 그대로임', new Set(barPos).size === 1, [...new Set(barPos)].join(' / '));
+  await page.click('#avScen button >> nth=0');
   // 다크 모드 켜고 끄기: 기본은 켬, 끄면 밝은 화면, 고른 값은 새로고침해도 유지
   const th = await ctx.newPage(); await th.goto(url, { waitUntil: 'load' });
   const lum = () => th.evaluate(() => { const m = getComputedStyle(document.body).backgroundColor.match(/\d+/g).map(Number); return (m[0] + m[1] + m[2]) / 3; });
@@ -589,7 +592,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('서버실-3D: "전원·냉방 설비" 버튼이 UPS·분전반·항온항습기(3개)를 보여 주고 UPS 설명이 오른쪽에 나옴', fc.fac === 'UPS-A' && fc.n === 3 && fc.tx > 4 && fc.panel.includes('무정전전원장치') && fc.panel.includes('가상'), JSON.stringify(fc));
   await page.click('#glFit'); await flyDone();
   const vr = await page.evaluate(() => document.querySelector('#appVer').textContent);
-  check('화면 위에 버전 표시(v2.13.0)가 있음', vr === 'v2.13.0', vr);
+  check('화면 위에 버전 표시(v2.13.1)가 있음', vr === 'v2.13.1', vr);
   await page.mouse.move(cv.x + 300, cv.y + 300); await page.mouse.down(); await page.mouse.move(cv.x + 420, cv.y + 300, { steps: 5 }); await page.mouse.up();
   const az = await page.evaluate(() => G.cs.az);
   check('서버실-3D: 드래그하면 시점이 회전하고 좌우 70도를 넘지 않음', Math.abs(az) > 5 && Math.abs(az) <= 70, az);

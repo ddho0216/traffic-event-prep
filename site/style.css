@@ -480,3 +480,16 @@ nav.tabs .grpbtn{cursor:default}nav.tabs .grpbtn:hover{color:var(--text)}
 .lv-rule td{padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top}.lv-rule tr.now td{background:var(--info-bg)}.lv-rule td:last-child{white-space:nowrap}
 .lv-why{margin-top:3px;font-size:12.5px;line-height:1.5}.lv-why b{margin-right:6px;color:var(--accent)}.lv-why.now b{color:var(--muted)}
 @media (max-width:1000px){.lv-agent .lv-how,.lv-agent .lv-graph,.lv-agent .lv-term,.lv-agent .lv-comp,.lv-agent .lv-log,.lv-agent .lv-todo,.lv-agent .lv-sms{grid-column:1;grid-row:auto}.lv-howg{grid-template-columns:1fr}}
+
+/* 대응 화면 머리줄: 제목 길이가 달라도 버튼·시계 자리가 바뀌지 않게 칸을 고정한다 (1줄: 제목·상태·시계 / 2줄: 시나리오·조작 버튼) */
+.lv-bar{display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:14px;row-gap:8px;align-items:center}
+.lv-bar h2{grid-column:1;grid-row:1;white-space:nowrap}
+.lv-bar>.muted{grid-column:2;grid-row:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lv-bar .lv-clock{grid-column:3;grid-row:1;margin-left:0;white-space:nowrap}
+.lv-bar>.seg,.lv-bar>.scn-wrap{grid-column:1/3;grid-row:2;justify-self:start}
+.lv-bar>.seg{display:flex;flex-wrap:wrap}
+.lv-bar .lv-ctl{grid-column:3;grid-row:2;justify-self:end}
+.lv-rule{table-layout:fixed}
+.lv-rule th:nth-child(1){width:34px}.lv-rule th:nth-child(2){width:23%}.lv-rule th:nth-child(3){width:35%}.lv-rule th:nth-child(5){width:104px}
+.lv-rule td{overflow-wrap:anywhere}
+@media (max-width:1000px){.lv-bar{grid-template-columns:minmax(0,1fr)}.lv-bar h2,.lv-bar>.muted,.lv-bar .lv-clock,.lv-bar>.seg,.lv-bar>.scn-wrap,.lv-bar .lv-ctl{grid-column:1;grid-row:auto;justify-self:start}.lv-bar h2{white-space:normal;flex-wrap:wrap}}
