@@ -373,8 +373,14 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   // 이벤트 탭 정리: 일정 표, 사전 계획 용어, 통보문(고객사별 버튼·제목 없음), 당일 모니터링 슬라이드, 보고 문자 줄 간격
   await goTab('event');
   const evx = await page.evaluate(() => ({ heads: [...document.querySelectorAll('#evList th')].map(x => x.textContent), centered: [...document.querySelectorAll('#evList tr:nth-child(2) td.c')].length, plan: document.getElementById('evPlan').innerText }));
-  check('일정 표에 "시간대" 칸이 없고 예상 배율·실제 최대 사용률·사후 판정은 가운데 정렬', !evx.heads.includes('시간대') && evx.centered === 3 && await page.evaluate(() => getComputedStyle(document.querySelector('#evList td.c')).textAlign === 'center'), evx.heads.join());
+  check('일정 표에 "시간대" 칸이 없고 예상 배율·실제 최대 사용률·사후 판정은 가운데 정렬', !evx.heads.includes('시간대') && evx.centered === 4 && await page.evaluate(() => getComputedStyle(document.querySelector('#evList td.c')).textAlign === 'center'), evx.heads.join());
   check('사전 계획에는 "큰 고객사" 대신 "주요 고객사"라고 나옴', evx.plan.includes('주요 고객사') && !evx.plan.includes('큰 고객사'));
+  await page.selectOption('#evSel', { label: (await page.locator('#evSel option').allTextContents()).find(x => x.startsWith('축구 결승')) });
+  const cue = await page.evaluate(() => ({ hint: document.querySelector('.evhint').textContent, banner: document.getElementById('evSelBanner').textContent, selRow: document.querySelector('#evList tr.sel').textContent, others: [...document.querySelectorAll('#evList tr.click:not(.sel) .evgo')].every(x => x.textContent === '보기 ›') }));
+  check('이벤트 일정 위에 "이벤트를 눌러 보세요" 안내가 있고, 각 줄 끝에 "보기 ›", 선택한 줄은 "▶ … 선택됨 ✓", 아래에 "선택한 이벤트 · 축구 결승"이 보임', cue.hint.includes('이벤트를 눌러 보세요') && cue.banner.includes('선택한 이벤트 · 축구 결승') && cue.selRow.includes('▶ 축구 결승') && cue.selRow.includes('선택됨 ✓') && cue.others, JSON.stringify(cue));
+  await page.locator('#evList tr.click >> nth=0').click();
+  const cue2 = await page.evaluate(() => ({ banner: document.getElementById('evSelBanner').textContent, flash: document.getElementById('evSelBanner').classList.contains('flash'), sel: document.querySelector('#evList tr.sel').textContent }));
+  check('일정 표에서 다른 이벤트(개회식)를 누르면 선택 표시와 안내 줄이 바뀌고 안내 줄이 깜빡임', cue2.banner.includes('선택한 이벤트 · 개회식') && cue2.sel.includes('▶ 개회식') && cue2.flash, JSON.stringify(cue2));
   await page.selectOption('#evSel', { label: (await page.locator('#evSel option').allTextContents()).find(x => x.startsWith('축구 결승')) });
   const nt = await page.evaluate(() => ({ tabs: [...document.querySelectorAll('#evNoticeTabs button')].map(b => b.textContent), text: document.getElementById('evNotice').value, copy: document.getElementById('evCopy').textContent }));
   check('통보문은 고객사마다 버튼으로 나뉘고, 고른 고객사 한 통만 보이며(구분선 없음) 제목 줄이 없고 "안녕하십니까 TEP IDC 담당자 ㅇㅇㅇ입니다."로 시작', nt.tabs.length >= 1 && !nt.text.includes('--------') && !nt.text.includes('제목:') && nt.text.startsWith('안녕하십니까 TEP IDC 담당자 ㅇㅇㅇ입니다.') && nt.text.includes('이용 회선에서') && nt.text.endsWith('추가로 필요한 사항이 있을시 회신 부탁드립니다.\n감사합니다.') && nt.copy.includes(nt.tabs[0]), JSON.stringify([nt.tabs, nt.copy]));

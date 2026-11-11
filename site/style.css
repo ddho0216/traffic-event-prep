@@ -419,3 +419,11 @@ nav.tabs .beta{font-size:10px;color:var(--warn);border:1px solid #54421d;border-
 table th.c,table td.c{text-align:center}
 .evm-body{max-height:62vh;overflow:auto;font-size:13.5px;line-height:1.65}.evm-body h4{margin:0 0 8px;font-size:15px}
 .evm-tbl{width:100%;border-collapse:collapse;margin:6px 0}.evm-tbl td,.evm-tbl th{padding:5px 8px;border-bottom:1px solid var(--line);text-align:left}.evm-tbl td:first-child{color:var(--muted);white-space:nowrap}.evm-tbl .n{text-align:right}
+
+/* 이벤트 대비 기록: 눌러 볼 수 있다는 표시와 선택 피드백 */
+.evhint{margin:4px 0 8px;color:var(--in);font-weight:600;font-size:13.5px}
+#evList tr.click:hover td{background:#1d2a36}
+#evList tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--in);font-weight:700}
+#evList .evgo{color:var(--muted);white-space:nowrap}#evList tr.sel .evgo{color:var(--in);font-weight:700}
+.evsel{margin:0 0 12px;padding:9px 14px;border:1px solid var(--in);border-left-width:4px;border-radius:4px;background:#12201f;scroll-margin-top:8px}
+.evsel.flash{animation:evflash 1s ease}@keyframes evflash{0%{background:#2a5a55}100%{background:#12201f}}

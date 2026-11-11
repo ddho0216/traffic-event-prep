@@ -516,16 +516,17 @@ function renderEvNotice(ev, calc) {   // 고객사 버튼 + 고른 고객사 통
 }
 function renderEvList() {
   const sel = $("#evSel").selectedIndex;
-  $("#evList").innerHTML = `<tr><th>이벤트</th><th>시작</th><th class="c">예상 배율</th><th>분산 필요 링크</th><th class="c">실제 최대 사용률</th><th class="c">사후 판정</th></tr>` +
+  $("#evList").innerHTML = `<tr><th>이벤트</th><th>시작</th><th class="c">예상 배율</th><th>분산 필요 링크</th><th class="c">실제 최대 사용률</th><th class="c">사후 판정</th><th class="c">기록</th></tr>` +
     DATA.events.map((ev, i) => {
       const c = evCalc(ev), top = c.rows.filter(r => r.f !== 1).sort((a, b) => b.act / b.l.cap - a.act / a.l.cap)[0], u = top.act / top.l.cap * 100;
-      return `<tr class="click ${i === sel ? "sel" : ""}" data-i="${i}"><td>${esc(ev.name)}</td><td>${md(msOf(c.s))}</td><td class="c">×${ev.expected}</td><td>${c.moves.map(m => m.r.l.id).join(", ") || "-"}</td><td class="c">${u.toFixed(0)}% (${top.l.id})</td><td class="c">${u >= 80 ? '<span class="tag crit">경고선 초과</span>' : u >= 70 ? '<span class="tag warn">주의</span>' : '<span class="tag ok">여유</span>'}</td></tr>`;
+      return `<tr class="click ${i === sel ? "sel" : ""}" data-i="${i}" title="눌러서 이 이벤트의 대비 기록 보기"><td>${i === sel ? "▶ " : ""}${esc(ev.name)}</td><td>${md(msOf(c.s))}</td><td class="c">×${ev.expected}</td><td>${c.moves.map(m => m.r.l.id).join(", ") || "-"}</td><td class="c">${u.toFixed(0)}% (${top.l.id})</td><td class="c">${u >= 80 ? '<span class="tag crit">경고선 초과</span>' : u >= 70 ? '<span class="tag warn">주의</span>' : '<span class="tag ok">여유</span>'}</td><td class="c evgo">${i === sel ? "선택됨 ✓" : "보기 ›"}</td></tr>`;
     }).join("");
 }
 function renderEvent() {
   const ev = DATA.events[$("#evSel").selectedIndex], calc = evCalc(ev);
   const evDay = Math.floor(calc.s / PER_DAY);
   $("#evInfo").textContent = `${md(msOf(calc.s))} ~ ${hm(msOf(calc.e))} · 예상 배율 ×${ev.expected} (${ev.links.join(", ")}) · 그때 가진 데이터: ${ymdhm(T0).slice(5, 10).replace("-", "/")} ~ ${ymdhm(msOf(evDay * PER_DAY - 1)).slice(5, 10).replace("-", "/")} (${evDay}일치, 이 이벤트 전날까지만 사용)`;
+  $("#evSelBanner").innerHTML = `<b>선택한 이벤트 · ${esc(ev.name)} (${md(msOf(calc.s))})</b> <span class="muted">아래는 이 이벤트의 대비 기록입니다 (사전 계획 → 분산 제안 → 통보문 → 당일 모니터링 → 사후 정리 → 보고 문자)</span>`;
   const lv = { crit: ["분산 필요", "crit"], warn: ["주의", "warn"], ok: ["정상", "ok"] };
   $("#evPlan").innerHTML = `<tr><th>링크</th><th class="n">평소 최대</th><th class="n">배율</th><th class="n">예상 최대</th><th class="n">용량</th><th class="n">예상 사용률</th><th>판정</th></tr>` +
     calc.rows.map(r => `<tr><td>${r.l.id} <span class="muted">${esc(r.l.desc)}</span></td><td class="n">${r.base.toFixed(1)}</td><td class="n">${r.f === 1 ? "-" : "×" + r.f}</td><td class="n">${r.exp.toFixed(1)}</td><td class="n">${r.l.cap}</td><td class="n">${(r.util * 100).toFixed(0)}%</td><td><span class="tag ${lv[r.level][1]}">${lv[r.level][0]}</span></td></tr>`).join("");
@@ -583,14 +584,18 @@ function openEvMon(i) {
   $("#evMonPrev").disabled = EVMON.i === 0; $("#evMonNext").disabled = EVMON.i === sl.length - 1;
   $("#evMon").hidden = false;
 }
+function evPicked() {   // 이벤트를 고르면 아래 기록이 그 이벤트 것으로 바뀌었음을 눈에 띄게 알려 준다: 안내 줄로 부드럽게 이동하고 잠깐 깜빡인다
+  const b = $("#evSelBanner"); b.classList.remove("flash"); void b.offsetWidth; b.classList.add("flash");
+  b.scrollIntoView({ behavior: "smooth", block: "start" });
+}
 (function initEvent() {
   $("#evMonPrev").onclick = () => openEvMon(EVMON.i - 1); $("#evMonNext").onclick = () => openEvMon(EVMON.i + 1);
   $("#evMonClose").onclick = () => { $("#evMon").hidden = true; };
   $("#evMon").addEventListener("click", e => { if (e.target.id === "evMon") $("#evMon").hidden = true; });
   document.addEventListener("keydown", e => { if (!$("#evMon").hidden) { if (e.key === "Escape") $("#evMon").hidden = true; else if (e.key === "ArrowRight") openEvMon(EVMON.i + 1); else if (e.key === "ArrowLeft") openEvMon(EVMON.i - 1); } });
   $("#evSel").innerHTML = DATA.events.map(e => `<option>${e.name} (${md(parseT(e.start))})</option>`).join("");
-  $("#evList").addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { $("#evSel").selectedIndex = +tr.dataset.i; evNoticeSel = 0; renderEvent(); } });
-  $("#evSel").onchange = () => { evNoticeSel = 0; renderEvent(); };
+  $("#evList").addEventListener("click", ev => { const tr = ev.target.closest("tr.click"); if (tr) { $("#evSel").selectedIndex = +tr.dataset.i; evNoticeSel = 0; renderEvent(); evPicked(); } });
+  $("#evSel").onchange = () => { evNoticeSel = 0; renderEvent(); evPicked(); };
   $("#evNoticeTabs").addEventListener("click", e => { const b = e.target.closest("[data-n]"); if (b) { evNoticeSel = +b.dataset.n; const ev = DATA.events[$("#evSel").selectedIndex]; renderEvNotice(ev, evCalc(ev)); } });
   $("#evReportPhone").onclick = () => { const ev = DATA.events[$("#evSel").selectedIndex]; openPhone($("#evReport").value, hm(parseT(ev.end) + 40 * 60000)); };
   $("#evReportCopy").onclick = async () => { try { await navigator.clipboard.writeText($("#evReport").value); $("#evReportMsg").textContent = "복사했습니다"; } catch (e) { $("#evReport").select(); $("#evReportMsg").textContent = "선택했습니다. Ctrl+C로 복사하세요"; } };
