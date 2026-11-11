@@ -36,16 +36,26 @@
       addLog(`블랙홀 차단 (${VICTIM}/32)`, true); if (!S.done.way) { S.choice = "블랙홀"; S.done.way = S.t; } if (S.upstream != null) mark("act"); else todo(); paint();
     }
     function reqUp() { if (S.bh == null || S.upstream != null) return; S.upstream = S.t; addLog("상위 연동망에 블랙홀 요청 (65535:666)", true); mark("act"); }
-    function release() {
-      if (S.bh == null || S.rel != null) return;
-      S.early = atkRaw(cur()) > 0.1; S.rel = S.t; addLog(S.early ? "블랙홀 해제 (공격이 아직 이어지는 중)" : "공격 종료 확인 · 블랙홀 해제", true);
-      term(`admin@${DEV}> delete routing-options static route ${VICTIM}/32\nadmin@${DEV}> commit\ncommit complete`); todo(); paint();
+    const DUE_H = 48;   // 블랙홀은 바로 풀지 않고 24~48시간 유지한 뒤 푼다 (현장 원칙). 이 시나리오는 48시간 뒤로 알림을 설정한다
+    const dueOf = () => parseT("2026-10-29T" + fmt(S.t)) + DUE_H * 3600000;
+    const dueStr = ms => `${ymdhm(ms).slice(5, 10).replace("-", "/")} ${ymdhm(ms).slice(11)}`;
+    function check() {
+      const m = cur(), atk = atkRaw(m);
+      if (S.bh == null || S.checked != null) return;
+      if (atk > 0.1) { addLog(`정상화 확인: 아직 공격 중 (유입 ${gb(atk)}Gbps)`); E("lvSendMsg").textContent = `아직 공격이 이어지는 중입니다 (유입 ${gb(atk)}Gbps). 줄어든 뒤 다시 확인하세요`; return; }
+      S.checked = S.t; addLog("정상화 확인 · 공격 종료 (블랙홀은 24~48시간 유지)", true); todo(); fill();
+    }
+    function setReminder() {
+      if (!done("fin") || S.rem != null) return;
+      const due = dueOf(), all = store.get("reminders", []).filter(x => x.key !== "ddos:" + VICTIM);
+      all.push({ key: "ddos:" + VICTIM, what: "블랙홀 해제 확인", detail: `${VICTIM}/32 · ${DEV}`, set: parseT("2026-10-29T" + fmt(S.t)), due });
+      store.set("reminders", all); S.rem = due; if (typeof renderTasks === "function") renderTasks(); addLog(`블랙홀 해제 알림 설정 (${dueStr(due)}, ${DUE_H}시간 뒤)`); mark("rem"); finish();
     }
     return {
       id: "ddos", name: "DDoS 공격 수신", clock0: 180, date: "10/29", start: ONSET - 2, end: 60, alertAt: ALERT, deadline: 8, stages: ["발생", "경과", "완료"], speedNote: true,
       linkTitle: `${UPL} · in`, linkDesc: "분당→서초 B · 100G · 점선=어제 같은 시각", dev: DEV, termQuick: [["속도 확인", 'show interfaces xe-0/0/1 extensive | match "bps|pps"'], ["경로 확인", `show route ${VICTIM}`]],
       cardTitle: "공격 트래픽 구성", cardSave: true,
-      init: () => ({ bh: null, rel: null, upstream: null, choice: null, victim: false, event: false, pending: false, saved: null, early: false, wait: false }),
+      init: () => ({ bh: null, rel: null, checked: null, rem: null, upstream: null, choice: null, victim: false, event: false, pending: false, saved: null, early: false, wait: false }),
       sub: () => alerted() ? `알림 ${fmt(ALERT)}${S.ack != null ? ` · 내가 확인 ${fmt(S.ack)}` : ""}` : "정상 감시 중",
       intro: `가상 장비 ${DEV} (juniper)에 연결됨. 실제 장비가 아닙니다. help를 입력하면 명령이 나옵니다.`,
       chart() {
@@ -64,9 +74,9 @@
         const v = valueIn(upto); return { svg: g + "</svg>", now: `${gb(v)}G`, bad: v > 6 };
       },
       alertBar() {
-        const m = cur(), v = valueIn(m), back = S.rel != null && m >= ATK_END + 2 && v < 5;
+        const m = cur(), v = valueIn(m), back = S.bh != null && m >= ATK_END + 2 && v < 5;
         if (!alerted()) return ["idle", '● 알림 없음 · 정상 감시 중 <span class="muted">(급증이 기준을 넘고 1~3분이 지나야 알림이 뜹니다)</span>'];
-        if (back) return ["ok", `● ${UPL} 정상 범위로 복귀 <span class="muted">${fmt(m)} · in ${gb(v)}G</span>`];
+        if (back) return ["ok", `● ${UPL} 정상 범위로 복귀 <span class="muted">${fmt(m)} · in ${gb(v)}G · 블랙홀은 유지 중 (24~48시간 뒤 해제)</span>`];
         return ["hot", `<span class="lv-dot"></span>${UPL} in 급증 감지 <span class="muted">${fmt(ALERT)} · 급증 시작 ${fmt(ONSET)} · 지연 ${ALERT - ONSET}분 · 평소 3.3G → ${gb(v)}G</span>` +
           (S.ack == null ? `<button class="btn" id="lvAck" type="button">확인하기</button>` : `<span class="muted" style="margin-left:auto">내가 확인 ${fmt(S.ack)}</span>`)];
       },
@@ -100,8 +110,10 @@
             done("way") ? "" : `<span class="lv-opts"><button class="btn sm" data-a="clean" ${can ? "" : "disabled"}>클린존 우회</button><button class="btn sm" data-a="bh" ${can ? "" : "disabled"}>블랙홀</button><button class="btn sm" data-a="wait" ${can ? "" : "disabled"}>더 지켜보기</button></span>`],
           ["act", "차단 실행 · 상위 연동망 요청", done("act") ? `차단 ${fmt(S.bh)} · 요청 ${fmt(S.upstream)}` : "블랙홀 명령을 넣고 상위 연동망에 요청합니다",
             done("act") ? "" : `<span class="lv-opts"><button class="btn sm" data-a="exec" ${can && S.bh == null ? "" : "disabled"}>블랙홀 실행 (가상)</button><button class="btn sm" data-a="up" ${S.bh != null && S.upstream == null ? "" : "disabled"}>연동망 요청</button></span>`],
-          ["fin", "정상화 확인 · 해제 · 완료 문자", done("fin") ? `완료 문자 ${fmt(S.done.fin)}` : S.rel != null ? "블랙홀을 풀었습니다. 정상이면 완료 문자를 보냅니다" : "버려지는 공격량이 0이 되면 해제하고 완료 문자를 보냅니다",
-            done("fin") ? "" : `<button class="btn sm" data-a="rel" ${S.bh != null && S.rel == null ? "" : "disabled"}>블랙홀 해제</button>`]
+          ["fin", "정상화 확인 · 완료 문자", done("fin") ? `완료 문자 ${fmt(S.done.fin)} (블랙홀은 유지)` : S.checked != null ? "정상화를 확인했습니다. 완료 문자를 보냅니다 (블랙홀은 그대로 둡니다)" : "블랙홀은 바로 풀지 않고 24~48시간 유지합니다. 공격이 끝나 버려지는 양이 0이 되면 정상화를 확인하고 완료 문자를 보냅니다",
+            done("fin") || S.checked != null ? "" : `<button class="btn sm" data-a="check" ${S.bh != null ? "" : "disabled"}>정상화 확인</button>`],
+          ["rem", `블랙홀 해제 알림 설정 (${DUE_H}시간 뒤)`, done("rem") ? `설정함 · ${dueStr(S.rem)} 해제 예정 (알림 > 내 업무에서 확인)` : `블랙홀은 24~48시간 뒤에 풉니다. 해제할 때가 되면 알림을 받도록 설정합니다. 설정하면 알림(종 모양)의 "내 업무"에서 확인해 보실 수 있습니다`,
+            done("rem") ? "" : `<button class="btn sm" data-a="rem" ${done("fin") ? "" : "disabled"}>${DUE_H}시간 뒤 알림 설정</button>`]
         ];
       },
       act(a) {
@@ -112,16 +124,17 @@
         else if (a === "bh") { S.choice = "블랙홀"; addLog("차단 방법: 블랙홀 선택"); mark("way"); }
         else if (a === "exec") execBh(true);
         else if (a === "up") reqUp();
-        else if (a === "rel") release();
+        else if (a === "check") check();
+        else if (a === "rem") setReminder();
       },
       draft(stage) {
         const m = cur(), atk = S.bh != null && S.rel == null && atkRaw(m) > 0 ? atkRaw(m) : atkRaw(Math.min(m, ATK_END - 1)), acts = S.log.filter(x => x.act).map(x => ({ t: fmt(x.m), txt: x.text }));
         const cause = (stage === "발생" ? "국제망 DDoS 공격 (확인 중)" : "국제망 DDoS 공격") + (S.saved && stage !== "발생" ? ` · 출발지 상위 ${S.saved.top.split(", ")[0]} 등` : "");
-        const impact = stage === "발생" ? "파악중" : stage === "경과" ? (S.bh != null && S.rel == null ? "대상 IP 접속 불가(블랙홀 중)" : "파악중") : (S.bh != null ? `블랙홀 구간(${fmt(S.bh)}~${fmt(S.rel != null ? S.rel : S.t)}) 대상 IP 접속 불가` : "영향 없음");
+        const impact = stage === "발생" ? "파악중" : stage === "경과" ? (S.bh != null && S.rel == null ? "대상 IP 접속 불가(블랙홀 중)" : "파악중") : (S.bh != null ? `대상 IP 접속 불가 (블랙홀 ${fmt(S.bh)}부터 유지 중, 24~48시간 뒤 해제 예정)` : "영향 없음");
         return smsNotice({ stage, center: "분당", title: "DDoS 공격 수신", target: `${DEV}(10.0.0.1)`, from: `10/29 ${fmt(ONSET)}`, to: stage === "완료" ? `10/29 ${fmt(S.t)}` : "", cause, attack: `TCP (${gb(atk)} Gbps / ${(atk * 1e9 / (PKT * 8) / 1e6).toFixed(1)} Mpps)`, actions: stage === "발생" ? [] : acts, impact, voc: stage === "발생" ? "파악중" : "없음" });
       },
-      stageOk: st => ({ 발생: true, 경과: done("sms"), 완료: S.rel != null })[st],
-      onSend(st) { if (st === "발생") mark("sms"); else if (st === "완료") { mark("fin"); finish(); } else todo(); },
+      stageOk: st => ({ 발생: true, 경과: done("sms"), 완료: S.checked != null })[st],
+      onSend(st) { if (st === "발생") mark("sms"); else if (st === "완료") mark("fin"); else todo(); },
       run(c) {
         const m = cur(), pk = Math.round(mpps(m) * 1e6), bps = Math.round(valueIn(m) * 1e9);
         if (/^show interfaces xe-0\/0\/1 extensive \| match "?bps\|pps"?$/.test(c)) return `  Input rate     : ${bps} bps (${pk} pps)\n  Output rate    : ${Math.round(3.3e9)} bps (${Math.round(3.3e9 / 800 / 8)} pps)`;
@@ -137,9 +150,9 @@
           ["알림 → 내가 확인", ackd == null ? "확인 안 함" : `${ackd.toFixed(1)}분`],
           ["알림 → 발생 문자", used == null ? "안 보냄" : `${used.toFixed(1)}분 (${used <= SC.deadline ? "기한 8분 안" : "기한 초과"})`],
           ["알림 → 차단", S.bh == null ? "차단 안 함" : `${(S.bh - ALERT).toFixed(1)}분`],
-          ["블랙홀 구간", S.bh == null ? "-" : `${fmt(S.bh)} ~ ${fmt(S.rel)} (${(S.rel - S.bh).toFixed(1)}분)`],
+          ["블랙홀", S.bh == null ? "-" : `${fmt(S.bh)}부터 유지 중 (바로 풀지 않고 24~48시간 유지)`],
           ["클린존 가입 확인", S.victim ? "확인함" : "확인 안 함 (차단 전에 확인하는 순서입니다)"],
-          ["공격이 끝나기 전에 해제", S.early ? "예 → 공격이 다시 들어왔습니다" : "아니오"],
+          ["블랙홀 해제 알림", S.rem ? `${dueStr(S.rem)}에 해제 확인 (알림 > 내 업무)` : "설정 안 함 (해제 시점을 놓칠 수 있습니다)"],
           ["사건 기록 저장", S.saved ? `#${S.saved.id} 저장함` : "안 함 (끝난 뒤에는 값을 다시 볼 수 없습니다)"],
           ["문자 순서", `발생${S.sent.경과 != null ? " → 경과" : ""} → 완료`]
         ];

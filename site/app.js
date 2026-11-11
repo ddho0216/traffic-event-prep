@@ -259,6 +259,10 @@ function timeNote(inp, ms) {
   let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(renderAll, 120); });
 })();
 
+/* 예약 알림: 실시간 대응에서 설정한 "블랙홀 해제 확인" 같은 것. 지금 보는 시각(관제의 기준 시각)이 예정 시각에 닿으면 "확인 필요"가 된다 */
+const remindersAll = () => store.get("reminders", []) || [];
+const remDue = r => r.due <= msOf(state.end);
+const remStr = ms => `${md(ms)}`;
 function renderTasksTable() {
   const sp = sendProgress();
   const checks = DATA.events.map(ev => (store.get("chk:" + ev.id, []) || []).length);
@@ -273,19 +277,21 @@ function renderTasksTable() {
     ["서버실 온도·육안점검", `온도 경고 ${ROOM_ALERTS.length}건 · 점검 기록 ${store.get("inspections", []).length}건`, ROOM_ALERTS.length ? "warn" : "ok", "room"],
     ["장비 점검 (광값·CRC)", "CRC·광 수신값 이상 회선 있음", "crit", "term"]
   ];
+  remindersAll().forEach(r => rows.push([`${r.what} (${r.detail})`, remDue(r) ? `${remStr(r.due)} 해제 확인 필요 — 설정 후 48시간이 지났습니다` : `${remStr(r.due)} 해제 예정 (설정 ${remStr(r.set)} · 48시간 뒤)`, remDue(r) ? "crit" : "warn", "live"]));
   $("#taskTbl").innerHTML = rows.map(r => `<tr><td>${r[0]}</td><td><span class="tag ${r[2]}">${r[1]}</span></td><td><button class="btn sm" data-go="${r[3]}">열기</button></td></tr>`).join("");
 }
 function renderTasks() { renderTasksTable(); renderBell(); }
 $("#taskTbl").addEventListener("click", e => { const b = e.target.closest("[data-go]"); if (b) { closeNotif(); showTab(b.dataset.go); } });
 
 /* ---------- 알림 (종 모양): 경고 이력 + 내 업무. 관제 첫 화면에는 모니터만 남긴다 ---------- */
-const needCheck = () => ALERTS.filter(a => !a.evName).length + ROOM_ALERTS.length;   // 사람이 확인해야 하는 건수
+const needCheck = () => ALERTS.filter(a => !a.evName).length + ROOM_ALERTS.length + remindersAll().filter(remDue).length;   // 사람이 확인해야 하는 건수
 function renderBell() {
   const n = needCheck(), all = $("#showAllAlerts").checked, hidden = ALERTS.filter(a => a.evName).length;
   $("#bellN").textContent = n; $("#bellN").hidden = n === 0;
   const rows = [];
   ALERTS.forEach((a, k) => { if (all || !a.evName) rows.push({ t: a.s, html: `<tr class="click" data-k="${k}"><td>${md(msOf(a.s))} ~ ${hm(msOf(a.e))}</td><td>${a.link}</td><td><span class="tag ${a.sev}">${a.kind}</span></td><td>${a.val}</td><td>${a.evName ? `<span class="tag ok">${esc(a.evName)}</span>` : '<span class="tag crit">확인 필요</span>'}</td></tr>` }); });
   ROOM_ALERTS.forEach((a, k) => rows.push({ t: a.s, html: `<tr class="click" data-r="${k}"><td>${md(msOf(a.s))} ~ ${hm(msOf(a.e))}</td><td>랙 ${a.rack}</td><td><span class="tag crit">온도 경고</span></td><td>${TEMP_HOT}°C 이상, 최고 ${a.max.toFixed(1)}°C</td><td><span class="tag crit">확인 필요</span></td></tr>` }));
+  remindersAll().filter(remDue).forEach(r => rows.push({ t: r.due, html: `<tr class="click" data-rm="${esc(r.key)}"><td>${remStr(r.due)}</td><td>${esc(r.detail)}</td><td><span class="tag crit">해제 알림</span></td><td>${esc(r.what)}: 설정 후 48시간이 지났습니다</td><td><span class="tag crit">확인 필요</span></td></tr>` }));
   rows.sort((x, y) => x.t - y.t);
   $("#alertTbl").innerHTML = `<tr><th>시각</th><th>대상</th><th>유형</th><th>내용</th><th>구분</th></tr>` + (rows.length ? rows.map(r => r.html).join("") : `<tr><td colspan="5" class="muted">확인 필요한 알림이 없습니다.</td></tr>`);
   $("#alertSum").textContent = `확인 필요 ${n}건` + (all ? ` · 경기와 겹침 ${hidden}건 포함` : ` · 경기와 겹치는 ${hidden}건은 숨김`);
@@ -305,6 +311,7 @@ function closeNotif() { $("#notif").hidden = true; $("#bell").setAttribute("aria
   $("#alertTbl").addEventListener("click", ev => {
     const tr = ev.target.closest("tr.click"); if (!tr) return;
     closeNotif();
+    if (tr.dataset.rm) { showTab("live"); return; }
     if (tr.dataset.k !== undefined) { const al = ALERTS[+tr.dataset.k]; if (!inView(al.link)) setCenter(codeOf(al.link)); showTab("monitor"); state.end = Math.min(N - 1, al.peak + 6); renderAll(); window.scrollTo({ top: 0, behavior: "smooth" }); }
     else { const ra = ROOM_ALERTS[+tr.dataset.r]; if (!inView(ra.rack)) setCenter(codeOf(ra.rack)); sr.end = ra.peak; showTab("room"); }
   });

@@ -149,7 +149,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const lv = async () => page.evaluate(() => ({ t: LIVE.state.t, now: document.getElementById('lvNow').textContent, alert: document.getElementById('lvAlert').className, comp: document.getElementById('lvComp').innerText, timer: document.getElementById('lvTimer').innerText, prog: document.getElementById('lvProg').textContent, draft: document.getElementById('lvDraft').value, term: document.getElementById('lvTermOut').textContent, log: document.getElementById('lvLog').innerText }));
   await page.evaluate(() => LIVE.reset(false));
   let L = await lv();
-  check('실시간 대응: 시작 전에는 알림이 없고 공격 구성은 "알림을 확인하면 표시"로 가려져 있음, 해야 할 일 0/6', L.alert.includes('idle') && L.comp.includes('알림을 확인하면') && L.prog.includes('0 / 6'));
+  check('실시간 대응: 시작 전에는 알림이 없고 공격 구성은 "알림을 확인하면 표시"로 가려져 있음, 해야 할 일 0/7', L.alert.includes('idle') && L.comp.includes('알림을 확인하면') && L.prog.includes('0 / 7'));
   await page.evaluate(() => LIVE.jump(22));
   L = await lv();
   check('급증이 시작된 뒤에도(03:22) 알림은 아직 안 뜸: 탐지 지연 3분(눈으로 먼저 알아채는 구간)', !L.alert.includes('hot') && parseFloat(L.now) > 5, L.now + ' ' + L.alert);
@@ -175,14 +175,14 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('터미널: 속도 확인은 가상 시각의 bps/pps, 경로 확인은 BGP 경로, 모르는 명령은 거절', /Input rate +: \d{9,} bps \(\d{6,} pps\)/.test(L.term) && L.term.includes('[BGP/170]') && L.term.includes('unknown command'));
   await page.click('#lvTodo [data-a=ev]'); await page.click('#lvTodo [data-a=ip]');
   await page.click('#lvTodo [data-a=clean]');
-  check('클린존 우회를 누르면 미가입이라 불가라고 알려 주고 차단 방법 단계는 그대로 남음', (await page.locator('#lvSendMsg').innerText()).includes('미가입') && (await page.locator('#lvProg').innerText()).includes('2 / 6'));
+  check('클린존 우회를 누르면 미가입이라 불가라고 알려 주고 차단 방법 단계는 그대로 남음', (await page.locator('#lvSendMsg').innerText()).includes('미가입') && (await page.locator('#lvProg').innerText()).includes('2 / 7'));
   await page.click('#lvSave');
   check('"기록에 저장": 저장됨 표시가 나오고 브라우저에 사건 기록이 남음', (await page.locator('#lvSaved').isVisible()) && (await page.evaluate(() => JSON.parse(localStorage.getItem('live:records')).length)) >= 1);
   await page.evaluate(() => LIVE.jump(26));
   await page.click('#lvSend');
   const ph2 = await page.evaluate(() => ({ vis: !document.getElementById('phone').hidden, txt: document.getElementById('phBody').innerText }));
   L = await lv();
-  check('발생 문자를 보내면 휴대폰 미리보기가 뜨고, 타이머가 기한 안 발송(알림 후 3분)으로 바뀌고 3번 단계가 끝남', ph2.vis && ph2.txt.includes('[주의_분당_발생]') && L.timer.includes('기한 안') && L.prog.includes('3 / 6'), L.timer.replace(/\n/g, ' '));
+  check('발생 문자를 보내면 휴대폰 미리보기가 뜨고, 타이머가 기한 안 발송(알림 후 3분)으로 바뀌고 3번 단계가 끝남', ph2.vis && ph2.txt.includes('[주의_분당_발생]') && L.timer.includes('기한 안') && L.prog.includes('3 / 7'), L.timer.replace(/\n/g, ' '));
   await page.keyboard.press('Escape');
   await page.click('#lvTodo [data-a=bh]');
   await page.click('#lvTodo [data-a=exec]');
@@ -192,25 +192,46 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('블랙홀을 실행하면 몇 분 뒤 그래프의 in이 평소 값으로 떨어지고, 경로가 Discard로 바뀜', before > 8 && parseFloat(L.now) < 5 && (await (async () => { await page.fill('#lvTermIn', 'show route 198.51.100.77'); await page.press('#lvTermIn', 'Enter'); return (await lv()).term.includes('Discard'); })()), `${before} → ${L.now}`);
   await page.click('#lvTodo [data-a=up]');
   L = await lv();
-  check('상위 연동망 요청까지 하면 5번 단계 완료, 조치 내용이 내 기록에 남음', L.prog.includes('5 / 6') && L.log.includes('블랙홀 차단') && L.log.includes('65535:666'));
+  check('상위 연동망 요청까지 하면 5번 단계 완료, 조치 내용이 내 기록에 남음', L.prog.includes('5 / 7') && L.log.includes('블랙홀 차단') && L.log.includes('65535:666'));
   check('공격이 끝나기 전(03:30)에는 블랙홀로 버려지는 양이 구성 카드에 보임', (await page.locator('#lvCompSub').innerText()).includes('블랙홀로 버려지는 양'));
-  // 공격이 끝난 뒤 해제 → 완료 문자 → 결과
+  // 블랙홀은 바로 풀지 않는다: 정상화 확인 → 완료 문자(블랙홀 유지) → 48시간 뒤 해제 알림 설정 → 결과
+  check('블랙홀 실행 뒤 해야 할 일에 "블랙홀 해제" 버튼이 없고, 6번은 정상화 확인·완료 문자, 7번은 해제 알림 설정(48시간 뒤)', (await page.locator('#lvTodo [data-a=rel]').count()) === 0 && (await page.locator('#lvTodo').innerText()).includes('정상화 확인 · 완료 문자') && (await page.locator('#lvTodo').innerText()).includes('블랙홀 해제 알림 설정 (48시간 뒤)') && (await page.locator('#lvTodo').innerText()).includes('24~48시간'));
+  check('7번 안내: "설정하면 알림(종 모양)의 내 업무에서 확인해 보실 수 있습니다"', (await page.locator('#lvTodo').innerText()).includes('설정하면 알림(종 모양)의 "내 업무"에서 확인해 보실 수 있습니다'));
+  check('완료 문자와 알림 설정은 정상화 확인 전에는 막혀 있음 (완료 단계 버튼 비활성, 알림 설정 버튼 비활성)', (await page.locator('#lvStage [data-st=완료]').isDisabled()) && (await page.locator('#lvTodo [data-a=rem]').isDisabled()));
   await page.evaluate(() => LIVE.jump(42));
-  await page.click('#lvTodo [data-a=rel]');
+  await page.click('#lvTodo [data-a=check]');
   await page.evaluate(() => LIVE.advance(3));
+  await page.fill('#lvTermIn', 'show route 198.51.100.77'); await page.press('#lvTermIn', 'Enter');
+  check('정상화를 확인해도 블랙홀은 그대로 유지됨 (경로가 계속 Discard)', (await lv()).term.split('show route 198.51.100.77').pop().includes('Discard') && (await page.locator('#lvAlert').innerText()).includes('블랙홀은 유지 중'));
   await page.click('#lvStage [data-st=완료]');
   const dn = await page.inputValue('#lvDraft');
-  check('완료 문자: 시작~끝 일시, 직접 한 조치 시간표(블랙홀 차단·연동망 요청·해제), 블랙홀 구간이 서비스영향에 적힘', /■ 일시 : 10\/29 03:20 ~ 10\/29 03:4\d/.test(dn) && dn.includes('블랙홀 차단') && dn.includes('65535:666') && dn.includes('블랙홀 해제') && /블랙홀 구간\(03:2\d~03:4\d\)/.test(dn) && dn.includes('_완료]'));
+  check('완료 문자: 시작~끝 일시, 직접 한 조치 시간표(블랙홀 차단·연동망 요청), 블랙홀이 유지 중(24~48시간 뒤 해제 예정)이라고 서비스영향에 적힘, 해제 조치는 없음', /■ 일시 : 10\/29 03:20 ~ 10\/29 03:4\d/.test(dn) && dn.includes('블랙홀 차단') && dn.includes('65535:666') && !dn.includes('블랙홀 해제') && /블랙홀 03:2\d부터 유지 중, 24~48시간 뒤 해제 예정/.test(dn) && dn.includes('_완료]'));
   await page.click('#lvSend');
   await page.keyboard.press('Escape');
-  const res = await page.evaluate(() => ({ vis: !document.getElementById('lvResult').hidden, txt: document.getElementById('lvResBody').innerText }));
-  check('완료 문자를 보내면 대응 결과가 나옴: 알림→확인·문자·차단 시간, 블랙홀 구간, 클린존 확인 여부, 기록 저장 여부', res.vis && ['알림 → 발생 문자', '기한 8분 안', '알림 → 차단', '블랙홀 구간', '클린존 가입 확인', '확인함', '사건 기록 저장', '발생 → 완료'].every(w => res.txt.includes(w)), res.txt.slice(0, 80).replace(/\n/g, ' '));
-  // 너무 일찍 해제하면 공격이 다시 들어온다, 문자를 늦게 보내면 기한 초과
+  check('완료 문자를 보내도 대응이 끝나지 않고(결과 창 없음) 7번 알림 설정이 열림', !(await page.evaluate(() => !document.getElementById('lvResult').hidden)) && (await page.locator('#lvTodo [data-a=rem]').isEnabled()) && (await page.locator('#lvProg').innerText()).includes('6 / 7'));
+  await page.click('#lvTodo [data-a=rem]');
+  const res = await page.evaluate(() => ({ vis: !document.getElementById('lvResult').hidden, txt: document.getElementById('lvResBody').innerText, rem: JSON.parse(localStorage.getItem('reminders') || '[]') }));
+  check('알림을 설정하면 대응 결과가 나옴: 알림→확인·문자·차단 시간, 블랙홀 유지, 해제 알림 시각, 클린존 확인, 기록 저장', res.vis && ['알림 → 발생 문자', '기한 8분 안', '알림 → 차단', '블랙홀', '유지 중', '블랙홀 해제 알림', '10/31', '클린존 가입 확인', '확인함', '사건 기록 저장', '발생 → 완료'].every(w => res.txt.includes(w)), res.txt.slice(0, 120).replace(/\n/g, ' | '));
+  check('설정한 해제 알림이 브라우저에 저장됨 (48시간 뒤 = 설정 시각 + 48시간)', res.rem.length === 1 && res.rem[0].key === 'ddos:198.51.100.77' && res.rem[0].due - res.rem[0].set === 48 * 3600000, JSON.stringify(res.rem));
+  await page.keyboard.press('Escape');
+  // 알림(종 모양)에서 확인: 설정 직후는 "해제 예정", 48시간이 지난 시각으로 보면 "확인 필요"
+  await page.click('#bell'); await page.click('[data-np=tasks]');
+  const bellTask = await page.locator('#taskTbl').innerText();
+  check('알림 > 내 업무에 "블랙홀 해제 확인 (198.51.100.77/32)"가 "10/31 … 해제 예정 · 48시간 뒤"로 보임', bellTask.includes('블랙홀 해제 확인') && bellTask.includes('198.51.100.77/32') && bellTask.includes('해제 예정') && bellTask.includes('10/31'), bellTask.slice(-160).replace(/\n/g, ' '));
+  const badge0 = await page.locator('#bellN').innerText();
+  await page.evaluate(() => { state.end = idxOf(parseT('2026-10-31T09:00')); renderTasks(); });
+  const badge1 = await page.locator('#bellN').innerText();
+  await page.click('[data-np=alerts]');
+  const alertTxt = await page.locator('#alertTbl').innerText();
+  check('보는 시각이 해제 예정 시각(48시간 뒤)을 지나면 알림 배지 숫자가 1 늘고, 경고 이력과 내 업무에 "해제 알림 · 확인 필요"가 나옴', +badge1 === +badge0 + 1 && alertTxt.includes('해제 알림') && alertTxt.includes('설정 후 48시간이 지났습니다') && (await page.locator('#taskTbl').innerText()).includes('해제 확인 필요'), badge0 + ' -> ' + badge1);
+  await page.evaluate(() => { state.end = NOW_IDX; renderTasks(); localStorage.removeItem('reminders'); renderTasks(); });
+  await page.keyboard.press('Escape'); await page.evaluate(() => { document.getElementById('notif').hidden = true; });
+  // 공격이 끝나기 전에 정상화를 확인하려 하면 아직 공격 중이라고 알려 준다. 문자를 늦게 보내면 기한 초과
   await page.evaluate(() => LIVE.reset(false));
   await page.evaluate(() => LIVE.jump(25)); await page.click('#lvAck'); await page.click('#lvTodo [data-a=bh]'); await page.click('#lvTodo [data-a=exec]');
   await page.evaluate(() => LIVE.advance(3)); const low = parseFloat((await lv()).now);
-  await page.click('#lvTodo [data-a=rel]'); await page.evaluate(() => LIVE.advance(2)); const high = parseFloat((await lv()).now);
-  check('공격이 끝나기 전에 블랙홀을 해제하면 그래프의 in이 다시 올라감', low < 5 && high > 8, `${low} → ${high}`);
+  await page.click('#lvTodo [data-a=check]');
+  check('공격이 끝나기 전에 "정상화 확인"을 누르면 아직 공격 중이라고 알려 주고 6번 단계는 그대로이며, 블랙홀 덕분에 in은 평소 값', (await page.locator('#lvSendMsg').innerText()).includes('아직 공격이 이어지는 중') && low < 5 && (await page.locator('#lvStage [data-st=완료]').isDisabled()), String(low));
   await page.evaluate(() => LIVE.reset(false));
   await page.evaluate(() => LIVE.jump(33)); await page.click('#lvAck'); await page.click('#lvSend');
   check('발생 문자를 8분 뒤에 보내면 "기한 초과"로 표시됨', (await lv()).timer.includes('기한 초과'));
