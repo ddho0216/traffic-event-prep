@@ -1514,8 +1514,9 @@ function r3Detail() { return withTime(msOf(clamp(sr.end, 0, N - 1)), r3DetailNow
 function r3DetailNow() {
   const d = DEV[R3.dev], rack = RACKS.find(r => r.id === d.rack), i = clamp(sr.end, 0, N - 1), dv = rack.devices.find(x => x.id === d.id), st = devState(rack, dv, i);
   const pl = portPlan(d), PX = 26, PAD = 20, CARD = d.vendor === "cisco" ? 6 : 0, GAPW = 16, ZONE = 150, HEAD = 26;
-  const colX = c => PAD + c * PX + (CARD ? Math.floor(c / CARD) * GAPW : 0);
-  const W = colX(pl.cols - 1) + PX + PAD, plateH = HEAD + 2 * 30 + PAD, H = ZONE * 2 + plateH;
+  const TAGW = 152, natW = PAD + (pl.cols - 1) * PX + (CARD ? Math.floor((pl.cols - 1) / CARD) * GAPW : 0) + PX + PAD, OFF = Math.max(0, (7 * TAGW + 40 - natW) / 2);   // 이름표(최대 7개)가 겹치지 않을 폭을 확보하고 포트 판은 가운데에 둔다
+  const colX = c => OFF + PAD + c * PX + (CARD ? Math.floor(c / CARD) * GAPW : 0);
+  const W = natW + 2 * OFF, plateH = HEAD + 2 * 30 + PAD, H = ZONE * 2 + plateH;
   const pos = k => ({ x: colX(Math.floor(k / 2)) + 10, row: k % 2, y: ZONE + HEAD + (k % 2) * 30 });
   const slot = R3.slot, inSlot = k => !slot || (k >= slot.a && k < slot.b), used = [...pl.map.keys()].sort((a, b) => a - b), cabled = used.filter(k => !pl.map.get(k)[11] && inSlot(k)), outNow = outageAt(d.id, msOf(clamp(sr.end, 0, N - 1)));   // 아직 안 쓰는 회선에는 케이블을 그리지 않는다
   const sel = R3.port != null && pl.map.has(R3.port) ? R3.port : null;
@@ -1534,7 +1535,7 @@ function r3DetailNow() {
       const slot = (W - 40) / tagged.length, tx = 20 + slot * (ti + 0.5), ty = up ? ZONE - 54 : ZONE + plateH + 54;
       svg += `<path d="M${p.x},${y0} C${p.x},${up ? y0 - 50 : y0 + 50} ${tx},${up ? ty + 50 : ty - 50} ${tx},${ty}" stroke="${col}" stroke-width="${sw}" fill="none"/>`;
       const pe = peerOf(f);
-      tags += `<div class="ctag${bad ? " x" : ""}${k === sel ? " sel" : ""}" style="left:${tx - 72}px;top:${up ? ty - 46 : ty + 2}px"><b>${esc(pe.dev)}</b> ${esc(pe.port === "-" ? "" : pe.port)}<br><span>${esc(pe.kind || "외부 연결")}${pe.gbps ? " · " + pe.gbps + "G" : ""} · 수신 ${f[3].toFixed(1)} dBm${f[2] ? " · CRC " + f[2] : ""}</span></div>`;
+      tags += `<div class="ctag${bad ? " x" : ""}${k === sel ? " sel" : ""}" data-i="${k}" title="눌러서 이 포트 보기" style="left:${tx - 72}px;top:${up ? ty - 46 : ty + 2}px"><b>${esc(pe.dev)}</b> ${esc(pe.port === "-" ? "" : pe.port)}<br><span>${esc(pe.kind || "외부 연결")}${pe.gbps ? " · " + pe.gbps + "G" : ""} · 수신 ${f[3].toFixed(1)} dBm${f[2] ? " · CRC " + f[2] : ""}</span></div>`;
     });
   });
   const rows = used.filter(inSlot).map(k => { const f = pl.map.get(k), pe = peerOf(f);
@@ -1545,7 +1546,7 @@ function r3DetailNow() {
     `<p class="note">노란 선이 꽂혀 있는 광케이블(가상, 단일모드로 가정)이고 빨간 선은 광 수신이 약하거나 CRC 오류가 많은 포트입니다. 회색 포트는 아직 쓰지 않는 회선(Down)이라 케이블을 그리지 않았습니다. 위줄 포트의 케이블은 위로, 아래줄은 아래로 나갑니다. 포트를 누르면 표시됩니다.</p>` +
     `<div class="dzoom"><button class="btn sm" id="r3ZIn" type="button">＋ 확대</button><button class="btn sm" id="r3ZOut" type="button">－ 축소</button><button class="btn sm" id="r3ZFit" type="button">전체 맞춤</button><span class="muted">포트를 누르면 가운데로 확대됩니다. 마우스로 끌어서 옮기고, 휠로 확대·축소합니다. (${Math.round(R3.z * 100)}%)</span></div>` +
     `<div class="dscroll"><div class="dsizer${R3.z > 1 ? " pad" : ""}" style="width:${W * R3.z}px;height:${H * R3.z}px"><div class="dwrap" style="width:${W}px;height:${H}px;transform:scale(${R3.z});transform-origin:0 0"><svg width="${W}" height="${H}">${svg}</svg>` +
-    `<div class="plate ${d.vendor}" style="left:0;top:${ZONE}px;width:${W}px;height:${plateH}px"><span class="pl">${d.id} · ${d.vendor === "cisco" ? "Cisco Nexus 7710 (추정)" : d.vendor === "juniper" ? "Juniper" : "Huawei"}</span></div>${plate}${tags}</div></div></div>` +
+    `<div class="plate ${d.vendor}" style="left:${OFF}px;top:${ZONE}px;width:${natW}px;height:${plateH}px"><span class="pl">${d.id} · ${d.vendor === "cisco" ? "Cisco Nexus 7710 (추정)" : d.vendor === "juniper" ? "Juniper" : "Huawei"}</span></div>${plate}${tags}</div></div></div>` +
     `<div class="card" style="padding:0;margin-top:10px;max-height:240px;overflow:auto"><table><tr><th>포트</th><th>연결 상대</th><th>종류</th><th class="n">Gbps</th><th class="n">수신 dBm</th><th class="n">CRC</th><th>상태</th></tr>${rows || `<tr><td colspan="6" class="muted">연결된 포트가 없습니다.</td></tr>`}</table></div>`;
   const sc = document.querySelector("#r3DBody .dscroll");
   if (sc) {

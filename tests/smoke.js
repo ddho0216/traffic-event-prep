@@ -540,6 +540,12 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('#glSlotPorts');
   const sd = await page.evaluate(() => ({ vis: !document.getElementById('r3Detail').hidden, head: document.querySelector('#r3DBody .dhd').innerText, rows: document.querySelectorAll('#r3DBody table tr[data-i]').length, dim: document.querySelectorAll('#r3DBody .pt.dim').length, all: document.querySelectorAll('#r3DBody .pt').length }));
   check('버튼을 누르면 포트·광케이블 자세히 창이 열리고 "칸: I/O 2" 표시, 표에는 그 칸의 포트(최대 12개)만 나오고 나머지 포트는 흐리게 보임', sd.vis && sd.head.includes('칸: I/O 2') && sd.rows > 0 && sd.rows <= 12 && sd.dim === sd.all - 12, JSON.stringify(sd));
+  const tagOv = await page.evaluate(() => { const rows = {}; document.querySelectorAll('#r3DBody .ctag').forEach(e => { const r = e.getBoundingClientRect(); (rows[Math.round(r.top / 20)] = rows[Math.round(r.top / 20)] || []).push(r); }); let bad = 0, n = 0; Object.values(rows).forEach(a => { a.sort((x, y) => x.left - y.left); for (let i = 1; i < a.length; i++) { n++; if (a[i].left < a[i - 1].right - 1) bad++; } }); return { bad, n, tags: document.querySelectorAll('#r3DBody .ctag').length }; });
+  check('포트 케이블 이름표(칸을 골랐을 때 줄마다 6개 안팎)가 서로 겹치지 않아 글자가 다 보임', tagOv.tags >= 4 && tagOv.n >= 3 && tagOv.bad === 0, JSON.stringify(tagOv));
+  const tagPick = await page.evaluate(() => { const e = document.querySelectorAll('#r3DBody .ctag')[2]; return { i: e.dataset.i, z0: getComputedStyle(e).zIndex }; });
+  await page.locator('#r3DBody .ctag >> nth=2').click();
+  const tagAfter = await page.evaluate(() => { const e = document.querySelector('#r3DBody .ctag.sel'); return e ? { i: e.dataset.i, z: getComputedStyle(e).zIndex, sel: R3.port } : null; });
+  check('이름표를 누르면 그 포트가 선택되고 이름표가 맨 앞(z-index 6)으로 나옴', tagAfter && tagAfter.i === tagPick.i && +tagAfter.sel === +tagPick.i && +tagAfter.z === 6 && +tagPick.z0 === 1, JSON.stringify([tagPick, tagAfter]));
   await page.click('#r3SlotAll');
   const sa = await page.evaluate(() => ({ rows: document.querySelectorAll('#r3DBody table tr[data-i]').length, dim: document.querySelectorAll('#r3DBody .pt.dim').length, head: document.querySelector('#r3DBody .dhd').innerText }));
   check('"장비 전체 보기"를 누르면 모든 포트가 다시 나옴', sa.rows > sd.rows && sa.dim === 0 && !sa.head.includes('칸:'));

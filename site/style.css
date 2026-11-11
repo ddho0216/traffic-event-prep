@@ -221,7 +221,7 @@ body.popup #centerBar{display:none}
 .pt{position:absolute;width:20px;height:24px;padding:0;border:1px solid #11161b;background:#222a31;color:#6f7d89;font:9px var(--mono);cursor:pointer;border-radius:2px}
 .pt.u{background:#2f8f5b;color:#e9fff1}.pt.x{background:#c2463a;color:#fff}
 .pt.sel{outline:2px solid #fff;z-index:3}
-.ctag{position:absolute;width:144px;font:10.5px var(--mono);background:#0e1419;color:#d6dee6;border:1px solid #3a4856;border-radius:3px;padding:3px 5px;color:#e6edf3}
+.ctag{position:absolute;width:144px;cursor:pointer;z-index:1;font:10.5px var(--mono);background:#0e1419;color:#d6dee6;border:1px solid #3a4856;border-radius:3px;padding:3px 5px;color:#e6edf3}
 .ctag span{color:var(--muted);font-size:9.5px}
 .ctag.x{border-color:#e5604d}.ctag.sel{border-color:#fff}
 
@@ -457,3 +457,7 @@ table th.c,table td.c{text-align:center}
 /* 묶음 이름은 이동하지 않는 메뉴 이름: 눌러서도 하위 메뉴가 열린다(터치용) */
 nav.tabs .tabgrp.open .submenu{opacity:1;visibility:visible;transform:none;transition-delay:0s}
 nav.tabs .grpbtn{cursor:default}nav.tabs .grpbtn:hover{color:var(--text)}
+
+/* 포트 케이블 이름표: 마우스를 올리거나 누르면 맨 앞으로 나와 글자가 다 보인다 */
+.ctag:hover,.ctag.sel{z-index:6;width:auto;min-width:144px;max-width:300px;box-shadow:0 4px 14px #000a;border-color:var(--accent)}
+.ctag.sel{border-color:#fff}
