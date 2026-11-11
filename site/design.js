@@ -70,7 +70,7 @@ function dgOverview(light, footer) {
   b += `<rect x="720" y="690" width="16" height="14" fill="${th.a}" stroke="${th.aLine}"/>` + dgText(742, 702, "A측(홀수 번호)", { size: 12, fill: th.text });
   b += `<rect x="850" y="690" width="16" height="14" fill="${th.b}" stroke="${th.bLine}"/>` + dgText(872, 702, "B측(짝수 번호)", { size: 12, fill: th.text });
   b += `<line x1="990" y1="697" x2="1030" y2="697" stroke="${th.coreLine}" stroke-width="2.5" stroke-dasharray="7 5"/>` + dgText(1038, 702, "서초 경유", { size: 12, fill: th.text });
-  b += dgText(620, 730, "용량은 가상 값입니다. 장비를 누르면 그 장비의 터미널로 이동합니다.", { size: 11.5, fill: th.sub });
+  b += dgText(620, 730, "용량은 가상 값입니다. 장비를 누르면 그 장비의 터미널이 새 창으로 열립니다.", { size: 11.5, fill: th.sub });
   return { svg: dgSvg(W, H, b, th, footer), w: W, h: H };
 }
 
@@ -126,7 +126,7 @@ function renderDiagram() {
   const tabs = $("#dgTabs"); if (!tabs) return;
   tabs.innerHTML = `<button class="btn" data-dg="ALL">전체</button>` + DG_CODES.map(c => `<button class="btn" data-dg="${c}">${TOPOLOGY.centers[c].replace(" 센터", "")}</button>`).join("");
   tabs.addEventListener("click", e => { const b = e.target.closest("button"); if (b) { dgCur = b.dataset.dg; renderDiagram(); } });
-  $("#dgView").addEventListener("click", e => { const g = e.target.closest("[data-dev]"); if (g) { showTermPane("term"); selectDevice(g.dataset.dev); window.scrollTo({ top: 0, behavior: "smooth" }); $("#termIn").focus(); } });
+  $("#dgView").addEventListener("click", e => { const g = e.target.closest("[data-dev]"); if (g) openDeviceTerminal(g.dataset.dev); });   // 설계도를 보던 자리에서 그 장비의 터미널을 새 창으로 연다 (서버실과 같은 방식)
   const box = $("#designBox");
   box.addEventListener("toggle", () => { if (box.open) renderDiagram(); });
   $("#dgPdf").onclick = makeDesignPdf;

@@ -893,8 +893,11 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
     check(`센터별 구성도(${c}): 그 센터 장비가 하나도 빠짐없이 그려짐`, r.same, `${r.n}/${r.want}`);
   }
   await page.click('#dgTabs [data-dg=B]');
-  await page.click('#dgView [data-dev="IDC_B_FS6"]');
-  check('설계도의 장비를 누르면 그 장비의 터미널이 선택됨', (await page.locator('#devSel').inputValue()) === 'IDC_B_FS6');
+  const [popD] = await Promise.all([ctx.waitForEvent('page'), page.click('#dgView [data-dev="IDC_B_FS6"]')]);
+  await popD.waitForLoadState('load');
+  const tgtD = await popD.locator('#termTarget').innerText();
+  check('설계도의 장비를 누르면 설계도를 떠나지 않고 그 장비(IDC_B_FS6)의 터미널이 새 창으로 열림', /^IDC_B_FS6/.test(tgtD) && (await page.evaluate(() => document.getElementById('designBox').open)) && (await page.evaluate(() => document.querySelector('#tabs button.on').dataset.tab)) === 'term', tgtD);
+  await popD.close();
   await page.evaluate(() => selectDevice('IDC_B_FS1'));   // 이후 시험은 꺼지지 않은 장비로 이어 간다
   await page.click('#termNav [data-pane=design]');   // 장비를 눌러 터미널로 갔으니 설계도를 다시 연다
   await page.click('#dgTables > summary');
