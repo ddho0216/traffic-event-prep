@@ -520,3 +520,34 @@ nav.tabs .grpbtn{cursor:default}nav.tabs .grpbtn:hover{color:var(--text)}
 @media (max-width:1000px){.evstepper{grid-template-columns:1fr}}
 #evList td:first-child,#evList td.c{white-space:nowrap}
 #evList td .tag{margin-left:4px;vertical-align:1px}
+
+/* ===== 깔끔하게 정리 (plush 스타일 참고): 굵은 왼쪽 막대·진한 테두리를 없애고, 테두리 대신 부드러운 면과 큰 둥근 모서리, 알약 버튼 ===== */
+:root{--soft-line:color-mix(in srgb,var(--line) 45%,transparent);--r:14px}
+.card{border:0;border-radius:var(--r);padding:14px 16px}
+th,td{border-bottom:1px solid var(--soft-line)}
+th{background:none;font-size:12px}
+.card table tr:last-child td{border-bottom:0}
+.btn,.seg button{border:0;border-radius:999px;padding:6px 14px;background:var(--panel2)}
+.btn:hover,.seg button:hover{background:var(--sel);border-color:transparent}
+.btn.sm{padding:3px 11px}
+.btn.primary,.btn.pri{background:var(--text);color:var(--bg);border:0}
+.btn.primary:hover,.btn.pri:hover{background:color-mix(in srgb,var(--text) 85%,var(--bg))}
+.btn[disabled]{opacity:.45}
+input[type=datetime-local],input[type=date],input[type=text],input[type=month],input[type=number],input[type=search],select,textarea{border:0;border-radius:10px;padding:7px 11px;background:var(--input)}
+input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 55%,transparent);outline-offset:1px}
+.tag{border:0;border-radius:999px;padding:1px 9px;background:var(--panel2)}
+.tag.ok{background:var(--ok-bg)}.tag.warn{background:var(--warn-bg)}.tag.crit{background:var(--crit-bg)}.tag.now{background:var(--info-bg);color:var(--accent)}
+.badge{border:0;border-radius:999px;padding:3px 11px;background:var(--warn-bg)}
+.steps span{border:0}
+/* 굵은 왼쪽 막대로 강조하던 상자: 막대 없이 부드러운 면으로 */
+.runbook .rbread,.scnpop-body .sumline,.smc-iss{border-left:0;border-radius:10px;padding:8px 12px}
+.evsel,.pr-banner{border:0;border-radius:12px;padding:10px 16px}
+.evst{border:0;border-radius:var(--r);background:var(--panel)}
+.evst:hover{background:var(--panel2)}
+.evst.done,.evst.now,.evst.check,.evst.wait{border-left:0}
+.evst.now{background:var(--info-bg)}.evst.check{background:var(--warn-bg)}
+.evst .evn{border-width:1.5px}
+#evList tr.sel td{background:var(--sel)}
+#evList tr.sel td:first-child{box-shadow:none}
+#evList tr.sel td{background:var(--sel)}
+#evList tr.sel td:first-child{border-radius:12px 0 0 12px}#evList tr.sel td:last-child{border-radius:0 12px 12px 0}
