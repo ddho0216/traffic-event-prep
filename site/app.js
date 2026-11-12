@@ -637,11 +637,43 @@ const SAMPLE_MAIL = `제목: 방문 신청 - 11/06 센터 방문
 const KNOWN0 = [{ name: "이샘플", org: "샘플게임즈" }, { name: "박예시", org: "예시미디어" }];
 const vv = id => $("#" + id);
 function visitors() { return store.get("visitors", KNOWN0); }
+/* 메일의 방문 일시 문장을 "YYYY-MM-DDTHH:MM"으로 읽는다. 읽는 모양: 2026-11-06 14:00 · 2026.11.06 오후 2시 · 11월 6일 오후 두시 반 · 11/06 14시 30분 · 내일 오전 10시 · 2pm.
+   날짜가 없으면 메일 전체(제목 등)에서 찾고, 그래도 없으면 오늘로 둔다. 오전/오후 표시가 없는 1~6시는 업무 시간으로 보고 오후로 읽는다. 읽은 방법은 note에 돌려준다. */
+const KHOUR = { 한: 1, 두: 2, 세: 3, 네: 4, 다섯: 5, 여섯: 6, 일곱: 7, 여덟: 8, 아홉: 9, 열: 10, 열한: 11, 열두: 12 };
+function parseWhen(s, full) {
+  const now = new Date(), Y = now.getFullYear(), p2 = n => String(n).padStart(2, "0"), notes = [];
+  let rest = String(s || ""), y, mo, d;
+  const find = (str, cut) => {
+    let m;
+    if ((m = str.match(/(\d{4})\s*[-./년]\s*(\d{1,2})\s*[-./월]\s*(\d{1,2})\s*일?/))) return { y: +m[1], mo: +m[2], d: +m[3], t: m[0] };
+    if ((m = str.match(/(\d{1,2})\s*월\s*(\d{1,2})\s*일?/))) return { y: Y, mo: +m[1], d: +m[2], t: m[0] };
+    if ((m = str.match(/(?<![\d:])(\d{1,2})\s*[\/.]\s*(\d{1,2})(?![\d:])/))) return { y: Y, mo: +m[1], d: +m[2], t: m[0] };
+    if ((m = str.match(/오늘|내일|모레/))) { const t = new Date(now.getFullYear(), now.getMonth(), now.getDate() + { 오늘: 0, 내일: 1, 모레: 2 }[m[0]]); return { y: t.getFullYear(), mo: t.getMonth() + 1, d: t.getDate(), t: m[0], rel: m[0] }; }
+    return null;
+  };
+  let dt = find(rest); if (dt) rest = rest.replace(dt.t, " ");
+  if (!dt && full) { dt = find(full); if (dt) notes.push("날짜는 메일 제목에서 읽음"); }
+  if (!dt) { dt = { y: Y, mo: now.getMonth() + 1, d: now.getDate() }; notes.push("날짜가 없어 오늘로 넣음"); }
+  const per = (rest.match(/오전|오후|아침|낮|저녁|밤|새벽|a\.?m\.?|p\.?m\.?/i) || [""])[0].toLowerCase();
+  const pm = /오후|낮|저녁|밤|^p/.test(per), am = /오전|아침|새벽|^a/.test(per);
+  let h = null, mi = 0, m;
+  if (/정오/.test(rest)) { h = 12; }
+  else if ((m = rest.match(/(\d{1,2})\s*:\s*(\d{2})/))) { h = +m[1]; mi = +m[2]; }
+  else if ((m = rest.match(/(열한|열두|열|한|두|세|네|다섯|여섯|일곱|여덟|아홉)\s*시\s*(?:(반)|(\d{1,2})\s*분)?/))) { h = KHOUR[m[1]]; mi = m[2] ? 30 : +(m[3] || 0); }
+  else if ((m = rest.match(/(\d{1,2})\s*시\s*(?:(반)|(\d{1,2})\s*분)?/))) { h = +m[1]; mi = m[2] ? 30 : +(m[3] || 0); }
+  else if ((m = rest.match(/(\d{1,2})\s*(?:a\.?m\.?|p\.?m\.?)/i))) { h = +m[1]; }
+  if (h == null || h > 24 || mi > 59) return { when: "", note: "시각을 읽지 못했습니다" };
+  if (pm && h < 12) h += 12; else if (am && h === 12) h = 0;
+  else if (!pm && !am && h >= 1 && h <= 6 && !/:/.test(rest) && !/^\d{2}\s*시/.test(rest.trim())) { h += 12; notes.push("오전/오후 표시가 없어 오후로 읽음"); }
+  if (h === 24) h = 0;
+  return { when: `${dt.y}-${p2(dt.mo)}-${p2(dt.d)}T${p2(h)}:${p2(mi)}`, note: notes.join(" · ") };
+}
 function parseMail(text) {
   const get = k => { const m = text.match(new RegExp("^\\s*" + k + "\\s*[:：]\\s*(.+)$", "m")); return m ? m[1].trim() : ""; };
   const who = get("방문자"), m = who.match(/^(.+?)\s*[\(（](.+?)[\)）]\s*$/);
   const yes = v => /필요|예|Y/i.test(v);
-  return { name: m ? m[1] : who, org: m ? m[2] : "", when: get("방문예정일시").replace(" ", "T"), center: get("방문센터"), purpose: get("방문목적"), place: get("방문장소"), park: yes(get("주차")), key: yes(get("서버실 출입키")) };
+  const wr = get("방문예정일시") || get("방문 예정 일시") || get("방문일시") || get("방문 일시") || get("방문일") || get("일시"), pw = parseWhen(wr, text);
+  return { name: m ? m[1] : who, org: m ? m[2] : "", when: pw.when, whenNote: wr ? (pw.when ? pw.note : pw.note + (wr ? ` (메일에 적힌 말: "${wr}")` : "")) : "방문 일시 줄이 없습니다", whenRaw: wr, center: get("방문센터"), purpose: get("방문목적"), place: get("방문장소"), park: yes(get("주차")), key: yes(get("서버실 출입키")) };
 }
 function vWho() {
   const n = vv("vName").value.trim(), o = vv("vOrg").value.trim();
@@ -665,6 +697,7 @@ function renderVisits() {
     const p = parseMail(vv("vMail").value);
     vv("vName").value = p.name; vv("vOrg").value = p.org; vv("vWhen").value = p.when; vv("vCenter").value = p.center;
     vv("vPurpose").value = p.purpose; vv("vPlace").value = p.place; vv("vPark").checked = p.park; vv("vKey").checked = p.key; vWho();
+    vv("vParseMsg").innerHTML = p.when ? `<span class="tag ok">읽은 일시 ${p.when.replace("T", " ")}</span>${p.whenNote ? ` <span class="muted">${esc(p.whenNote)}</span>` : ""}` : `<span class="tag crit">일시를 읽지 못했습니다</span> <span class="muted">${esc(p.whenNote)} · 오른쪽 방문예정일시 칸에서 직접 고르세요</span>`;
   };
   ["vName", "vOrg"].forEach(id => vv(id).addEventListener("input", vWho));
   vv("vReg").onclick = () => {

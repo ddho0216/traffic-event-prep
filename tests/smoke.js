@@ -594,7 +594,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('서버실-3D: "전원·냉방 설비" 버튼이 UPS·분전반·항온항습기(3개)를 보여 주고 UPS 설명이 오른쪽에 나옴', fc.fac === 'UPS-A' && fc.n === 3 && fc.tx > 4 && fc.panel.includes('무정전전원장치') && fc.panel.includes('가상'), JSON.stringify(fc));
   await page.click('#glFit'); await flyDone();
   const vr = await page.evaluate(() => document.querySelector('#appVer').textContent);
-  check('화면 위에 버전 표시(v2.13.3)가 있음', vr === 'v2.13.3', vr);
+  check('화면 위에 버전 표시(v2.13.4)가 있음', vr === 'v2.13.4', vr);
   await page.mouse.move(cv.x + 300, cv.y + 300); await page.mouse.down(); await page.mouse.move(cv.x + 420, cv.y + 300, { steps: 5 }); await page.mouse.up();
   const az = await page.evaluate(() => G.cs.az);
   check('서버실-3D: 드래그하면 시점이 회전하고 좌우 70도를 넘지 않음', Math.abs(az) > 5 && Math.abs(az) <= 70, az);
@@ -938,6 +938,17 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('#vTbl [data-del="0"]');
   const vDel = await page.evaluate(() => ({ n: JSON.parse(localStorage.getItem('visits') || '[]').length, rows: document.querySelectorAll('#vTbl [data-del]').length, reply: document.querySelector('#vReply').value, empty: document.querySelector('#vTbl').textContent.includes('아직 등록한 방문이 없습니다') }));
   check('방문 신청 삭제: 한 번 더 누르면 그 줄이 지워지고, 떠 있던 그 방문의 회신 초안도 비워짐', vDel.n === vc0 - 1 && vDel.rows === vc0 - 1 && vDel.reply === '' && (vc0 > 1 || vDel.empty), JSON.stringify(vDel));
+  const whenCases = [['2026-11-06 14:00', '2026-11-06T14:00'], ['2026-11-06 오후 2시', '2026-11-06T14:00'], ['2026.11.06 오후 두시', '2026-11-06T14:00'], ['11월 6일 오후 두시 반', '2026-11-06T14:30'], ['11/06 14시 30분', '2026-11-06T14:30'], ['2026-11-06 2pm', '2026-11-06T14:00'], ['2026-11-06 오전 열한시', '2026-11-06T11:00'], ['2026-11-06 저녁 7시 30분', '2026-11-06T19:30'], ['2026-11-06 3시', '2026-11-06T15:00']];
+  const whenGot = [];
+  for (const [txt] of whenCases) {
+    await page.fill('#vMail', `제목: 방문 신청 - 11/06 센터 방문\n방문자: 김가상 (예시전자)\n방문예정일시: ${txt}\n방문목적: 서버 증설 작업`);
+    await page.click('#vParse'); whenGot.push(await page.inputValue('#vWhen'));
+  }
+  check('받은 메일의 방문예정일시를 14:00 형식이 아니어도 읽음 (오후 2시·오후 두시·두시 반·14시 30분·2pm·저녁 7시 30분·표시 없는 3시=오후)', JSON.stringify(whenGot) === JSON.stringify(whenCases.map(c => c[1])), JSON.stringify(whenGot));
+  await page.fill('#vMail', '방문자: 김가상 (예시전자)\n방문예정일시: 곧 갈게요\n방문목적: 점검'); await page.click('#vParse');
+  check('일시를 읽지 못하면 칸을 비우고 "읽지 못했습니다, 직접 고르세요"라고 알려 줌', (await page.inputValue('#vWhen')) === '' && (await page.locator('#vParseMsg').innerText()).includes('읽지 못했습니다'));
+  await page.click('#vSample'); await page.click('#vParse');
+  check('예시 메일은 그대로 읽히고 "읽은 일시 2026-11-06 14:00"이 표시됨', (await page.inputValue('#vWhen')) === '2026-11-06T14:00' && (await page.locator('#vParseMsg').innerText()).includes('2026-11-06 14:00'));
   await page.click('#vParse'); await page.click('#vReg');
 
   await goTab('term');
