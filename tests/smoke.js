@@ -594,7 +594,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('서버실-3D: "전원·냉방 설비" 버튼이 UPS·분전반·항온항습기(3개)를 보여 주고 UPS 설명이 오른쪽에 나옴', fc.fac === 'UPS-A' && fc.n === 3 && fc.tx > 4 && fc.panel.includes('무정전전원장치') && fc.panel.includes('가상'), JSON.stringify(fc));
   await page.click('#glFit'); await flyDone();
   const vr = await page.evaluate(() => document.querySelector('#appVer').textContent);
-  check('화면 위에 버전 표시(v2.13.2)가 있음', vr === 'v2.13.2', vr);
+  check('화면 위에 버전 표시(v2.13.3)가 있음', vr === 'v2.13.3', vr);
   await page.mouse.move(cv.x + 300, cv.y + 300); await page.mouse.down(); await page.mouse.move(cv.x + 420, cv.y + 300, { steps: 5 }); await page.mouse.up();
   const az = await page.evaluate(() => G.cs.az);
   check('서버실-3D: 드래그하면 시점이 회전하고 좌우 70도를 넘지 않음', Math.abs(az) > 5 && Math.abs(az) <= 70, az);
@@ -931,6 +931,14 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.click('#vParse');
   await page.click('#vReg');
   check('방문 등록 후 회신 초안이 생김', (await page.locator('#vReply').inputValue()).includes('방문 등록 완료'));
+  const vc0 = await page.locator('#vTbl tr button[data-del]').count();
+  await page.click('#vTbl [data-del="0"]');
+  const vArm = await page.evaluate(() => ({ n: JSON.parse(localStorage.getItem('visits') || '[]').length, txt: document.querySelector('#vTbl [data-del="0"]').textContent }));
+  check('방문 신청 삭제: 한 번 누르면 바로 지워지지 않고 "한 번 더 누르면 삭제"로 바뀜 (실수 방지)', vc0 >= 1 && vArm.n === vc0 && vArm.txt.includes('한 번 더'), JSON.stringify([vc0, vArm]));
+  await page.click('#vTbl [data-del="0"]');
+  const vDel = await page.evaluate(() => ({ n: JSON.parse(localStorage.getItem('visits') || '[]').length, rows: document.querySelectorAll('#vTbl [data-del]').length, reply: document.querySelector('#vReply').value, empty: document.querySelector('#vTbl').textContent.includes('아직 등록한 방문이 없습니다') }));
+  check('방문 신청 삭제: 한 번 더 누르면 그 줄이 지워지고, 떠 있던 그 방문의 회신 초안도 비워짐', vDel.n === vc0 - 1 && vDel.rows === vc0 - 1 && vDel.reply === '' && (vc0 > 1 || vDel.empty), JSON.stringify(vDel));
+  await page.click('#vParse'); await page.click('#vReg');
 
   await goTab('term');
   const opts = async () => (await page.locator('#devSel option').allInnerTexts()).map(o => o.split(' · ')[0]);

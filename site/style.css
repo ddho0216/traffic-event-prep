@@ -495,3 +495,6 @@ nav.tabs .grpbtn{cursor:default}nav.tabs .grpbtn:hover{color:var(--text)}
 @media (max-width:1000px){.lv-bar{grid-template-columns:minmax(0,1fr)}.lv-bar h2,.lv-bar>.muted,.lv-bar .lv-clock,.lv-bar>.seg,.lv-bar>.scn-wrap,.lv-bar .lv-ctl{grid-column:1;grid-row:auto;justify-self:start}.lv-bar h2{white-space:normal;flex-wrap:wrap}}
 
 .scn-wrap{display:none}
+
+.btn.danger{border-color:#e5604d;color:#ff8d92}
+#vTbl td:last-child{white-space:nowrap}

@@ -656,7 +656,7 @@ function replyText(r) {
 function renderVisits() {
   const v = store.get("visits", []);
   vv("vTbl").innerHTML = `<tr><th>방문예정</th><th>방문자</th><th>소속</th><th>장소</th><th>주차</th><th>키</th><th>구분</th><th></th></tr>` +
-    (v.length ? v.map((r, i) => `<tr><td>${r.when.replace("T", " ")}</td><td>${esc(r.name)}</td><td>${esc(r.org)}</td><td>${esc(r.place)}</td><td>${r.park ? "O" : "-"}</td><td>${r.key ? "O" : "-"}</td><td>${r.isNew ? '<span class="tag warn">신규 출입자</span>' : '<span class="tag ok">기존</span>'}</td><td><button class="btn sm" data-reply="${i}">회신 보기</button></td></tr>`).join("") : `<tr><td colspan="8" class="muted">아직 등록한 방문이 없습니다.</td></tr>`);
+    (v.length ? v.map((r, i) => `<tr><td>${r.when.replace("T", " ")}</td><td>${esc(r.name)}</td><td>${esc(r.org)}</td><td>${esc(r.place)}</td><td>${r.park ? "O" : "-"}</td><td>${r.key ? "O" : "-"}</td><td>${r.isNew ? '<span class="tag warn">신규 출입자</span>' : '<span class="tag ok">기존</span>'}</td><td><button class="btn sm" data-reply="${i}">회신 보기</button> <button class="btn sm" data-del="${i}" title="이 방문 기록을 지웁니다">삭제</button></td></tr>`).join("") : `<tr><td colspan="8" class="muted">아직 등록한 방문이 없습니다.</td></tr>`);
 }
 (function initVisit() {
   vv("vMail").value = SAMPLE_MAIL;
@@ -675,7 +675,17 @@ function renderVisits() {
     store.set("visits", store.get("visits", []).concat([r]));
     vv("vReply").value = replyText(r); renderVisits(); renderTasks(); vWho();
   };
-  vv("vTbl").addEventListener("click", e => { const b = e.target.closest("[data-reply]"); if (b) vv("vReply").value = replyText(store.get("visits", [])[+b.dataset.reply]); });
+  let delArm = null, delTimer = null;   // 삭제는 두 번 눌러야 지워진다 (실수 방지, 3초 안에 한 번 더)
+  vv("vTbl").addEventListener("click", e => {
+    const b = e.target.closest("[data-reply]"); if (b) { vv("vReply").value = replyText(store.get("visits", [])[+b.dataset.reply]); return; }
+    const d = e.target.closest("[data-del]"); if (!d) return;
+    const i = +d.dataset.del;
+    if (delArm !== i) { delArm = i; d.textContent = "한 번 더 누르면 삭제"; d.classList.add("danger"); clearTimeout(delTimer); delTimer = setTimeout(() => { delArm = null; renderVisits(); }, 3000); return; }
+    clearTimeout(delTimer); delArm = null;
+    const all = store.get("visits", []), gone = all[i]; if (!gone) return;
+    if (vv("vReply").value === replyText(gone)) vv("vReply").value = "";   // 지운 방문의 회신 초안이 떠 있으면 같이 비운다
+    store.set("visits", all.filter((_, k) => k !== i)); renderVisits(); renderTasks(); vWho();
+  });
   renderVisits();
 })();
 
