@@ -56,7 +56,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await goTo('2026-10-21T14:35');
   check('회선 다운 구간에서 IDC_A_FS1_UP1 패널에 급감 표시', (await page.locator('#p-IDC_A_FS1_UP1 .chip').innerText()) === '급감');
 
-  await goTo('2026-10-02T22:05', 36);
+  await goTo('2026-10-03T21:35', 36);
   const marks = await page.locator('#p-IDC_B_FS1_UP1 svg text', { hasText: '하프타임' }).count()
     + await page.locator('#p-IDC_B_FS1_UP1 svg text', { hasText: '하이드레이션' }).count();
   check('경기 시간대에서 하이드레이션·하프타임 표시', marks >= 2, String(marks));
@@ -392,8 +392,8 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('전주 데이터가 없는 구간(9/11 08:00 ~ 9/12 08:00)은 전주 값을 "-"로 표시', (await page.inputValue('#smDraft')).includes('- 센터 업링크(400G): -'));
   await page.click('#smKind [data-k=event]');
   const re = await page.inputValue('#smDraft');
-  check('이벤트 최대 트래픽 보고: 제목 "[2026 아이치·나고야 아시안게임] 9월 27일 축구 8강 중 최대 트래픽", ■ 백본 트래픽·■ 고객 트래픽·■ 서비스 영향·■ VOC', /\[2026 아이치·나고야 아시안게임\] 9월 27일 축구 8강 중 최대 트래픽/.test(re) && ['■ 백본 트래픽', '■ 고객 트래픽', '■ 서비스 영향 : 서비스 및 DDoS 특이사항 없음', '■ VOC : 없음'].every(w => re.includes(w)));
-  const calcEv = await page.evaluate(() => { const ev = DATA.events.find(e => e.name === '축구 8강'), up = LINKS.filter(l => l.id.split('_')[1] === 'S' && /_UP\d$/.test(l.id)), idx = ms => Math.floor((ms - T0) / STEP), s0 = parseT(ev.start), e0 = parseT(ev.end), mx = sh => { let m = 0; for (let i = idx(s0 - sh); i <= idx(e0 - sh); i++) { let v = 0; up.forEach(l => { v += l.out[i]; }); m = Math.max(m, v); } return m; }, now = mx(0), prev = mx(7 * 86400000); return `- 서초 : ${now.toFixed(1)}G / 400G (사용률 ${(now / 400 * 100).toFixed(1)}% 전주 MAX 대비 ${Math.abs(now - prev).toFixed(1)}G ${now >= prev ? '증가' : '감소'})`; });
+  check('이벤트 최대 트래픽 보고: 제목 "[2026 아이치·나고야 아시안게임] 9월 25일 축구 8강 중 최대 트래픽", ■ 백본 트래픽·■ 고객 트래픽·■ 서비스 영향·■ VOC', /\[2026 아이치·나고야 아시안게임\] 9월 25일 축구 8강 중 최대 트래픽/.test(re) && ['■ 백본 트래픽', '■ 고객 트래픽', '■ 서비스 영향 : 서비스 및 DDoS 특이사항 없음', '■ VOC : 없음'].every(w => re.includes(w)));
+  const calcEv = await page.evaluate(() => { const ev = DATA.events.find(e => e.name === '축구 8강'), up = LINKS.filter(l => l.id.split('_')[1] === 'S' && /_UP\d$/.test(l.id)), idx = ms => Math.floor((ms - T0) / STEP), s0 = parseT(ev.start), e0 = parseT(ev.end), mx = sh => { let m = 0; for (let i = idx(s0 - sh); i <= idx(e0 - sh); i++) { let v = 0; up.forEach(l => { v += l.out[i]; }); m = Math.max(m, v); } return m; }, now = mx(0), prev = mx(7 * 86400000); const d = Math.abs(now - prev), fd = d >= 1 ? d.toFixed(1) + 'G' : d >= 0.001 ? (d * 1000).toFixed(1) + 'M' : (d * 1e6).toFixed(1) + 'K'; return `- 서초 : ${now.toFixed(1)}G / 400G (사용률 ${(now / 400 * 100).toFixed(1)}% 전주 MAX 대비 ${fd} ${now >= prev ? '증가' : '감소'})`; });
   check('서초 백본 줄(최대·용량·사용률%·전주 MAX 대비 증감)이 데이터에서 따로 계산한 값과 같음', re.includes(calcEv), calcEv);
   check('보고 문자도 오른쪽 휴대폰에 받는 사람 화면으로 바로 보임', (await page.locator('#iphBody').innerText()).includes('중 최대 트래픽'));
   await page.click('#smKind [data-k=incident]');
@@ -594,7 +594,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('서버실-3D: "전원·냉방 설비" 버튼이 UPS·분전반·항온항습기(3개)를 보여 주고 UPS 설명이 오른쪽에 나옴', fc.fac === 'UPS-A' && fc.n === 3 && fc.tx > 4 && fc.panel.includes('무정전전원장치') && fc.panel.includes('가상'), JSON.stringify(fc));
   await page.click('#glFit'); await flyDone();
   const vr = await page.evaluate(() => document.querySelector('#appVer').textContent);
-  check('화면 위에 버전 표시(v2.13.4)가 있음', vr === 'v2.13.4', vr);
+  check('화면 위에 버전 표시(v2.13.5)가 있음', vr === 'v2.13.5', vr);
   await page.mouse.move(cv.x + 300, cv.y + 300); await page.mouse.down(); await page.mouse.move(cv.x + 420, cv.y + 300, { steps: 5 }); await page.mouse.up();
   const az = await page.evaluate(() => G.cs.az);
   check('서버실-3D: 드래그하면 시점이 회전하고 좌우 70도를 넘지 않음', Math.abs(az) > 5 && Math.abs(az) <= 70, az);
