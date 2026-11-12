@@ -528,12 +528,38 @@ function renderEvNotice(ev, calc) {   // 고객사 버튼 + 고른 고객사 통
   $("#evNotice").value = list[evNoticeSel].text;
   $("#evCopy").textContent = list[evNoticeSel].name ? `${list[evNoticeSel].name} 통보문 복사` : "통보문 복사";
 }
+/* 이벤트 대비 진행 단계: 5단계마다 완료 / 진행 중 / 대기 / 확인 필요를 계산한다 (데이터 + 체크리스트 + 당일 모니터링을 본 적이 있는지로 판단).
+   확인 필요 = 사람이 눈으로 봐야 하는 것 (분산할 곳이 부족하거나, 분산 없이는 경고선을 넘었을 결과). 진행 중 = 아직 안 끝난 첫 단계. */
+const EVST = { done: "완료", now: "진행 중", wait: "대기", check: "확인 필요" };
+function evSteps(ev, calc) {
+  calc = calc || evCalc(ev);
+  const chk = new Set(store.get("chk:" + ev.id, [])), seen = !!store.get("evmon:" + ev.id, false);
+  const crit = calc.rows.filter(r => r.level === "crit").length, warn = calc.rows.filter(r => r.level === "warn").length, bad = calc.moves.filter(m => !m.ok).length;
+  const top = calc.rows.filter(r => r.f !== 1).sort((a, b) => b.act / b.l.cap - a.act / a.l.cap)[0], topU = top ? top.act / top.l.cap : 0;
+  const nn = evNoticeList(ev, calc).filter(x => x.name).length;
+  const st = [
+    { t: "사전 계획", s: "done", d: `링크 ${calc.rows.length}개 · 분산 필요 ${crit}개${warn ? ` · 주의 ${warn}개` : ""}`, to: "evS1" },
+    { t: "분산 제안", s: !calc.moves.length ? "done" : bad ? "check" : "done", d: !calc.moves.length ? "분산할 링크 없음" : bad ? `여유 회선 부족 ${bad}건` : `분산 ${calc.moves.length}건 · 옮길 곳 있음`, to: "evS2" },
+    { t: "고객사 통보", s: !calc.moves.length || chk.has(0) ? "done" : "wait", d: !calc.moves.length ? "통보 필요 없음" : chk.has(0) ? "사전 연락 완료" : `${nn}곳에 보낼 통보문`, to: "evS3" },
+    { t: "당일 모니터링", s: seen ? "done" : "wait", d: seen ? "슬라이드 확인함" : "아직 안 봄", to: "evS4" },
+    { t: "사후 정리", s: topU >= 0.8 ? "check" : chk.has(5) ? "done" : "wait", d: topU >= 0.8 ? `실제 ${(topU * 100).toFixed(0)}% · 분산 없었다면 경고선 초과` : chk.has(5) ? "고객사 회신 확인" : `실제 최대 ${(topU * 100).toFixed(0)}% · 회신 확인 전`, to: "evS5" }
+  ];
+  const first = st.findIndex(x => x.s === "wait"); if (first >= 0) st[first].s = "now";
+  return st;
+}
+const ubar = (u, cls) => `<span class="ubar${cls ? " " + cls : ""}" title="용량 대비 ${(u * 100).toFixed(0)}% (70% 선: 분산 기준, 80% 선: 경고선)"><i class="${u >= 0.8 ? "crit" : u >= MOVE_LIMIT ? "warn" : "ok"}" style="width:${Math.min(100, u * 100)}%"></i><b class="m70"></b><b class="m80"></b></span>`;
+function renderEvStepper(ev, calc) {
+  const st = evSteps(ev, calc);
+  $("#evStepper").innerHTML = st.map((x, i) => `<button type="button" class="evst ${x.s}" data-to="${x.to}"><span class="evn">${x.s === "done" ? "✓" : x.s === "check" ? "!" : i + 1}</span><span class="evt"><b>${x.t}</b><span class="tag ${x.s === "done" ? "ok" : x.s === "check" ? "warn" : x.s === "now" ? "now" : ""}">${EVST[x.s]}</span></span><span class="evd">${esc(x.d)}</span></button>`).join("");
+}
+function evStepsRefresh() { const ev = DATA.events[$("#evSel").selectedIndex]; renderEvStepper(ev); renderEvList(); }
+const EVKIND = { ceremony: "개·폐회식", game: "경기", match: "축구" };
 function renderEvList() {
   const sel = $("#evSel").selectedIndex;
-  $("#evList").innerHTML = `<tr><th>이벤트</th><th>시작</th><th class="c">예상 배율</th><th>분산 필요 링크</th><th class="c">실제 최대 사용률</th><th class="c">사후 판정</th><th class="c">기록</th></tr>` +
+  $("#evList").innerHTML = `<tr><th>이벤트</th><th>시작</th><th class="c">예상 배율</th><th>분산 필요 링크</th><th class="c">실제 최대 사용률</th><th class="c">사후 판정</th><th class="c">대비 진행</th><th class="c">기록</th></tr>` +
     DATA.events.map((ev, i) => {
       const c = evCalc(ev), top = c.rows.filter(r => r.f !== 1).sort((a, b) => b.act / b.l.cap - a.act / a.l.cap)[0], u = top.act / top.l.cap * 100;
-      return `<tr class="click ${i === sel ? "sel" : ""}" data-i="${i}" title="눌러서 이 이벤트의 대비 기록 보기"><td>${i === sel ? "▶ " : ""}${esc(ev.name)}</td><td>${md(msOf(c.s))}</td><td class="c">×${ev.expected}</td><td>${c.moves.map(m => m.r.l.id).join(", ") || "-"}</td><td class="c">${u.toFixed(0)}% (${top.l.id})</td><td class="c">${u >= 80 ? '<span class="tag crit">경고선 초과</span>' : u >= 70 ? '<span class="tag warn">주의</span>' : '<span class="tag ok">여유</span>'}</td><td class="c evgo">${i === sel ? "선택됨 ✓" : "보기 ›"}</td></tr>`;
+      return `<tr class="click ${i === sel ? "sel" : ""}" data-i="${i}" title="눌러서 이 이벤트의 대비 기록 보기"><td>${i === sel ? "▶ " : ""}${esc(ev.name)}${EVKIND[ev.kind] ? ` <span class="tag">${EVKIND[ev.kind]}</span>` : ""}</td><td>${md(msOf(c.s))}</td><td class="c">×${ev.expected}</td><td>${c.moves.map(m => m.r.l.id).join(", ") || "-"}</td><td class="c"><span class="ucell">${ubar(u / 100)}<span>${u.toFixed(0)}% <span class="muted">${top.l.id}</span></span></span></td><td class="c">${u >= 80 ? '<span class="tag crit">경고선 초과</span>' : u >= 70 ? '<span class="tag warn">주의</span>' : '<span class="tag ok">여유</span>'}</td><td class="c">${(() => { const ss = evSteps(ev, c), dn = ss.filter(x => x.s === "done").length, ck = ss.some(x => x.s === "check"); return `<span class="evdots" title="${ss.map(x => x.t + ": " + EVST[x.s]).join(" / ")}">${ss.map(x => `<i class="${x.s}"></i>`).join("")}</span> <span class="${ck ? "crit-t" : "muted"}">${dn}/5${ck ? " · 확인" : ""}</span>`; })()}</td><td class="c evgo">${i === sel ? "선택됨 ✓" : "보기 ›"}</td></tr>`;
     }).join("");
 }
 function renderEvent() {
@@ -543,7 +569,7 @@ function renderEvent() {
   $("#evSelBanner").innerHTML = `<b>선택한 이벤트 · ${esc(ev.name)} (${md(msOf(calc.s))})</b> <span class="muted">아래는 이 이벤트의 대비 기록입니다 (사전 계획 → 분산 제안 → 통보문 → 당일 모니터링 → 사후 정리 → 보고 문자)</span>`;
   const lv = { crit: ["분산 필요", "crit"], warn: ["주의", "warn"], ok: ["정상", "ok"] };
   $("#evPlan").innerHTML = `<tr><th>링크</th><th class="n">평소 최대</th><th class="n">배율</th><th class="n">예상 최대</th><th class="n">용량</th><th class="n">예상 사용률</th><th>판정</th></tr>` +
-    calc.rows.map(r => `<tr><td>${r.l.id} <span class="muted">${esc(r.l.desc)}</span></td><td class="n">${r.base.toFixed(1)}</td><td class="n">${r.f === 1 ? "-" : "×" + r.f}</td><td class="n">${r.exp.toFixed(1)}</td><td class="n">${r.l.cap}</td><td class="n">${(r.util * 100).toFixed(0)}%</td><td><span class="tag ${lv[r.level][1]}">${lv[r.level][0]}</span></td></tr>`).join("");
+    calc.rows.map(r => `<tr><td>${r.l.id} <span class="muted">${esc(r.l.desc)}</span></td><td class="n">${r.base.toFixed(1)}</td><td class="n">${r.f === 1 ? "-" : "×" + r.f}</td><td class="n">${r.exp.toFixed(1)}</td><td class="n">${r.l.cap}</td><td class="n"><span class="ucell r">${ubar(r.util)}<span>${(r.util * 100).toFixed(0)}%</span></span></td><td><span class="tag ${lv[r.level][1]}">${lv[r.level][0]}</span></td></tr>`).join("");
   $("#evMove").innerHTML = `<div class="note">이 이벤트에서 <b>어느 회선의 트래픽을 얼마나, 어디로 옮기기로 했는지</b>를 보여 줍니다. 예상 사용률이 ${Math.round(MOVE_LIMIT * 100)}% 이상인 회선은 경고선(80%)에 닿기 전에 미리 일부를 덜어 내고, 덜어 낸 뒤 ${Math.round(TARGET * 100)}% 이하가 되게 합니다. 옮길 후보는 같은 센터의 여유 있는 회선을 먼저 보고, 다른 센터면 협의가 필요하다고 표시합니다.</div>` +
     (calc.moves.length ? calc.moves.map(m => `<p><b>${m.r.l.id}</b>: 예상 ${m.r.exp.toFixed(0)}G → 약 <b>${Math.max(1, Math.ceil(m.need))}G</b> 덜어내기. ` +
       (m.best ? `후보 <b>${m.best.c.l.id}</b> (${CENTER(m.best.c.l.id)}, 여유 약 ${m.best.spare.toFixed(0)}G) ${m.ok ? '<span class="tag ok">가능</span>' : '<span class="tag warn">여유 부족</span>'}${CENTER(m.best.c.l.id) !== CENTER(m.r.l.id) ? ' <span class="muted">다른 센터라 협의 필요</span>' : ""}` : '<span class="tag crit">후보 없음</span> 증설·서비스 협의 필요') + "</p>").join("") : "<p>분산이 필요한 링크가 없습니다.</p>");
@@ -552,11 +578,12 @@ function renderEvent() {
   $("#evPost").innerHTML = `<tr><th>링크</th><th class="n">예상 최대</th><th class="n">실제 최대</th><th class="n">차이</th><th class="n">실제 사용률</th><th>비고</th></tr>` +
     calc.rows.filter(r => r.f !== 1).map(r => {
       const diff = (r.act / r.exp - 1) * 100, u = r.act / r.l.cap * 100;
-      return `<tr><td>${r.l.id}</td><td class="n">${r.exp.toFixed(1)}</td><td class="n">${r.act.toFixed(1)}</td><td class="n ${diff > 5 ? "crit-t" : ""}">${diff > 0 ? "+" : ""}${diff.toFixed(0)}%</td><td class="n">${u.toFixed(0)}%</td><td>${u >= 80 ? '<span class="tag crit">경고선 초과 (분산 없었다면)</span> ' : ""}${diff > 5 ? "예상보다 큼" : diff < -5 ? "예상보다 작음" : "예상과 비슷"}</td></tr>`;
+      return `<tr><td>${r.l.id}</td><td class="n">${r.exp.toFixed(1)}</td><td class="n">${r.act.toFixed(1)}</td><td class="n ${diff > 5 ? "crit-t" : ""}">${diff > 0 ? "+" : ""}${diff.toFixed(0)}%</td><td class="n"><span class="ucell r">${ubar(u / 100)}<span>${u.toFixed(0)}%</span></span></td><td>${u >= 80 ? '<span class="tag crit">경고선 초과 (분산 없었다면)</span> ' : ""}${diff > 5 ? "예상보다 큼" : diff < -5 ? "예상보다 작음" : "예상과 비슷"}</td></tr>`;
     }).join("");
   const worst = calc.rows.filter(r => r.f !== 1).sort((a, b) => Math.abs(b.act / b.exp - 1) - Math.abs(a.act / a.exp - 1))[0];
   $("#evSummary").textContent = worst ? `가장 크게 어긋난 링크는 ${worst.l.id}: 예상 ${worst.exp.toFixed(0)}G, 실제 ${worst.act.toFixed(0)}G (${((worst.act / worst.exp - 1) * 100).toFixed(0)}%). 다음에 같은 유형의 이벤트는 배율을 ×${(1 + (worst.act - worst.base) / refPeak(worst.l)).toFixed(1)} 정도로 잡는 것을 제안합니다.` : "";
   const done = new Set(store.get("chk:" + ev.id, []));
+  renderEvStepper(ev, calc);
   renderEvList();
   $("#evCheck").innerHTML = CHECK_ITEMS.map((t, i) => `<label class="chk" style="display:flex;margin:4px 0"><input type="checkbox" data-i="${i}" ${done.has(i) ? "checked" : ""}> ${t}</label>`).join("");
 }
@@ -614,12 +641,13 @@ function evPicked() {   // 이벤트를 고르면 아래 기록이 그 이벤트
   $("#evReportPhone").onclick = () => { const ev = DATA.events[$("#evSel").selectedIndex]; openPhone($("#evReport").value, hm(parseT(ev.end) + 40 * 60000)); };
   $("#evReportCopy").onclick = async () => { try { await navigator.clipboard.writeText($("#evReport").value); $("#evReportMsg").textContent = "복사했습니다"; } catch (e) { $("#evReport").select(); $("#evReportMsg").textContent = "선택했습니다. Ctrl+C로 복사하세요"; } };
   $("#evCopy").onclick = () => copyText($("#evNotice").value, $("#evCopy"));
-  $("#evGo").onclick = () => openEvMon(0);
+  $("#evGo").onclick = () => { store.set("evmon:" + DATA.events[$("#evSel").selectedIndex].id, true); openEvMon(0); evStepsRefresh(); };
   $("#evCheck").addEventListener("change", e => {
     const ev = DATA.events[$("#evSel").selectedIndex];
     const set = new Set(store.get("chk:" + ev.id, [])); e.target.checked ? set.add(+e.target.dataset.i) : set.delete(+e.target.dataset.i);
-    store.set("chk:" + ev.id, [...set]); renderTasks();
+    store.set("chk:" + ev.id, [...set]); renderTasks(); evStepsRefresh();
   });
+  $("#evStepper").addEventListener("click", e => { const b = e.target.closest("[data-to]"); if (b) $("#" + b.dataset.to).scrollIntoView({ behavior: "smooth", block: "start" }); });
   const first = DATA.events.findIndex(ev => evCalc(ev).moves.length > 0);
   if (first > 0) $("#evSel").selectedIndex = first;
   renderEvent();

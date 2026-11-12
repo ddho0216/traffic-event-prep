@@ -140,23 +140,23 @@
   <p class="evhint">▼ 이벤트를 눌러 보세요. 아래의 대비 기록이 그 이벤트 것으로 바뀝니다.</p>
   <div class="card" style="padding:0;margin-bottom:14px"><table id="evList"></table></div>
   <div class="evsel" id="evSelBanner"></div>
-  <div class="steps"><span>1 사전 계획</span><span>2 분산 제안</span><span>3 고객사 통보</span><span>4 당일 모니터링</span><span>5 사후 정리</span></div>
+  <div class="evstepper" id="evStepper"></div>
 
-  <h2>1. 사전 계획 <small>예상 최대 = 경기 없는 날 같은 시간대 최대(중앙값) + 평소 하루 최대 × (배율 − 1) · 이 이벤트 전날까지 가진 데이터만 사용(그때 어떻게 대비했는지 그대로 보이도록)</small></h2>
+  <h2 id="evS1">1. 사전 계획 <small>예상 최대 = 경기 없는 날 같은 시간대 최대(중앙값) + 평소 하루 최대 × (배율 − 1) · 이 이벤트 전날까지 가진 데이터만 사용(그때 어떻게 대비했는지 그대로 보이도록)</small></h2>
   <div class="card" style="padding:0"><table id="evPlan"></table></div>
 
-  <h2>2. 분산 제안</h2>
+  <h2 id="evS2">2. 분산 제안</h2>
   <div class="card" id="evMove"></div>
 
-  <h2>3. 고객사 통보문 초안 <small>고객사마다 따로 보냅니다. 버튼으로 고객사를 고르세요</small></h2>
+  <h2 id="evS3">3. 고객사 통보문 초안 <small>고객사마다 따로 보냅니다. 버튼으로 고객사를 고르세요</small></h2>
   <div class="toolbar" id="evNoticeTabs"></div>
   <textarea id="evNotice" rows="12"></textarea>
   <div class="toolbar" style="margin-top:8px"><button class="btn" id="evCopy">통보문 복사</button></div>
 
-  <h2>4. 당일 모니터링 <small>그날 관제 화면을 어떻게 맞춰 놓고 무엇을 봤는지 (슬라이드)</small></h2>
+  <h2 id="evS4">4. 당일 모니터링 <small>그날 관제 화면을 어떻게 맞춰 놓고 무엇을 봤는지 (슬라이드)</small></h2>
   <button class="btn" id="evGo">당일 모니터링 보기</button>
 
-  <h2>5. 사후 정리 <small>예상 vs 실제 (분산 조치 전 가상 데이터 기준)</small></h2>
+  <h2 id="evS5">5. 사후 정리 <small>예상 vs 실제 (분산 조치 전 가상 데이터 기준)</small></h2>
   <div class="card" style="padding:0"><table id="evPost"></table></div>
   <p id="evSummary" class="note" style="font-size:13px;color:var(--text)"></p>
 

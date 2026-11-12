@@ -410,8 +410,24 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   // 이벤트 탭 정리: 일정 표, 사전 계획 용어, 통보문(고객사별 버튼·제목 없음), 당일 모니터링 슬라이드, 보고 문자 줄 간격
   await goTab('event');
   const evx = await page.evaluate(() => ({ heads: [...document.querySelectorAll('#evList th')].map(x => x.textContent), centered: [...document.querySelectorAll('#evList tr:nth-child(2) td.c')].length, plan: document.getElementById('evPlan').innerText }));
-  check('일정 표에 "시간대" 칸이 없고 예상 배율·실제 최대 사용률·사후 판정은 가운데 정렬', !evx.heads.includes('시간대') && evx.centered === 4 && await page.evaluate(() => getComputedStyle(document.querySelector('#evList td.c')).textAlign === 'center'), evx.heads.join());
+  check('일정 표에 "시간대" 칸이 없고 예상 배율·실제 최대 사용률·사후 판정은 가운데 정렬', !evx.heads.includes('시간대') && evx.centered === 5 && await page.evaluate(() => getComputedStyle(document.querySelector('#evList td.c')).textAlign === 'center'), evx.heads.join());
   check('사전 계획에는 "큰 고객사" 대신 "주요 고객사"라고 나옴', evx.plan.includes('주요 고객사') && !evx.plan.includes('큰 고객사'));
+  const stp = await page.evaluate(() => { const ev = DATA.events[$("#evSel").selectedIndex], want = evSteps(ev), cards = [...document.querySelectorAll('#evStepper .evst')]; return { n: cards.length, titles: cards.map(c => c.querySelector('b').textContent).join(), states: cards.map(c => c.className.replace('evst ', '')).join(), want: want.map(x => x.s).join(), labels: cards.map(c => c.querySelector('.tag').textContent).join(), oneNow: cards.filter(c => c.classList.contains('now')).length <= 1, firstDone: cards[0].classList.contains('done') }; });
+  check('이벤트 대비 기록 맨 위에 5단계 진행 표시(사전 계획·분산 제안·고객사 통보·당일 모니터링·사후 정리)가 있고, 단계마다 완료/진행 중/대기/확인 필요가 데이터와 체크리스트로 계산되어 표시됨', stp.n === 5 && stp.titles === '사전 계획,분산 제안,고객사 통보,당일 모니터링,사후 정리' && stp.states === stp.want && stp.oneNow && stp.firstDone && stp.labels.split(',').every(x => ['완료', '진행 중', '대기', '확인 필요'].includes(x)), JSON.stringify(stp));
+  await page.locator('#evSel').selectOption({ label: (await page.locator('#evSel option').allTextContents()).find(x => x.startsWith('축구 결승')) });
+  const stp2 = await page.evaluate(() => [...document.querySelectorAll('#evStepper .evst')].map(c => c.className.replace('evst ', '')).join());
+  check('축구 결승(실제 90%로 경고선 초과, 분산 후보 부족)은 분산 제안·사후 정리가 "확인 필요"로 표시됨', stp2.split(',')[1] === 'check' && stp2.split(',')[4] === 'check', stp2);
+  await page.click('#evGo'); await page.click('#evMonClose');
+  const stp3 = await page.evaluate(() => [...document.querySelectorAll('#evStepper .evst')].map(c => c.className.replace('evst ', '')).join());
+  check('"당일 모니터링 보기"를 열면 4단계가 완료로 바뀌고 일정 표의 대비 진행 점도 같이 바뀜', stp3.split(',')[3] === 'done' && (await page.evaluate(() => document.querySelector('#evList tr.sel .evdots i:nth-child(4)').className)) === 'done', stp3);
+  await page.locator('#evCheck input[data-i="0"]').check();
+  const stp4 = await page.evaluate(() => [...document.querySelectorAll('#evStepper .evst')].map(c => c.className.replace('evst ', '')).join());
+  check('체크리스트의 "고객사 사전 연락"을 체크하면 3단계(고객사 통보)가 완료로 바뀜', stp4.split(',')[2] === 'done', stp4);
+  await page.locator('#evCheck input[data-i="0"]').uncheck();
+  const bars = await page.evaluate(() => { const b = document.querySelector('#evPlan .ubar'), m7 = b.querySelector('.m70').getBoundingClientRect(), m8 = b.querySelector('.m80').getBoundingClientRect(), r = b.getBoundingClientRect(); return { n: document.querySelectorAll('#evPlan .ubar').length, rows: document.querySelectorAll('#evPlan tr').length - 1, p70: (m7.left - r.left) / r.width, p80: (m8.left - r.left) / r.width, list: document.querySelectorAll('#evList .ubar').length, ev: document.querySelectorAll('#evList tr.click').length }; });
+  check('사전 계획의 예상 사용률·일정 표의 실제 최대 사용률에 막대가 있고, 70%(분산 기준)·80%(경고선) 눈금이 막대 길이의 70%·80% 자리에 있음', bars.n === bars.rows && bars.list === bars.ev && Math.abs(bars.p70 - 0.7) < 0.03 && Math.abs(bars.p80 - 0.8) < 0.03, JSON.stringify(bars));
+  const noWrap = await page.evaluate(() => [...document.querySelectorAll('#evList tr.click')].every(tr => [...tr.querySelectorAll('td.c, td:first-child')].every(td => td.getBoundingClientRect().height < 40)));
+  check('일정 표에서 이벤트 이름·판정·대비 진행이 줄바꿈 없이 한 줄로 보임', noWrap);
   await page.selectOption('#evSel', { label: (await page.locator('#evSel option').allTextContents()).find(x => x.startsWith('축구 결승')) });
   const cue = await page.evaluate(() => ({ hint: document.querySelector('.evhint').textContent, banner: document.getElementById('evSelBanner').textContent, selRow: document.querySelector('#evList tr.sel').textContent, others: [...document.querySelectorAll('#evList tr.click:not(.sel) .evgo')].every(x => x.textContent === '보기 ›') }));
   check('이벤트 일정 위에 "이벤트를 눌러 보세요" 안내가 있고, 각 줄 끝에 "보기 ›", 선택한 줄은 "▶ … 선택됨 ✓", 아래에 "선택한 이벤트 · 축구 결승"이 보임', cue.hint.includes('이벤트를 눌러 보세요') && cue.banner.includes('선택한 이벤트 · 축구 결승') && cue.selRow.includes('▶ 축구 결승') && cue.selRow.includes('선택됨 ✓') && cue.others, JSON.stringify(cue));

@@ -498,3 +498,25 @@ nav.tabs .grpbtn{cursor:default}nav.tabs .grpbtn:hover{color:var(--text)}
 
 .btn.danger{border-color:#e5604d;color:#ff8d92}
 #vTbl td:last-child{white-space:nowrap}
+
+/* 이벤트 대비 기록: 5단계 진행 표시, 사용률 막대(70% 분산 기준선·80% 경고선), 일정 표의 대비 진행 점 */
+.evstepper{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:6px 0 16px}
+.evst{all:unset;box-sizing:border-box;display:grid;grid-template-columns:26px 1fr;column-gap:8px;row-gap:3px;padding:9px 11px;border:1px solid var(--line);border-left-width:4px;border-radius:6px;background:var(--panel2);cursor:pointer}
+.evst:hover{border-color:var(--accent)}.evst:focus-visible{outline:2px solid var(--accent)}
+.evst .evn{grid-row:1/3;align-self:start;width:24px;height:24px;border-radius:50%;border:1.5px solid var(--muted);color:var(--muted);display:flex;align-items:center;justify-content:center;font:700 12px var(--mono)}
+.evst .evt{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.evst .evt b{font-size:13.5px}
+.evst .evd{font-size:12px;color:var(--muted);line-height:1.45}
+.evst.done{border-left-color:#3fa56b}.evst.done .evn{background:#3fa56b;border-color:#3fa56b;color:#fff}
+.evst.now{border-left-color:var(--accent);background:var(--info-bg)}.evst.now .evn{border-color:var(--accent);color:var(--accent)}
+.evst.check{border-left-color:#e0a33a}.evst.check .evn{background:#e0a33a;border-color:#e0a33a;color:#1b1500}
+.evst.wait{border-left-color:var(--line)}
+.tag.now{border-color:var(--accent);color:var(--accent)}
+.ubar{position:relative;display:inline-block;width:92px;height:9px;border-radius:5px;background:var(--line);vertical-align:middle;overflow:visible}
+.ubar i{position:absolute;left:0;top:0;bottom:0;border-radius:5px 0 0 5px;background:#3fa56b}.ubar i.warn{background:#e0a33a}.ubar i.crit{background:#e5604d}
+.ubar b{position:absolute;top:-3px;bottom:-3px;width:0;border-left:1.5px solid var(--muted)}.ubar b.m70{left:70%}.ubar b.m80{left:80%;border-left:1.5px dashed #e5604d}
+.ucell{display:inline-flex;align-items:center;gap:8px}.ucell.r{justify-content:flex-end}
+.evdots{display:inline-flex;gap:3px;vertical-align:middle}.evdots i{width:9px;height:9px;border-radius:50%;background:var(--line)}
+.evdots i.done{background:#3fa56b}.evdots i.now{background:var(--accent)}.evdots i.check{background:#e0a33a}
+@media (max-width:1000px){.evstepper{grid-template-columns:1fr}}
+#evList td:first-child,#evList td.c{white-space:nowrap}
+#evList td .tag{margin-left:4px;vertical-align:1px}
