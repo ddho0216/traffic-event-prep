@@ -73,7 +73,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.setViewportSize({ width: 1600, height: 900 });
 
   // 탭 순서와 센터 선택: 센터 선택은 관제·서버실에서만 보이고, 두 화면이 같은 센터로 동기화된다
-  check('위 메뉴: 관제 / 서버실▾ / 장비 터미널 / 대응▾ / 이벤트 대비 기록 / 고객 지원▾ (하위 메뉴: 서버실·서버실 3D / 내가 대응·자동 대응 / 문자 전파·방문 신청·장비 반출입·월간 자료)', JSON.stringify(await page.locator('#tabs > button, #tabs > .tabgrp > .grpbtn').allTextContents()) === JSON.stringify(['관제', '서버실', '장비 터미널', '대응', '이벤트 대비 기록', '고객 지원']) && JSON.stringify(await page.locator('#tabs .tabgrp:nth-of-type(1) .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D']) && JSON.stringify(await page.locator('#tabs .tabgrp .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D', '내가 대응 시험판', '자동 대응 시험판', '문자 전파', '방문 신청', '장비 반출입', '월간 자료']));
+  check('위 메뉴: 관제 / 서버실▾ / 장비 터미널 / 대응▾ / 이벤트 대비 기록 / 고객 지원▾ (하위 메뉴: 서버실·서버실 3D / 직접 대응·자동 대응 / 문자 전파·방문 신청·장비 반출입·월간 자료)', JSON.stringify(await page.locator('#tabs > button, #tabs > .tabgrp > .grpbtn').allTextContents()) === JSON.stringify(['관제', '서버실', '장비 터미널', '대응', '이벤트 대비 기록', '고객 지원']) && JSON.stringify(await page.locator('#tabs .tabgrp:nth-of-type(1) .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D']) && JSON.stringify(await page.locator('#tabs .tabgrp .submenu button').allTextContents()) === JSON.stringify(['서버실', '서버실 3D', '직접 대응 시험판', '자동 대응 시험판', '문자 전파', '방문 신청', '장비 반출입', '월간 자료']));
   const sub0 = await page.locator('#tabs .tabgrp >> nth=2 >> .submenu').isVisible();
   await page.hover('#tabs .tabgrp >> nth=2 >> .grpbtn');
   const sub1 = await page.locator('#tabs .tabgrp >> nth=2 >> .submenu').isVisible();
@@ -252,7 +252,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.keyboard.press('Escape');
   await page.evaluate(() => LIVE.reset(false));
   // 실시간 대응: 업링크 회선 다운 (사이트의 실제 가상 데이터, 복구 원인은 시작할 때 고름)
-  await goTab('live'); await page.click('#scnBtn'); await page.click('#scnMenu [data-scn=liveLinkDown]');
+  await goTab('live'); await page.click('#lvScen button >> nth=1');
   check('업링크 회선 다운(직접 대응)을 고르면 복구 원인(정답)을 먼저 고르는 창이 뜸', await page.locator('#scnCausePop').isVisible());
   await page.click('[data-ldcause=fiber]');
   const ld0 = await page.evaluate(() => ({ id: LIVE.scenario.id, cause: LIVE.state.cause, title: document.getElementById('lvTitle').textContent, t: LIVE.state.t, vis: !!document.querySelector('#tab-live.on') }));
@@ -294,7 +294,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('상대 작업이 원인인데 현장 교체를 요청하면 결과에 "불필요했음"으로 나옴', (await page.locator('#lvResBody').innerText()).includes('이번에는 불필요했음'));
   await page.evaluate(() => LIVE.load('ddos'));
   // 실시간 대응: 트래픽 급감 (국내 연동 IX, 사이트의 실제 가상 데이터)
-  await goTab('live'); await page.click('#scnBtn'); await page.click('#scnMenu [data-scn=liveDrop]');
+  await goTab('live'); await page.click('#lvScen button >> nth=2');
   check('트래픽 급감(직접 대응)을 고르면 실시간 대응 화면에서 바로 시작됨', (await page.evaluate(() => LIVE.scenario.id)) === 'drop' && (await page.locator('#lvTitle').innerText()) === '트래픽 급감' && (await page.evaluate(() => LIVE.state.t === LIVE.scenario.start && LIVE.scenario.alertAt - LIVE.scenario.start === 5)));   // 떨어지기 2분(가상) 전에 시작: 첫 변화까지 기다리는 시간이 짧다
   await page.evaluate(() => LIVE.jump(22));
   check('급감이 시작된 뒤에도(20:12) 알림은 아직 안 뜸 (지연 3분)', !(await page.locator('#lvAlert.hot').count()));
@@ -326,7 +326,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('끝나면 결과: 경기 일정 확인, 우회 확인, 광값 확인, 문의 3가지, 고객사 안내, 급감 구간, 문자 순서', ['경기 일정 확인', '함 (급감과 경기 하락을 구분)', '우회 확인', '우리 쪽 광값 확인', '모두 함', '고객사 안내', '급감 구간', '발생 → 완료'].every(w => drr.includes(w)), drr.replace(/\s+/g, ' ').slice(0, 90));
   await page.evaluate(() => LIVE.load('ddos'));
   // 실시간 대응: 이중화로 무사히 넘기기 (장비 한 대가 꺼져도 짝 장비가 받는다)
-  await goTab('live'); await page.click('#scnBtn'); await page.click('#scnMenu [data-scn=liveRedundancy]');
+  await goTab('live'); await page.click('#lvScen button >> nth=3');
   check('이중화(직접 대응)를 고르면 실시간 대응 화면에서 시작되고, 장비 전환 버튼(꺼진 장비·짝 장비)이 터미널에 있음', (await page.evaluate(() => LIVE.scenario.id)) === 'redundancy' && (await page.locator('#lvQ [data-dev]').count()) === 2);
   await page.evaluate(() => LIVE.jump(32));
   check('장비가 꺼진 뒤에도(03:10 직후) 알림은 아직 안 뜸', !(await page.locator('#lvAlert.hot').count()));
@@ -368,10 +368,12 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('경과 문자를 건너뛰고 완료로 보내면 결과에 "복구 직후에는 경과로 먼저 알립니다"로 나옴', (await page.locator('#lvResBody').innerText()).includes("복구 직후에는 '경과'로 먼저 알립니다"));
   await page.evaluate(() => LIVE.load('ddos'));
   // 시나리오 목록은 실시간 대응 화면에 있다: 직접 대응(실시간) 4개
-  await goTab('live'); await page.click('#scnBtn');
+  await goTab('live');
   const menuIds = await page.evaluate(() => [...document.querySelectorAll('#scnMenu [data-scn]')].map(b => b.dataset.scn));
+  const manScen = await page.evaluate(() => { const bs = [...document.querySelectorAll('#lvScen button')], r = bs.map(b => b.getBoundingClientRect()); return { names: bs.map(b => b.textContent).join(), inView: r.every(q => q.left >= 0 && q.right <= innerWidth && q.width > 0), on: bs.filter(b => b.classList.contains('primary')).length, drop: getComputedStyle(document.querySelector('#scnBtn')).display !== 'none' && document.querySelector('#scnBtn').offsetWidth > 0 }; });
+  check('직접 대응 화면: 시나리오를 자동 대응처럼 버튼 한 줄(DDoS·회선 다운·급감·이중화)로 고르고, 버튼이 모두 화면 안에 보이며 지금 것 하나가 강조됨. 잘리던 드롭다운은 없음', manScen.names === 'DDoS 공격 수신,업링크 회선 다운,트래픽 급감,이중화' && manScen.inView && manScen.on === 1 && !manScen.drop, JSON.stringify(manScen));
   check('실시간 대응 화면의 시나리오 목록: 직접 대응 4개(DDoS·회선 다운·급감·이중화)만 있음 (슬라이드 방식과 평일 오후 7시·폭주·서버실 온도는 뺌, 기록은 docs/removed-scenarios.md)', JSON.stringify(menuIds) === JSON.stringify(['live', 'liveLinkDown', 'liveDrop', 'liveRedundancy']), menuIds.join(','));
-  await goTab('monitor'); await goTab('live'); await page.click('#scnBtn'); await page.click('#scnMenu [data-scn=live]');
+  await goTab('monitor'); await goTab('live'); await page.click('#lvScen button >> nth=3'); await page.click('#lvScen button >> nth=0');
   check('목록에서 "직접 대응"을 고르면 실시간 대응이 처음 상태(03:18, 공격이 시작되기 2분 전)로 시작함', (await page.locator('#tab-live').isVisible()) && (await page.evaluate(() => LIVE.state.t)) === 18);
   await page.evaluate(() => document.querySelector('#tabs button[data-tab=room3d]').click());
   check('서버실-3D 범례: 짧게 정상/주의/경고/위험과 기준 온도(27·30·33°C)가 보이고, 설명은 접혀 있음', await page.evaluate(() => { const t = document.querySelector('.r3legend').innerText; return ['정상', '주의', '경고', '위험', '27°C', '30°C', '33°C'].every(w => t.includes(w)) && document.getElementById('glLegTip').hidden; }));
@@ -448,7 +450,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('사전 계획의 "평소 최대"는 이벤트 전날까지의 데이터로만 계산됨 (개회식은 9/10~9/18 안의 날, 결승은 그 전날까지)', asof.every(x => Math.abs(x.want - x.got) < 1e-9) && asof[0].days >= 8, JSON.stringify(asof));
   await page.selectOption('#evSel', { index: 0 });
   check('이벤트 정보 줄에 "그때 가진 데이터: 09/10 ~ 09/18 (9일치, 이 이벤트 전날까지만 사용)"이 보임', (await page.locator('#evInfo').innerText()).includes('그때 가진 데이터: 09/10 ~ 09/18 (9일치, 이 이벤트 전날까지만 사용)'));
-  // 자동 대응(시험판): '내가 대응'과 같은 화면·같은 시나리오를 규칙표대로 스스로 끝까지 진행한다
+  // 자동 대응(시험판): '직접 대응'과 같은 화면·같은 시나리오를 규칙표대로 스스로 끝까지 진행한다
   await goTab('soar');
   const au0 = await page.evaluate(() => ({ how: document.querySelector('#avHow').textContent, rules: document.querySelectorAll('#avHow .lv-rule tr').length - 1, scen: [...document.querySelectorAll('#avScen button')].map(b => b.textContent), termOff: document.querySelector('#avTermIn').disabled, sendHidden: getComputedStyle(document.querySelector('#avSend')).display === 'none', btns: document.querySelectorAll('#avTodo button').length, old: !!document.querySelector('#soRun') }));
   check('자동 대응 화면: 움직이는 방법 카드(시작 조건·규칙표 7줄·안전장치·자동화한 방법)가 있고, 시나리오 5개를 고를 수 있으며, 사람이 누르는 버튼(단계 버튼·보내기·터미널 입력)은 없음. 예전 승인 화면은 없음', au0.how.includes('무엇을 보고 시작하나') && au0.how.includes('안전장치') && au0.how.includes('자동화한 방법') && au0.how.includes('AI는 부르지 않아서') && au0.rules === 7 && au0.scen.length === 5 && au0.termOff && au0.sendHidden && au0.btns === 0 && !au0.old, JSON.stringify(au0).slice(0, 300));
@@ -457,7 +459,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const au2 = await page.evaluate(() => { const out = []; for (const [id, o] of [['ddos', null], ['linkDown', { cause: 'work' }], ['linkDown', { cause: 'fiber' }], ['drop', null], ['redundancy', null]]) { AUTO.load(id, o); const sc = AUTO.scenario; AUTO.advance(sc.end - sc.start + 2); const s = AUTO.state; out.push({ id, fin: s.finished, all: Object.keys(s.done).length === sc.rows().length, sent: Object.keys(s.sent).join(), sms: s.done.sms - sc.alertAt, fix: s.fix || '', res: document.querySelector('#avResBody').textContent }); } return out; });
   check('자동 대응: 시나리오 5개 모두 끝까지 진행(모든 단계 완료, 발생 → 경과 → 완료 문자)하고 발생 문자는 기한 8분 안에 나감', au2.every(x => x.fin && x.all && x.sent === '발생,경과,완료' && x.sms <= 8), JSON.stringify(au2.map(x => [x.id, x.fin, x.all, x.sent, x.sms])));
   check('자동 대응(회선 다운): 회신에 상대 작업이 있으면 복구 대기, 모두 없음이고 빛이 없으면 현장 교체 요청으로 갈림', au2[1].fix === '대기' && au2[2].fix === '교체', au2[1].fix + '/' + au2[2].fix);
-  check('자동 대응 결과에 걸린 시간·내가 대응 기록과의 비교·자동화의 한계가 나옴', au2.every(x => x.res.includes('자동 대응이 걸린 시간') && x.res.includes('내가 대응했을 때') && x.res.includes('자동화의 한계')), au2[0].res.slice(0, 200));
+  check('자동 대응 결과에 걸린 시간·직접 대응 기록과의 비교·자동화의 한계가 나옴', au2.every(x => x.res.includes('자동 대응이 걸린 시간') && x.res.includes('직접 대응했을 때') && x.res.includes('자동화의 한계')), au2[0].res.slice(0, 200));
   await page.evaluate(() => { document.querySelector('#avResult').hidden = true; AUTO.load('ddos'); });
   const barPos = []; for (let i = 0; i < 5; i++) { await page.click(`#avScen button >> nth=${i}`); barPos.push(await page.evaluate(() => ['#avPlay', '#avClock', '#avScen', '#avHow .lv-rule th:nth-child(3)', '#avHow .lv-rule th:nth-child(5)'].map(q => { const r = document.querySelector(q).getBoundingClientRect(); return Math.round(r.left) + ',' + Math.round(r.top); }).join('|'))); }
   check('자동 대응: 시나리오를 바꿔도(제목 길이가 달라도) 시작 버튼·시계·시나리오 버튼·규칙표 칸의 위치가 그대로임', new Set(barPos).size === 1, [...new Set(barPos)].join(' / '));
@@ -479,7 +481,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const pos = await th.evaluate(() => { const t = document.getElementById('themeBtn').getBoundingClientRect(), b = document.getElementById('bell').getBoundingClientRect(), bt = document.getElementById('themeBtn').textContent.trim(); return { adj: Math.abs(t.right - b.left) < 14 && Math.abs(t.top - b.top) < 3 && Math.abs(t.height - b.height) < 2, left: t.right <= b.left, bt }; });
   check('다크 모드 버튼은 글자 없이 아이콘(해·달)만 있고 알림 종 바로 옆(같은 높이)에 있음', pos.adj && pos.left && pos.bt === '', JSON.stringify(pos));
   const betaChk = await th.evaluate(() => { const g = document.querySelector('#tabs .tabgrp:nth-of-type(2) .grpbtn'); const items = [...document.querySelectorAll('#tabs .submenu button[data-tab=live], #tabs .submenu button[data-tab=soar]')]; return { grp: g.textContent.trim(), betaInGrp: !!g.querySelector('.beta'), items: items.map(i => !!i.querySelector('.beta')), names: items.map(i => i.firstChild.textContent.trim()) }; });
-  check('위 메뉴의 "대응"에는 시험판 표시가 없고, 하위 메뉴는 "내가 대응"·"자동 대응" 둘이며 옆에 시험판이 붙어 있음', betaChk.grp === '대응' && !betaChk.betaInGrp && betaChk.items.every(Boolean) && betaChk.items.length === 2 && betaChk.names.join() === '내가 대응,자동 대응', JSON.stringify(betaChk));
+  check('위 메뉴의 "대응"에는 시험판 표시가 없고, 하위 메뉴는 "직접 대응"·"자동 대응" 둘이며 옆에 시험판이 붙어 있음', betaChk.grp === '대응' && !betaChk.betaInGrp && betaChk.items.every(Boolean) && betaChk.items.length === 2 && betaChk.names.join() === '직접 대응,자동 대응', JSON.stringify(betaChk));
   await th.hover('#tabs .tabgrp:has(button[data-tab=soar]) .grpbtn');
   const alignChk = await th.evaluate(() => [...document.querySelectorAll('#tabs .submenu button[data-tab=live], #tabs .submenu button[data-tab=soar]')].map(b => { const r = b.getBoundingClientRect(), q = b.querySelector('.beta').getBoundingClientRect(); return Math.abs((r.top + r.height / 2) - (q.top + q.height / 2)); }));
   check('"시험판" 표시가 메뉴 글자 줄의 세로 가운데에 맞음 (오차 2px 이하)', alignChk.every(d => d <= 2), alignChk.join());
@@ -592,7 +594,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('서버실-3D: "전원·냉방 설비" 버튼이 UPS·분전반·항온항습기(3개)를 보여 주고 UPS 설명이 오른쪽에 나옴', fc.fac === 'UPS-A' && fc.n === 3 && fc.tx > 4 && fc.panel.includes('무정전전원장치') && fc.panel.includes('가상'), JSON.stringify(fc));
   await page.click('#glFit'); await flyDone();
   const vr = await page.evaluate(() => document.querySelector('#appVer').textContent);
-  check('화면 위에 버전 표시(v2.13.1)가 있음', vr === 'v2.13.1', vr);
+  check('화면 위에 버전 표시(v2.13.2)가 있음', vr === 'v2.13.2', vr);
   await page.mouse.move(cv.x + 300, cv.y + 300); await page.mouse.down(); await page.mouse.move(cv.x + 420, cv.y + 300, { steps: 5 }); await page.mouse.up();
   const az = await page.evaluate(() => G.cs.az);
   check('서버실-3D: 드래그하면 시점이 회전하고 좌우 70도를 넘지 않음', Math.abs(az) > 5 && Math.abs(az) <= 70, az);

@@ -1,8 +1,8 @@
-/* 내가 대응 · 자동 대응 (시험판): 가상 시계가 흐르는 동안 알림을 직접 확인하고, 조회·판단·조치를 직접 눌러 진행한다.
+/* 직접 대응 · 자동 대응 (시험판): 가상 시계가 흐르는 동안 알림을 직접 확인하고, 조회·판단·조치를 직접 눌러 진행한다.
    여러 시나리오를 담는 구조: 공통 부분(시계·그래프·알림 줄·해야 할 일·터미널·문자·결과)은 이 파일 위쪽에 있고,
    시나리오마다 달라지는 부분(값·단계·명령·문자)은 아래 SCEN 안에 시나리오별로 있다.
    모든 수치·IP·절차는 가상이고, DDoS의 클린존 가입 여부와 차단 절차는 제가 정한 가정이다. */
-/* 같은 코드로 화면 둘을 만든다: 내가 대응(P="lv", 사람이 누른다)과 자동 대응(P="av", 규칙표대로 스스로 진행한다) */
+/* 같은 코드로 화면 둘을 만든다: 직접 대응(P="lv", 사람이 누른다)과 자동 대응(P="av", 규칙표대로 스스로 진행한다) */
 function makeLive(root, P, AGENT) {
   if (!root) return null;
   const pad = n => String(n).padStart(2, "0");
@@ -590,9 +590,9 @@ function makeLive(root, P, AGENT) {
 
   /* ================= 공통 화면 ================= */
   root.innerHTML = (`
-<div class="lv-bar"><h2><span id="lvTitle"></span> <span class="tag warn">시험판</span>${AGENT ? ' <span class="tag">자동 대응 · 규칙 기반 (AI 호출 없음)</span>' : ' <span class="tag">내가 대응</span>'}</h2>
+<div class="lv-bar"><h2><span id="lvTitle"></span> <span class="tag warn">시험판</span>${AGENT ? ' <span class="tag">자동 대응 · 규칙 기반 (AI 호출 없음)</span>' : ' <span class="tag">직접 대응</span>'}</h2>
   <span class="muted" id="lvSub"></span>
-  ${AGENT ? '<span class="seg" id="lvScen"></span>' : ""}
+  <span class="seg" id="lvScen"></span>
   <span class="lv-ctl"><button class="btn primary" id="lvPlay" type="button">▶ 시작</button><button class="btn" id="lvStep" type="button" title="가상 시계를 1분 앞으로">+1분</button>
     <select id="lvSpeed" aria-label="속도"><option value="6">느리게 (1분=6초)</option><option value="3" selected>보통 (1분=3초)</option><option value="1">빠르게 (1분=1초)</option></select>
     <button class="btn" id="lvReset" type="button">처음부터</button></span>
@@ -616,7 +616,7 @@ function makeLive(root, P, AGENT) {
 <div class="scnpop" id="lvResult" hidden><div class="scnpop-box" role="dialog" aria-modal="true" style="width:min(560px,100%)"><h3>${AGENT ? "자동 대응 결과" : "대응 결과"}</h3><div id="lvResBody"></div><div class="scnpop-foot"><span class="sp"></span><button class="btn primary" id="lvResClose" type="button">닫기</button></div></div></div>`).replace(/id="lv/g, `id="${P}`);
   if (AGENT) { root.classList.add("lv-agent"); ["lvSend", "lvFill", "lvSave"].forEach(k => { E(k).style.display = "none"; }); E("lvDraft").readOnly = true; }
   const wrap = document.querySelector(".scn-wrap");   // 시나리오 목록은 이 화면에 있다 (관제 화면에서는 뺐다)
-  if (wrap && !AGENT) { const bar = root.querySelector(".lv-bar"); bar.insertBefore(wrap, bar.querySelector(".lv-ctl")); }
+  if (wrap && !AGENT) root.appendChild(wrap);   // 예전 드롭다운 목록은 숨겨 두고(원인 고르기 창만 계속 쓴다), 시나리오는 위 버튼 줄에서 고른다
 
   /* ----- 기록·터미널 ----- */
   const addLog = (text, act) => { S.log.push({ m: S.t, text, act: !!act }); renderLog(); };
@@ -679,7 +679,7 @@ function makeLive(root, P, AGENT) {
       const me = last[SC.id];
       fr = fr.map(r => [r[0].replace("내가 ", "자동 ").replace("내 조치", "자동 조치"), r[1]]).concat([
         ["자동 대응이 걸린 시간", `발생 문자 ${used == null ? "안 보냄" : used + "분"} · 끝까지 ${total}분 (알림 기준)`],
-        ["내가 대응했을 때 (최근 기록)", me ? `발생 문자 ${me.sms == null ? "안 보냄" : me.sms + "분"} · 끝까지 ${me.total}분` : "아직 없음 ('내가 대응'에서 같은 시나리오를 끝내면 여기에 비교됩니다)"]]);
+        ["직접 대응했을 때 (최근 기록)", me ? `발생 문자 ${me.sms == null ? "안 보냄" : me.sms + "분"} · 끝까지 ${me.total}분` : "아직 없음 ('직접 대응'에서 같은 시나리오를 끝내면 여기에 비교됩니다)"]]);
     }
     E("lvResBody").innerHTML = `<table class="kv2">${fr.map(r => `<tr><th>${r[0]}</th><td>${esc(r[1])}</td></tr>`).join("")}</table>${AGENT && SC.auto.limit ? `<p class="note"><b>자동화의 한계</b> ${esc(SC.auto.limit)}</p>` : ""}<p class="note">${SC.note}</p>`;
     E("lvResult").hidden = false; E("lvPlay").textContent = "▶ 다시"; stageBtns();
@@ -705,6 +705,7 @@ function makeLive(root, P, AGENT) {
   /* ----- 자동 대응 (규칙 기반): 사람이 누르던 단계를 규칙표(SC.auto.steps) 순서대로 대신 실행한다. AI 호출은 없다 -----
      0.3분(가상)마다 "아직 안 끝난 첫 단계"를 찾는다 → 조건이 맞으면 그 단계의 행동을 하나 실행하고, 맞지 않으면 기다린다. */
   const BEAT = 0.3;
+  const MAN_LIST = [["ddos", null, "DDoS 공격 수신"], ["linkDown", "ask", "업링크 회선 다운"], ["drop", null, "트래픽 급감"], ["redundancy", null, "이중화"]];   // 직접 대응: 회선 다운은 복구 원인을 먼저 고른다
   const AG_LIST = [["ddos", null, "DDoS 공격 수신"], ["linkDown", { cause: "work" }, "회선 다운 · 상대 작업"], ["linkDown", { cause: "fiber" }, "회선 다운 · 광 고장"], ["drop", null, "트래픽 급감"], ["redundancy", null, "이중화"]];
   function agentSend(st) { S.stage = st; fill(); S.sent[st] = S.t; addLog(`${st} 문자 발송 (자동 · 가상)`); E("lvSendMsg").textContent = `${st} 문자를 자동으로 보냈습니다 (${fmt(S.t)})`; SC.onSend(st); }
   function agentNote(key, did) { const p = SC.auto.steps[key] || {}; S.ag.did[key] = { did, why: p.why ? p.why() : "" }; }
@@ -738,14 +739,18 @@ function makeLive(root, P, AGENT) {
     E("lvHow").innerHTML = `<div class="lv-howg"><div>
       <h4>① 무엇을 보고 시작하나</h4><p>${esc(a.trigger)}</p>
       <h4>③ 안전장치 <span class="muted">이럴 땐 하지 않거나 사람에게 넘깁니다</span></h4><ul>${a.guards.map(g => `<li>${esc(g)}</li>`).join("")}</ul>
-      <h4>④ 자동화한 방법</h4><p>'내가 대응'에서 사람이 누르던 단계를 그대로 규칙표(조건 → 행동)로 옮겼습니다. 0.3분(가상)마다 아직 안 끝난 첫 단계를 찾아, 조건이 맞으면 실행하고 맞지 않으면 기다립니다. 정해 둔 규칙만 따르고 AI는 부르지 않아서, 같은 상황이면 항상 같은 결과가 나옵니다.</p>
+      <h4>④ 자동화한 방법</h4><p>'직접 대응'에서 사람이 누르던 단계를 그대로 규칙표(조건 → 행동)로 옮겼습니다. 0.3분(가상)마다 아직 안 끝난 첫 단계를 찾아, 조건이 맞으면 실행하고 맞지 않으면 기다립니다. 정해 둔 규칙만 따르고 AI는 부르지 않아서, 같은 상황이면 항상 같은 결과가 나옵니다.</p>
     </div><div>
       <h4>② 규칙표 <span class="muted">사람이 하던 순서 그대로</span></h4>
       <table class="lv-rule"><tr><th>#</th><th>단계</th><th>조건 → 행동</th><th>쓰는 것</th><th>상태</th></tr>${rows.map((r, i) => { const p = a.steps[r[0]] || {}; return `<tr class="${i === first && S.ack != null && !S.finished ? "now" : ""}"><td>${i + 1}</td><td>${r[1]}</td><td>${esc(p.rule || "")}</td><td class="muted">${esc(p.tool || "")}</td><td>${st(r[0], i)}</td></tr>`; }).join("")}</table>
     </div></div>`;
   }
-  function renderScen() { E("lvScen").innerHTML = AG_LIST.map((x, i) => `<button class="btn${x[0] === SC.id && (!x[1] || x[1].cause === S.cause) ? " primary" : ""}" data-i="${i}" type="button">${x[2]}</button>`).join(""); }
-  if (AGENT) E("lvScen").addEventListener("click", e => { const b = e.target.closest("button[data-i]"); if (b) { const x = AG_LIST[+b.dataset.i]; loadPub(x[0], x[1]); } });
+  function renderScen() { E("lvScen").innerHTML = (AGENT ? AG_LIST : MAN_LIST).map((x, i) => `<button class="btn${x[0] === SC.id && (!AGENT || !x[1] || x[1].cause === S.cause) ? " primary" : ""}" data-i="${i}" type="button">${x[2]}</button>`).join(""); }
+  E("lvScen").addEventListener("click", e => {
+    const b = e.target.closest("button[data-i]"); if (!b) return;
+    const x = (AGENT ? AG_LIST : MAN_LIST)[+b.dataset.i];
+    if (x[1] === "ask") { window.ldRoute = "live"; document.getElementById("scnCausePop").hidden = false; } else loadPub(x[0], x[1]);
+  });
 
   /* ----- 시나리오 불러오기 ----- */
   function load(id, opts) {
@@ -758,7 +763,7 @@ function makeLive(root, P, AGENT) {
     E("lvCardTitle").textContent = SC.cardTitle; E("lvSave").hidden = !SC.cardSave; E("lvSaved").hidden = true; E("lvSave").textContent = "기록에 저장";
     E("lvStage").innerHTML = SC.stages.map((s, i) => `<button class="btn${i === 0 ? " primary" : ""}" data-st="${s}" type="button">${s}</button>`).join("");
     E("lvTermOut").textContent = ""; E("lvSendMsg").textContent = ""; E("lvPlay").textContent = "▶ 시작";
-    term(SC.intro); fill(); renderLog(); paint(); todo(); if (AGENT) renderScen();
+    term(SC.intro); fill(); renderLog(); paint(); todo(); renderScen();
   }
   function reset(autoplay) { load(SC.id, SC.lastOpts); if (autoplay) loop(); }
   const origLoad = load;
