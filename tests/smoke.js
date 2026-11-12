@@ -424,8 +424,8 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const stp4 = await page.evaluate(() => [...document.querySelectorAll('#evStepper .evst')].map(c => c.className.replace('evst ', '')).join());
   check('체크리스트의 "고객사 사전 연락"을 체크하면 3단계(고객사 통보)가 완료로 바뀜', stp4.split(',')[2] === 'done', stp4);
   await page.locator('#evCheck input[data-i="0"]').uncheck();
-  const bars = await page.evaluate(() => { const b = document.querySelector('#evPlan .ubar'), m7 = b.querySelector('.m70').getBoundingClientRect(), m8 = b.querySelector('.m80').getBoundingClientRect(), r = b.getBoundingClientRect(); return { n: document.querySelectorAll('#evPlan .ubar').length, rows: document.querySelectorAll('#evPlan tr').length - 1, p70: (m7.left - r.left) / r.width, p80: (m8.left - r.left) / r.width, list: document.querySelectorAll('#evList .ubar').length, ev: document.querySelectorAll('#evList tr.click').length }; });
-  check('사전 계획의 예상 사용률·일정 표의 실제 최대 사용률에 막대가 있고, 70%(분산 기준)·80%(경고선) 눈금이 막대 길이의 70%·80% 자리에 있음', bars.n === bars.rows && bars.list === bars.ev && Math.abs(bars.p70 - 0.7) < 0.03 && Math.abs(bars.p80 - 0.8) < 0.03, JSON.stringify(bars));
+  const bars = await page.evaluate(() => { const b = document.querySelector('#evList .ubar'), m7 = b.querySelector('.m70').getBoundingClientRect(), m8 = b.querySelector('.m80').getBoundingClientRect(), r = b.getBoundingClientRect(); return { plan: document.querySelectorAll('#evPlan .ubar, #evPost .ubar').length, p70: (m7.left - r.left) / r.width, p80: (m8.left - r.left) / r.width, list: document.querySelectorAll('#evList .ubar').length, ev: document.querySelectorAll('#evList tr.click').length }; });
+  check('일정 표의 실제 최대 사용률에 막대가 이벤트마다 있고, 70%(분산 기준)·80%(경고선) 눈금이 막대 길이의 70%·80% 자리에 있음 (사전 계획·사후 정리 표는 숫자만)', bars.plan === 0 && bars.list === bars.ev && Math.abs(bars.p70 - 0.7) < 0.03 && Math.abs(bars.p80 - 0.8) < 0.03, JSON.stringify(bars));
   const noWrap = await page.evaluate(() => [...document.querySelectorAll('#evList tr.click')].every(tr => [...tr.querySelectorAll('td.c, td:first-child')].every(td => td.getBoundingClientRect().height < 40)));
   check('일정 표에서 이벤트 이름·판정·대비 진행이 줄바꿈 없이 한 줄로 보임', noWrap);
   await page.selectOption('#evSel', { label: (await page.locator('#evSel option').allTextContents()).find(x => x.startsWith('축구 결승')) });
@@ -610,7 +610,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('서버실-3D: "전원·냉방 설비" 버튼이 UPS·분전반·항온항습기(3개)를 보여 주고 UPS 설명이 오른쪽에 나옴', fc.fac === 'UPS-A' && fc.n === 3 && fc.tx > 4 && fc.panel.includes('무정전전원장치') && fc.panel.includes('가상'), JSON.stringify(fc));
   await page.click('#glFit'); await flyDone();
   const vr = await page.evaluate(() => document.querySelector('#appVer').textContent);
-  check('화면 위에 버전 표시(v2.13.5)가 있음', vr === 'v2.13.5', vr);
+  check('화면 위에 버전 표시(v2.14.0)가 있음', vr === 'v2.14.0', vr);
   await page.mouse.move(cv.x + 300, cv.y + 300); await page.mouse.down(); await page.mouse.move(cv.x + 420, cv.y + 300, { steps: 5 }); await page.mouse.up();
   const az = await page.evaluate(() => G.cs.az);
   check('서버실-3D: 드래그하면 시점이 회전하고 좌우 70도를 넘지 않음', Math.abs(az) > 5 && Math.abs(az) <= 70, az);
