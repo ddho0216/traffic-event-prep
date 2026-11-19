@@ -551,3 +551,9 @@ input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px soli
 #evList tr.sel td:first-child{box-shadow:none}
 #evList tr.sel td{background:var(--sel)}
 #evList tr.sel td:first-child{border-radius:12px 0 0 12px}#evList tr.sel td:last-child{border-radius:0 12px 12px 0}
+
+/* 밝은 화면에서 연하게 보이던 글자: 포트 이름표, 대응 화면 터미널 (어두운 배경용 색이 그대로 남아 있었음) */
+:root[data-theme="light"] .stlab{color:#2c3a47}
+:root[data-theme="light"] .stlab.x{color:#c63d2c}
+:root[data-theme="light"] .stlab.sel,:root[data-theme="light"] .stlab:hover{color:#0b2545}
+:root[data-theme="light"] #lvTermOut,:root[data-theme="light"] #avTermOut{color:#1e3a5f}

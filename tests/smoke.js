@@ -480,6 +480,9 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const barPos = []; for (let i = 0; i < 5; i++) { await page.click(`#avScen button >> nth=${i}`); barPos.push(await page.evaluate(() => ['#avPlay', '#avClock', '#avScen', '#avHow .lv-rule th:nth-child(3)', '#avHow .lv-rule th:nth-child(5)'].map(q => { const r = document.querySelector(q).getBoundingClientRect(); return Math.round(r.left) + ',' + Math.round(r.top); }).join('|'))); }
   check('자동 대응: 시나리오를 바꿔도(제목 길이가 달라도) 시작 버튼·시계·시나리오 버튼·규칙표 칸의 위치가 그대로임', new Set(barPos).size === 1, [...new Set(barPos)].join(' / '));
   await page.click('#avScen button >> nth=0');
+  // 밝은 화면에서 포트 이름표·대응 터미널 글자가 배경과 충분히 대비됨 (어두운 배경용 연한 색이 남지 않음)
+  const lc = await page.evaluate(() => { const was = document.documentElement.dataset.theme; document.documentElement.dataset.theme = 'light'; const lum = c => { const m = c.match(/\d+/g).map(Number).slice(0, 3).map(v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); }); return .2126 * m[0] + .7152 * m[1] + .0722 * m[2]; }; const t = document.createElement('div'); t.className = 'stlab'; document.body.appendChild(t); const a = lum(getComputedStyle(t).color), b = lum(getComputedStyle(document.getElementById('lvTermOut')).color); t.remove(); if (was) document.documentElement.dataset.theme = was; else delete document.documentElement.dataset.theme; return { stlab: +((1.05) / (a + .05)).toFixed(1), term: +((1.05) / (b + .05)).toFixed(1) }; });
+  check('밝은 화면에서 포트 이름표와 대응 터미널 글자가 흰 배경 대비 4.5:1 이상 (인쇄해도 읽힘)', lc.stlab >= 4.5 && lc.term >= 4.5, JSON.stringify(lc));
   // 다크 모드 켜고 끄기: 기본은 켬, 끄면 밝은 화면, 고른 값은 새로고침해도 유지
   const th = await ctx.newPage(); await th.goto(url, { waitUntil: 'load' });
   const lum = () => th.evaluate(() => { const m = getComputedStyle(document.body).backgroundColor.match(/\d+/g).map(Number); return (m[0] + m[1] + m[2]) / 3; });
@@ -610,7 +613,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('서버실-3D: "전원·냉방 설비" 버튼이 UPS·분전반·항온항습기(3개)를 보여 주고 UPS 설명이 오른쪽에 나옴', fc.fac === 'UPS-A' && fc.n === 3 && fc.tx > 4 && fc.panel.includes('무정전전원장치') && fc.panel.includes('가상'), JSON.stringify(fc));
   await page.click('#glFit'); await flyDone();
   const vr = await page.evaluate(() => document.querySelector('#appVer').textContent);
-  check('화면 위에 버전 표시(v2.14.1)가 있음', vr === 'v2.14.1', vr);
+  check('화면 위에 버전 표시(v2.14.2)가 있음', vr === 'v2.14.2', vr);
   await page.mouse.move(cv.x + 300, cv.y + 300); await page.mouse.down(); await page.mouse.move(cv.x + 420, cv.y + 300, { steps: 5 }); await page.mouse.up();
   const az = await page.evaluate(() => G.cs.az);
   check('서버실-3D: 드래그하면 시점이 회전하고 좌우 70도를 넘지 않음', Math.abs(az) > 5 && Math.abs(az) <= 70, az);
