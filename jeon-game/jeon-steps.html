@@ -85,12 +85,12 @@ const STAGES = ['재료 고르기', '손질하기', '반죽 만들기', '굽기'
 
 /* 할머니 안내 (제가 만든 초안 — 직접 고쳐 쓰시면 됩니다) */
 const TIP = [
-  '냉장고에 뭐 있나 보자. 네 가지까지 골라 봐.',
+  '오랜만에 와서 네가 해 준다고? 냉장고 열어 봐라. 네 가지까지.',
   '도마 위를 톡톡 눌러서 썰어. 손 조심하고.',
   '가루 고르고, 주전자를 꾹 눌러 물 붓고, 그릇을 꾹 눌러 섞어.',
   '기름병 눌러 기름 두르고, 팬을 눌러 부어. 톡 뒤집기, 꾹 센불.',
   '예쁘게 담자. 먹는 것도 눈이 먼저다.',
-  '자, 다들 와서 먹어라.',
+  '다들 와서 앉아라. 얘가 부쳤다.',
 ];
 
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -153,7 +153,7 @@ function reactions(r) {
   if (bad) out.push(['탄 것도 전이다. 다음엔 불 좀 줄여라.', 'meh']);
   else if (raw) out.push(['속이 덜 익었다. 조금만 더 기다리지.', 'meh']);
   else if (r.oil === 0) out.push(['기름을 안 둘렀구나. 눌었다.', 'meh']);
-  else if (gold && r.batter === 'ok') out.push(['색 곱다. 이제 시집 장가 가도 되겠다.', 'love']);
+  else if (gold && r.batter === 'ok') out.push(['내가 가르친 보람이 있네. 색 곱다.', 'love']);
   else if (r.batter === 'thick') out.push(['두툼하니 든든하네.', 'good']);
   else if (r.batter === 'thin') out.push(['얇게 잘 폈다. 바삭하네.', 'good']);
   else out.push(['잘했다. 처음엔 다 이렇게 하는 거다.', 'good']);
@@ -162,14 +162,14 @@ function reactions(r) {
   else if (has('pepper')) out.push(['캬, 칼칼하다! 이거 하나 더 없나?', 'love']);
   else if (has('kimchi')) out.push(['비 오는 날엔 역시 김치전이지.', 'love']);
   else if (crispy) out.push(['바삭바삭 소리 좋다.', 'good']);
-  else out.push(['맛있네. 간장 좀 줘 봐.', 'good']);
+  else out.push(['우리 애 다 컸네. 맛있다.', 'good']);
   // 엄마: 채소, 기름
   const veg = ['buchu', 'zucchini', 'onion', 'carrot'].filter(has).length;
   if (r.oil >= 3) out.push(['맛은 있는데 기름이 좀 많다~', 'meh']);
   else if (veg >= 2) out.push(['채소가 듬뿍이라 좋다.', 'love']);
   else if (has('squid')) out.push(['오징어가 쫄깃하네.', 'good']);
   else if (raw) out.push(['조금만 더 익혀 줄래?', 'meh']);
-  else out.push(['수고했어. 맛있다.', 'good']);
+  else out.push(['거기서 밥은 잘 해 먹고 다니는구나.', 'good']);
   // 동생: 매운 것 싫음, 감자 좋아함
   if (has('pepper')) out.push(['으악 매워!! 물! 물!', 'sad']);
   else if (r.items.length >= 4) out.push(['이게 다 뭐야?! …근데 맛있네.', 'good']);
@@ -342,6 +342,7 @@ function btnPress() {
 /* ================= 업데이트 ================= */
 function update(dt) {
   clock += dt; msgT += dt;
+  if (phase === 'intro') introT += dt;
   if (phase !== 'play') return;
   if (stage === 1) {
     S.chopA = Math.min(1, S.chopA + dt / 0.14);
@@ -497,13 +498,21 @@ function drawWindow() {
 }
 function drawHeader() {
   ctx.fillStyle = '#2b221c'; ctx.fillRect(0, 0, W, 60);
-  const step = 128;
-  STAGES.forEach((s, i) => {
-    const x = 26 + i * step, cur = i === stage, done = i < stage;
-    if (i > 0) { ctx.strokeStyle = done || cur ? '#8a6a3a' : '#4a3d33'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x - step + 24, 30); ctx.lineTo(x - 6, 30); ctx.stroke(); }
-    ctx.fillStyle = cur ? '#e2a43a' : done ? '#6f9a4a' : '#4a3d33'; circle(x + 8, 30, 11); ctx.fill();
-    txt(String(i + 1), x + 8, 35, 13, cur || done ? '#221a14' : '#a59c8b', 'center', FS);
-    txt(s, x + 24, 36, 16, cur ? '#f3c552' : done ? '#b9c2b0' : '#7d7266', 'left', FS);
+  ctx.font = `16px ${FS}`;
+  const tw = STAGES.map(t => ctx.measureText(t).width);
+  const iw = tw.map(w => 22 + 8 + w);
+  const gap = (790 - 20 - iw.reduce((p, q) => p + q, 0)) / (STAGES.length - 1);
+  let x = 20;
+  STAGES.forEach((t, i) => {
+    const cur = i === stage, done = i < stage;
+    if (i > 0) {
+      ctx.strokeStyle = done || cur ? '#8a6a3a' : '#4a3d33'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(x - gap + 8, 30); ctx.lineTo(x - 8, 30); ctx.stroke();
+    }
+    ctx.fillStyle = cur ? '#e2a43a' : done ? '#6f9a4a' : '#4a3d33'; circle(x + 11, 30, 11); ctx.fill();
+    txt(String(i + 1), x + 11, 35, 13, cur || done ? '#221a14' : '#a59c8b', 'center', FS);
+    txt(t, x + 30, 36, 16, cur ? '#f3c552' : done ? '#b9c2b0' : '#7d7266', 'left', FS);
+    x += iw[i] + gap;
   });
   ctx.fillStyle = 'rgba(255,255,255,0.08)'; rr(DEXB.x, DEXB.y, DEXB.w, DEXB.h, 6); ctx.fill();
   txt('도감', DEXB.x + DEXB.w / 2, DEXB.y + 23, 15, '#d9cdb8', 'center', FS);
@@ -822,10 +831,9 @@ function drawServe() {
 }
 
 /* ================= 6. 저녁 식탁 ================= */
-function drawPerson(f, idx) {
-  const L = f.look, x = f.x, s = L.small ? 0.85 : 1, y = L.small ? 228 : 214;
+function drawFigure(x, y, s, L, face) {
   ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
-  ctx.fillStyle = L.shirt; rr(-50, 34, 100, 100, 32); ctx.fill();
+  ctx.fillStyle = L.shirt; rr(-50, 34, 100, 110, 32); ctx.fill();
   ctx.fillStyle = L.skin; rr(-10, 22, 20, 18, 4); ctx.fill();
   if (L.style === 'bob') { ctx.fillStyle = L.hair; circle(0, -2, 39); ctx.fill(); ctx.fillRect(-39, -2, 78, 30); }
   ctx.fillStyle = L.skin; circle(0, 0, 34); ctx.fill();
@@ -834,19 +842,24 @@ function drawPerson(f, idx) {
   else if (L.style === 'bob') { ctx.beginPath(); ctx.arc(0, -6, 35, Math.PI, Math.PI * 2); ctx.fill(); }
   else if (L.style === 'bun') { ctx.beginPath(); ctx.arc(0, -4, 35, Math.PI * 1.1, Math.PI * 1.9); ctx.fill(); circle(0, -38, 12); ctx.fill(); }
   else if (L.style === 'cap') { ctx.fillStyle = '#c8452f'; ctx.beginPath(); ctx.arc(0, -8, 35, Math.PI, Math.PI * 2); ctx.fill(); ctx.fillRect(-6, -14, 52, 8); }
-  const rx = S.result && S.tableT > 0.6 + idx * 0.6 ? S.result.react[idx][1] : 'good';
+  else if (L.style === 'messy') { ctx.beginPath(); ctx.arc(0, -4, 36, Math.PI * 1.0, Math.PI * 2.0); ctx.fill(); [-24, -8, 8, 24].forEach(a => { ctx.beginPath(); ctx.moveTo(a - 8, -30); ctx.lineTo(a, -44); ctx.lineTo(a + 8, -30); ctx.fill(); }); }
   ctx.fillStyle = '#2a2220';
-  if (rx === 'love') { ctx.strokeStyle = '#2a2220'; ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(-11, 2, 4, Math.PI * 1.1, Math.PI * 1.9); ctx.moveTo(15, 2); ctx.arc(11, 2, 4, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); }
+  if (face === 'love') { ctx.strokeStyle = '#2a2220'; ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(-11, 2, 4, Math.PI * 1.1, Math.PI * 1.9); ctx.moveTo(15, 2); ctx.arc(11, 2, 4, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); }
   else { circle(-11, 0, 3); ctx.fill(); circle(11, 0, 3); ctx.fill(); }
   if (L.glasses) { ctx.strokeStyle = '#3a2e28'; ctx.lineWidth = 2; circle(-11, 0, 9); ctx.stroke(); circle(11, 0, 9); ctx.stroke(); ctx.beginPath(); ctx.moveTo(-2, 0); ctx.lineTo(2, 0); ctx.stroke(); }
   ctx.strokeStyle = '#2a2220'; ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.beginPath();
-  if (rx === 'love' || rx === 'good') ctx.arc(0, 10, rx === 'love' ? 9 : 6, 0.15 * Math.PI, 0.85 * Math.PI);
-  else if (rx === 'sad') { ctx.arc(0, 22, 7, 1.2 * Math.PI, 1.8 * Math.PI); }
+  if (face === 'love' || face === 'good') ctx.arc(0, 10, face === 'love' ? 9 : 6, 0.15 * Math.PI, 0.85 * Math.PI);
+  else if (face === 'sad') ctx.arc(0, 22, 7, 1.2 * Math.PI, 1.8 * Math.PI);
   else { ctx.moveTo(-6, 16); ctx.lineTo(6, 14); }
   ctx.stroke();
-  ctx.fillStyle = rx === 'sad' ? 'rgba(214,80,60,0.5)' : 'rgba(214,110,90,0.35)'; circle(-20, 10, 5); ctx.fill(); circle(20, 10, 5); ctx.fill();
-  if (rx === 'sad') { ctx.fillStyle = '#9cc6e6'; ctx.beginPath(); ctx.ellipse(28, -8, 3, 5, 0, 0, 6.28); ctx.fill(); }
+  ctx.fillStyle = face === 'sad' ? 'rgba(214,80,60,0.5)' : 'rgba(214,110,90,0.35)'; circle(-20, 10, 5); ctx.fill(); circle(20, 10, 5); ctx.fill();
+  if (face === 'sad') { ctx.fillStyle = '#9cc6e6'; ctx.beginPath(); ctx.ellipse(28, -8, 3, 5, 0, 0, 6.28); ctx.fill(); }
   ctx.restore();
+}
+function drawPerson(f, idx) {
+  const L = f.look, s = L.small ? 0.85 : 1, y = L.small ? 228 : 214;
+  const face = S.result && S.tableT > 0.6 + idx * 0.6 ? S.result.react[idx][1] : 'good';
+  drawFigure(f.x, y, s, L, face);
 }
 function drawTable() {
   ctx.fillStyle = '#4a3a2e'; ctx.fillRect(0, 60, W, 488);
@@ -906,6 +919,127 @@ function wrapText(s, x, y, maxW, lh, size, col) {
   lines.slice(0, 2).forEach((l, i) => txt(l, x, y + off + i * lh, size, col, 'center', FT));
 }
 
+
+/* ================= 인트로 (이야기 초안: 제가 만든 것) ================= */
+const ME = { skin: '#f1cfae', hair: '#2b2420', shirt: '#4f6f8a', style: 'messy' };
+const INTRO = [
+  { sc: 'room', who: '', lines: ['유학 온 지 꽤 됐다.', '낯선 동네 작은 방. 밤만 되면 김치 생각이 났다.'] },
+  { sc: 'kimchi', who: '', lines: ['결국 할머니한테 하나하나 물어 가며', '김치를 직접 담갔다. 망친 것도 여러 통.'] },
+  { sc: 'plane', who: '', lines: ['그리고 오늘,', '아주 잠깐 한국에 돌아왔다.'] },
+  { sc: 'home', who: '가족들', lines: ['"왔어? 얼굴이 반쪽이네!"', '오랜만에 다 같이 모인 저녁. 밖에는 비가 온다.'] },
+  { sc: 'kitchen', who: '할머니', lines: ['비 오는 날엔 전이지.', '피곤할 텐데, 할미가 부쳐 줄까?'] },
+  { sc: 'kitchen2', who: '나', lines: ['아니요, 오늘은 제가 할게요.', '그동안 갈고닦은 실력, 보여 드릴게요.'] },
+];
+const SKIP = { x: 840, y: 16, w: 104, h: 36 };
+let introI = 0, introT = 0;
+const introStr = () => INTRO[introI].lines.join('\n');
+const introDone = () => introT * 26 >= introStr().length;
+function introNext() {
+  if (!introDone()) { introT = 99; return; }
+  sfx.pick(); introI++; introT = 0;
+  if (introI >= INTRO.length) { phase = 'play'; freshRound(); }
+}
+function scRoom() {
+  ctx.fillStyle = '#1b2130'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#0d1320'; ctx.fillRect(540, 50, 340, 230);
+  ctx.fillStyle = '#e9e4c8'; circle(820, 100, 22); ctx.fill(); ctx.fillStyle = '#0d1320'; circle(810, 94, 20); ctx.fill();
+  [[550, 120, 60], [615, 90, 50], [670, 150, 70], [745, 110, 55], [805, 170, 70]].forEach(([x, h, w], i) => {
+    ctx.fillStyle = '#18202f'; ctx.fillRect(x, 280 - h, w, h);
+    ctx.fillStyle = 'rgba(243,197,82,0.6)'; for (let k = 0; k < 6; k++) if ((i + k) % 3) ctx.fillRect(x + 8 + (k % 3) * 16, 290 - h + Math.floor(k / 3) * 22, 6, 9);
+  });
+  ctx.strokeStyle = '#3a4256'; ctx.lineWidth = 8; ctx.strokeRect(540, 50, 340, 230);
+  ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(710, 50); ctx.lineTo(710, 280); ctx.stroke();
+  // 작은 냉장고 (텅 빔)
+  ctx.fillStyle = '#c9d2d4'; rr(40, 200, 130, 210, 8); ctx.fill();
+  ctx.fillStyle = '#eef3f4'; rr(52, 212, 106, 186, 4); ctx.fill();
+  const fg = ctx.createRadialGradient(105, 220, 5, 105, 260, 140); fg.addColorStop(0, 'rgba(255,255,230,0.5)'); fg.addColorStop(1, 'rgba(255,255,230,0)'); ctx.fillStyle = fg; ctx.fillRect(0, 160, 300, 300);
+  ctx.fillStyle = '#c3cdd0'; ctx.fillRect(52, 300, 106, 4);
+  ctx.fillStyle = '#e6e2d0'; rr(70, 268, 26, 30, 3); ctx.fill();
+  // 사람 + 책상
+  drawFigure(330, 236, 1, ME, 'sad');
+  ctx.fillStyle = '#9fc3e6'; ctx.globalAlpha = 0.25; circle(330, 260, 120); ctx.fill(); ctx.globalAlpha = 1;
+  ctx.fillStyle = '#2b3140'; rr(230, 250, 200, 110, 6); ctx.fill();
+  ctx.fillStyle = '#9fc3e6'; rr(242, 262, 176, 86, 4); ctx.fill();
+  ctx.fillStyle = '#4a3f36'; ctx.fillRect(160, 360, 360, 18); ctx.fillRect(176, 378, 14, 50); ctx.fillRect(490, 378, 14, 50);
+  ctx.fillStyle = '#f2ece0'; rr(436, 334, 46, 26, 4); ctx.fill(); txt('라면', 459, 352, 13, '#c8452f', 'center', FS);
+}
+function scKimchi() {
+  ctx.fillStyle = '#3b3029'; ctx.fillRect(0, 0, W, H);
+  const lg = ctx.createRadialGradient(480, 40, 10, 480, 40, 460); lg.addColorStop(0, 'rgba(255,214,140,0.3)'); lg.addColorStop(1, 'rgba(255,214,140,0)'); ctx.fillStyle = lg; ctx.fillRect(0, 0, W, H);
+  drawFigure(470, 220, 1, { ...ME, shirt: '#c8452f' }, 'good');
+  ctx.fillStyle = '#f2ece0'; rr(436, 262, 68, 90, 10); ctx.fill();
+  ctx.fillStyle = '#7a5a3e'; ctx.fillRect(80, 330, 800, 100);
+  ctx.fillStyle = '#93704e'; ctx.fillRect(80, 330, 800, 8);
+  // 김치통
+  ctx.fillStyle = 'rgba(230,240,245,0.55)'; rr(200, 200, 150, 150, 14); ctx.fill();
+  ctx.fillStyle = '#c23b25'; rr(210, 250, 130, 94, 8); ctx.fill();
+  for (let i = 0; i < 12; i++) { ctx.fillStyle = i % 2 ? '#d9573a' : '#a92f1c'; ctx.beginPath(); ctx.ellipse(222 + (i % 6) * 22, 262 + Math.floor(i / 6) * 30, 12, 7, i, 0, 6.28); ctx.fill(); }
+  ctx.fillStyle = '#4f6f8a'; rr(194, 188, 162, 20, 6); ctx.fill();
+  // 배추
+  ctx.fillStyle = '#e9efc0'; ctx.beginPath(); ctx.ellipse(130, 318, 46, 26, -0.3, 0, 6.28); ctx.fill();
+  ctx.fillStyle = '#8fb84e'; ctx.beginPath(); ctx.ellipse(110, 306, 30, 18, -0.3, 0, 6.28); ctx.fill();
+  // 영상통화 중인 휴대폰
+  ctx.fillStyle = '#1e1f22'; rr(640, 170, 120, 200, 16); ctx.fill();
+  ctx.fillStyle = '#3d4a52'; rr(648, 182, 104, 176, 10); ctx.fill();
+  drawGranny(700, 270, 2.3);
+  ctx.fillStyle = '#8fbf6a'; circle(700, 344, 6); ctx.fill();
+  txt('"고춧가루는 더 넣어도 된다"', 700, 160, 14, '#f3c552', 'center', FT);
+}
+function scPlane() {
+  const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#1a2338'); g.addColorStop(0.7, '#5a4a6a'); g.addColorStop(1, '#d08a5a');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  for (let i = 0; i < 40; i++) { ctx.fillStyle = `rgba(255,255,255,${0.3 + (i % 3) * 0.2})`; circle((i * 137) % W, (i * 71) % 260, 1.2); ctx.fill(); }
+  ctx.fillStyle = 'rgba(255,240,230,0.25)';
+  [[140, 360, 120], [380, 390, 160], [700, 350, 140], [880, 400, 110]].forEach(([x, y, r]) => { ctx.beginPath(); ctx.ellipse(x, y, r, 30, 0, 0, 6.28); ctx.fill(); });
+  const px = 160 + (introT * 60) % 700, py = 220 - (introT * 6) % 40;
+  ctx.save(); ctx.translate(px, py); ctx.rotate(-0.08);
+  ctx.fillStyle = '#e9edf0'; rr(-90, -14, 180, 28, 14); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(-50, 50); ctx.lineTo(-20, 50); ctx.lineTo(30, 0); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(-40, -40); ctx.lineTo(-20, -40); ctx.lineTo(20, 0); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-84, -6); ctx.lineTo(-100, -40); ctx.lineTo(-80, -40); ctx.lineTo(-60, -10); ctx.fill();
+  ctx.fillStyle = '#4f6f8a'; for (let i = 0; i < 8; i++) { circle(-50 + i * 16, -3, 3.4); ctx.fill(); }
+  ctx.restore();
+}
+function scHome() {
+  ctx.fillStyle = '#5a4636'; ctx.fillRect(0, 0, W, H);
+  const lg = ctx.createRadialGradient(400, 40, 10, 400, 40, 520); lg.addColorStop(0, 'rgba(255,214,140,0.3)'); lg.addColorStop(1, 'rgba(255,214,140,0)'); ctx.fillStyle = lg; ctx.fillRect(0, 0, W, H);
+  const wx = 60, wy = 50, ww = 180, wh = 130;
+  ctx.fillStyle = '#2c3a48'; ctx.fillRect(wx, wy, ww, wh);
+  ctx.strokeStyle = 'rgba(200,220,235,0.45)'; ctx.lineWidth = 1; ctx.beginPath();
+  for (let i = 0; i < 18; i++) { const x = wx + (i * 37) % ww, y = wy + ((i * 53 + introT * 300) % wh); ctx.moveTo(x, y); ctx.lineTo(x - 3, Math.min(wy + wh, y + 12)); }
+  ctx.stroke(); ctx.strokeStyle = '#7a5a3e'; ctx.lineWidth = 6; ctx.strokeRect(wx, wy, ww, wh);
+  ctx.fillStyle = '#6e5440'; ctx.fillRect(0, 380, W, 220);
+  FAMILY.forEach((f, i) => drawFigure(150 + i * 150, f.look.small ? 250 : 236, f.look.small ? 0.85 : 1, f.look, 'love'));
+  drawFigure(800, 236, 1, ME, 'love');
+  ctx.fillStyle = '#3f5a73'; rr(850, 300, 70, 90, 8); ctx.fill();
+  ctx.strokeStyle = '#2b3d50'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(872, 300); ctx.lineTo(872, 284); ctx.lineTo(898, 284); ctx.lineTo(898, 300); ctx.stroke();
+  ctx.fillStyle = '#f3c552'; ctx.fillRect(856, 330, 58, 10);
+}
+function scKitchen(me) {
+  drawWall(); drawWindow();
+  ctx.fillStyle = '#2b2b2d'; rr(620, 300, 260, 90, 8); ctx.fill();
+  ctx.fillStyle = '#1e1f22'; ctx.beginPath(); ctx.ellipse(740, 300, 90, 26, 0, 0, 6.28); ctx.fill();
+  ctx.strokeStyle = '#1c1c1e'; ctx.lineWidth = 12; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(826, 300); ctx.lineTo(900, 296); ctx.stroke();
+  drawFigure(260, 232, 1, FAMILY[0].look, me ? 'good' : 'love');
+  drawFigure(450, 226, 1, { ...ME, shirt: '#c8452f' }, me ? 'love' : 'good');
+  ctx.fillStyle = '#f2ece0'; rr(416, 268, 68, 92, 10); ctx.fill();
+  ctx.fillStyle = '#7a5a3e'; ctx.fillRect(0, 380, 600, 30);
+}
+function drawIntro() {
+  const sc = INTRO[introI].sc;
+  ({ room: scRoom, kimchi: scKimchi, plane: scPlane, home: scHome, kitchen: () => scKitchen(false), kitchen2: () => scKitchen(true) })[sc]();
+  // 자막
+  ctx.fillStyle = 'rgba(24,18,14,0.92)'; rr(60, 432, 840, 138, 12); ctx.fill();
+  const who = INTRO[introI].who;
+  if (who) { ctx.font = `16px ${FS}`; const w = ctx.measureText(who).width + 28; ctx.fillStyle = '#e2a43a'; rr(84, 416, w, 30, 15); ctx.fill(); txt(who, 84 + w / 2, 437, 16, '#2a1c12', 'center', FS); }
+  const shown = introStr().slice(0, Math.floor(introT * 26));
+  shown.split('\n').forEach((l, i) => txt(l, 96, 484 + i * 36, 23, '#f1e7d3', 'left', FT));
+  INTRO.forEach((_, i) => { ctx.fillStyle = i === introI ? '#e2a43a' : 'rgba(255,255,255,0.2)'; circle(96 + i * 16, 552, 4); ctx.fill(); });
+  if (introDone()) { ctx.globalAlpha = 0.5 + 0.5 * Math.sin(clock * 5); txt(introI === INTRO.length - 1 ? '눌러서 부엌으로' : '눌러서 계속', 876, 552, 15, '#f3c552', 'right', FS); ctx.globalAlpha = 1; }
+  ctx.fillStyle = 'rgba(0,0,0,0.4)'; rr(SKIP.x, SKIP.y, SKIP.w, SKIP.h, 6); ctx.fill();
+  txt('건너뛰기', SKIP.x + SKIP.w / 2, SKIP.y + 24, 16, '#d9cdb8', 'center', FS);
+}
+
 /* ================= 첫 화면, 도감 ================= */
 const START = { x: 380, y: 452, w: 200, h: 54 };
 const demoJeon = makeJeon(['kimchi', 'squid', 'onion']);
@@ -917,7 +1051,7 @@ function drawTitle() {
   ctx.fillStyle = '#efe2c6'; rr(-220, -52, 440, 92, 4); ctx.fill();
   txt('오늘 저녁은 전', 0, 18, 58, '#3a2418', 'center', FS);
   ctx.restore();
-  txt('비 오는 날, 할머니랑 가족 저녁 반찬 부치기', 480, 216, 18, '#d9cdb8', 'center', FT);
+  txt('잠깐 귀국한 비 오는 날, 가족에게 부쳐 주는 저녁 반찬', 480, 216, 18, '#d9cdb8', 'center', FT);
   drawJeon(160, 340, 74, demoJeon, 70, 78);
   drawJeon(800, 340, 74, demoJeon, 62, 72);
   STAGES.forEach((s, i) => {
@@ -927,7 +1061,7 @@ function drawTitle() {
     txt(s, 424, y, 18, '#f1e7d3', 'left', FT);
   });
   ctx.fillStyle = '#e2a43a'; rr(START.x, START.y, START.w, START.h, 8); ctx.fill();
-  txt('부엌으로', 480, START.y + 36, 24, '#2a1c12', 'center', FS);
+  txt('시작하기', 480, START.y + 36, 24, '#2a1c12', 'center', FS);
   txt('틀린 전은 없다. 뭘 넣든 이름이 붙는다.', 480, 540, 14, '#a59c8b', 'center', FT);
   if (Object.keys(dex).length) txt(`지금까지 만든 전 ${Object.keys(dex).length}종`, 480, 566, 14, '#a59c8b', 'center', FT);
 }
@@ -949,6 +1083,7 @@ function drawDex() {
 function render() {
   ctx.clearRect(0, 0, W, H);
   if (phase === 'title') { drawTitle(); drawHeaderMini(); }
+  else if (phase === 'intro') drawIntro();
   else {
     [drawPick, drawCut, drawBatter, drawFry, drawServe, drawTable][stage]();
     drawParts();
@@ -978,6 +1113,7 @@ const inR = (x, y, b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.
 const dist = (x, y, a, b) => Math.hypot(x - a, y - b);
 function hit(x, y) {
   if (showDex) return { k: 'closedex' };
+  if (phase === 'intro') return inR(x, y, SKIP) ? { k: 'skip' } : { k: 'introNext' };
   if (inR(x, y, MUTE)) return { k: 'mute' };
   if (inR(x, y, DEXB)) return { k: 'dex' };
   if (phase === 'title') return inR(x, y, START) ? { k: 'start' } : null;
@@ -1005,7 +1141,9 @@ function act(h) {
     case 'closedex': showDex = false; break;
     case 'dex': showDex = true; break;
     case 'mute': muted = !muted; if (master) master.gain.value = muted ? 0 : 0.6; break;
-    case 'start': phase = 'play'; freshRound(); break;
+    case 'start': phase = 'intro'; introI = 0; introT = 0; break;
+    case 'skip': phase = 'play'; freshRound(); break;
+    case 'introNext': introNext(); break;
     case 'btn': btnPress(); break;
     case 'card': togglePick(h.id); break;
     case 'board': chop(); break;
@@ -1046,6 +1184,7 @@ cv.addEventListener('keydown', e => {
     e.preventDefault(); initAudio();
     if (showDex) showDex = false;
     else if (phase === 'title') act({ k: 'start' });
+    else if (phase === 'intro') introNext();
     else if (stage === 1 && !allCut()) chop();
     else btnPress();
   }
