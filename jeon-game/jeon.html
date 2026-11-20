@@ -127,7 +127,7 @@ const BTN = { x: 380, y: 448, w: 200, h: 54 };
 
 /* ---------- 상태 ---------- */
 let phase = 'title';
-let day = 1, dayLen = 100, t = dayLen, money = 0, goal = 20000;
+let day = 1, dayLen = 180, t = dayLen, money = 0, goal = 20000;
 let cust = [null, null, null], spawnT = 1.2;
 let bowl, pans, plates, selPlate = -1;
 let msg = GRANNY.open, msgT = 0;
@@ -141,7 +141,7 @@ function saveDex() { try { localStorage.setItem('jeon-dex-v1', JSON.stringify([.
 
 function freshPan() { return { st: 'empty', jeon: null, sides: [0, 0], cur: 0, anim: 0, hold: false, warned: [false, false] }; }
 function startDay(d) {
-  day = d; t = dayLen; money = 0; goal = 20000 + (d - 1) * 12000;
+  day = d; t = dayLen; money = 0; goal = 15000 + (d - 1) * 10000;
   cust = [null, null, null]; spawnT = 1.2;
   bowl = { items: [], mix: 0, specks: [], rot: 0 };
   pans = [freshPan(), freshPan()];
@@ -236,7 +236,7 @@ function newCustomer() {
   const maxT = Math.min(3, day);
   const nt = Math.floor(rnd(0, maxT + 0.99) * (day === 1 ? 0.6 : 1));
   const tops = [...TOPS].sort(() => Math.random() - 0.5).slice(0, clamp(nt, 0, 3));
-  const maxPat = Math.max(26, 48 - day * 4);
+  const maxPat = Math.max(45, 75 - day * 5);
   return {
     order: { base, tops }, pat: maxPat, maxPat, st: 'in', a: 0, mood: 'neutral', say: '',
     look: {
@@ -288,7 +288,7 @@ function update(dt) {
   if (spawnT <= 0) {
     const free = cust.map((c, i) => c ? -1 : i).filter(i => i >= 0);
     if (free.length && t > 8) { cust[pick(free)] = newCustomer(); sfx.bell(); }
-    spawnT = rnd(5, 9) * Math.max(0.55, 1 - 0.1 * (day - 1));
+    spawnT = rnd(8, 13) * Math.max(0.6, 1 - 0.08 * (day - 1));
   }
   cust.forEach((c, i) => {
     if (!c) return;
@@ -311,7 +311,7 @@ function update(dt) {
     if (p.st === 'pour') { p.anim += dt / 0.35; if (p.anim >= 1) { p.st = 'cook'; p.anim = 0; } }
     if (p.st === 'flip') { p.anim += dt / 0.42; if (p.anim >= 1) { p.st = 'cook'; p.anim = 0; } }
     if (p.st !== 'empty') {
-      const rate = 13 * (p.hold ? 2.3 : 1);
+      const rate = 9 * (p.hold ? 2.3 : 1);
       p.sides[p.cur] += rate * dt;
       const v = p.sides[p.cur], q = PAN_POS[i];
       if (v > 95) {
