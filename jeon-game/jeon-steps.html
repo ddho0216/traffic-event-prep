@@ -253,7 +253,9 @@ function makeJeon(items) {
   const shape = Array.from({ length: 22 }, () => rnd(0.9, 1.05));
   const specks = [];
   items.forEach(k => { for (let i = 0; i < ING[k].sp; i++) { const d = Math.sqrt(Math.random()) * 0.74, a = rnd(0, 6.28); specks.push({ k, x: Math.cos(a) * d, y: Math.sin(a) * d, r: rnd(0, 6.28) }); } });
-  return { items: [...items], shape, specks };
+  const lace = Array.from({ length: 44 }, (_, i) => ({ a: i / 44 * 6.283 + rnd(-0.05, 0.05), d: rnd(1.0, 1.1), s: rnd(0.05, 0.11) }));
+  const bubbles = Array.from({ length: 22 }, () => { const d = Math.sqrt(Math.random()) * 0.8, a = rnd(0, 6.28); return { x: Math.cos(a) * d, y: Math.sin(a) * d, s: rnd(0.025, 0.055) }; });
+  return { items: [...items], shape, specks, lace, bubbles };
 }
 function togglePick(k) {
   const i = S.picks.indexOf(k);
@@ -399,16 +401,18 @@ function heart(x, y, s, fill) {
 }
 
 function drawSpeck(s, R, alpha) {
-  ctx.save(); ctx.translate(s.x * R, s.y * R); ctx.rotate(s.r); ctx.globalAlpha *= alpha;
+  const sc = clamp(R / 60, 1, 1.9);
+  ctx.save(); ctx.translate(s.x * R, s.y * R); ctx.rotate(s.r); ctx.scale(sc, sc); ctx.globalAlpha *= alpha;
+  ctx.shadowColor = 'rgba(40,20,5,0.35)'; ctx.shadowBlur = 2; ctx.shadowOffsetY = 1;
   switch (s.k) {
-    case 'kimchi': ctx.fillStyle = '#c23b25'; ctx.beginPath(); ctx.moveTo(-6, -3); ctx.lineTo(5, -4); ctx.lineTo(7, 2); ctx.lineTo(-4, 4); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#e9d6a8'; ctx.fillRect(-2, -1, 5, 1.6); break;
-    case 'buchu': ctx.strokeStyle = '#3f7d2e'; ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(-8, 0); ctx.quadraticCurveTo(0, -3, 8, 1); ctx.stroke(); break;
-    case 'squid': ctx.strokeStyle = '#f7efe4'; ctx.lineWidth = 2.4; circle(0, 0, 4.2); ctx.stroke(); ctx.strokeStyle = '#d9a3a0'; ctx.lineWidth = 0.8; circle(0, 0, 5.4); ctx.stroke(); break;
-    case 'onion': ctx.strokeStyle = '#efe6ee'; ctx.lineWidth = 1.8; ctx.beginPath(); ctx.arc(0, 0, 6, 0.3, 2.6); ctx.stroke(); break;
-    case 'pepper': ctx.strokeStyle = '#3d8a26'; ctx.lineWidth = 2; circle(0, 0, 3); ctx.stroke(); ctx.fillStyle = '#f2e7b0'; circle(0, 0, 1); ctx.fill(); break;
-    case 'zucchini': ctx.fillStyle = '#eef2c4'; ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI); ctx.fill(); ctx.strokeStyle = '#5f8f2e'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI); ctx.stroke(); break;
-    case 'potato': ctx.fillStyle = '#ecd99a'; ctx.fillRect(-5, -1.5, 10, 3); break;
-    case 'carrot': ctx.fillStyle = '#e07b2e'; ctx.fillRect(-5, -1.2, 10, 2.4); break;
+    case 'kimchi': ctx.fillStyle = '#b8331f'; ctx.beginPath(); ctx.moveTo(-8, -4); ctx.lineTo(6, -5); ctx.lineTo(9, 3); ctx.lineTo(-5, 5); ctx.closePath(); ctx.fill(); ctx.shadowColor = 'transparent'; ctx.fillStyle = '#ecd9ac'; ctx.fillRect(-3, -2, 7, 2.4); ctx.fillStyle = '#d9573a'; ctx.fillRect(-7, -3, 4, 2); break;
+    case 'buchu': ctx.shadowColor = 'transparent'; ctx.strokeStyle = '#2f6a22'; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(-11, 0); ctx.quadraticCurveTo(0, -4, 11, 1); ctx.stroke(); ctx.strokeStyle = '#5da23f'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(-10, -0.6); ctx.quadraticCurveTo(0, -4.6, 10, 0.4); ctx.stroke(); break;
+    case 'squid': ctx.strokeStyle = '#f7efe4'; ctx.lineWidth = 3.4; circle(0, 0, 5.2); ctx.stroke(); ctx.shadowColor = 'transparent'; ctx.strokeStyle = '#d98f8a'; ctx.lineWidth = 1; circle(0, 0, 7); ctx.stroke(); break;
+    case 'onion': ctx.strokeStyle = '#f2e8f0'; ctx.lineWidth = 2.6; ctx.beginPath(); ctx.arc(0, 0, 7, 0.2, 5.6); ctx.stroke(); ctx.shadowColor = 'transparent'; ctx.strokeStyle = '#d9c0d8'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(0, 0, 4.2, 0.4, 5.2); ctx.stroke(); break;
+    case 'pepper': ctx.strokeStyle = '#3d8a26'; ctx.lineWidth = 2.6; circle(0, 0, 3.6); ctx.stroke(); ctx.shadowColor = 'transparent'; ctx.fillStyle = '#f2e7b0'; circle(0, 0, 1.4); ctx.fill(); break;
+    case 'zucchini': ctx.fillStyle = '#eef2c4'; ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI); ctx.fill(); ctx.shadowColor = 'transparent'; ctx.strokeStyle = '#5f8f2e'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI); ctx.stroke(); break;
+    case 'potato': ctx.fillStyle = '#efdc9e'; ctx.fillRect(-7, -2, 14, 4); ctx.shadowColor = 'transparent'; ctx.fillStyle = '#d8c077'; ctx.fillRect(-7, 0, 14, 1.4); break;
+    case 'carrot': ctx.fillStyle = '#e07b2e'; ctx.fillRect(-7, -1.8, 14, 3.6); ctx.shadowColor = 'transparent'; ctx.fillStyle = '#f09a4e'; ctx.fillRect(-7, -1.8, 14, 1.2); break;
   }
   ctx.restore();
 }
@@ -453,19 +457,46 @@ function jeonPath(shape, R) {
   }
   ctx.closePath();
 }
+function tintColor(col, items) {
+  let t = null, w = 0;
+  if (items.includes('kimchi')) { t = [226, 126, 60]; w = 0.5; }
+  else if (items.includes('carrot')) { t = [232, 150, 70]; w = 0.22; }
+  else if (items.includes('buchu')) { t = [176, 196, 104]; w = 0.2; }
+  if (!t) return col;
+  const m = col.match(/\d+/g).map(Number), bright = (m[0] + m[1] + m[2]) / 765;
+  w *= clamp(bright * 1.5, 0, 1);
+  return `rgb(${m.map((v, i) => Math.round(lerp(v, t[i], w))).join(',')})`;
+}
 function drawJeon(x, y, R, jeon, topV, edgeV, sy = 1, slices = 0) {
   ctx.save(); ctx.translate(x, y); ctx.scale(1, sy);
-  jeonPath(jeon.shape, R); ctx.fillStyle = doneColor(edgeV); ctx.fill();
-  jeonPath(jeon.shape, R * 0.86); ctx.fillStyle = doneColor(topV); ctx.fill();
-  ctx.save(); jeonPath(jeon.shape, R * 0.9); ctx.clip();
-  const a = topV > 95 ? 0.35 : topV < 20 ? 0.55 : 0.9;
-  jeon.specks.forEach(s => drawSpeck(s, R, a));
+  const it = jeon.items;
+  // 그림자
+  ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(2, 5, R * 1.04, R * 1.0, 0, 0, 6.283); ctx.fill();
+  // 가장자리 레이스 (반죽이 번진 부분)
+  const lc = tintColor(doneColor(edgeV + 6), it);
+  ctx.fillStyle = lc; ctx.globalAlpha = 0.75;
+  (jeon.lace || []).forEach(l => { ctx.beginPath(); ctx.ellipse(Math.cos(l.a) * R * l.d, Math.sin(l.a) * R * l.d, R * l.s, R * l.s * 0.7, l.a, 0, 6.283); ctx.fill(); });
+  ctx.globalAlpha = 1;
+  // 바삭한 테두리, 몸통
+  jeonPath(jeon.shape, R); ctx.fillStyle = tintColor(doneColor(edgeV + 8), it); ctx.fill();
+  jeonPath(jeon.shape, R * 0.88); ctx.fillStyle = tintColor(doneColor(topV), it); ctx.fill();
+  ctx.save(); jeonPath(jeon.shape, R * 0.92); ctx.clip();
+  // 기포 자국 (익을수록 진해짐)
+  if (topV > 25 && topV < 100) {
+    (jeon.bubbles || []).forEach(b => { ctx.fillStyle = 'rgba(110,60,15,0.22)'; ctx.beginPath(); ctx.ellipse(b.x * R, b.y * R, b.s * R, b.s * R * 0.8, 0, 0, 6.283); ctx.fill(); ctx.strokeStyle = 'rgba(255,240,200,0.22)'; ctx.lineWidth = 1; ctx.stroke(); });
+  }
+  const a = topV > 95 ? 0.35 : topV < 20 ? 0.55 : 0.95;
+  jeon.specks.forEach(sp => drawSpeck(sp, R, a));
+  // 기름 윤기
+  ctx.globalAlpha = 0.16; ctx.fillStyle = '#fff4c8';
+  ctx.beginPath(); ctx.ellipse(-R * 0.25, -R * 0.4, R * 0.5, R * 0.14, -0.5, 0, 6.283); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(R * 0.35, R * 0.3, R * 0.22, R * 0.07, -0.4, 0, 6.283); ctx.fill();
+  ctx.globalAlpha = 1;
   ctx.restore();
   if (slices) {
-    ctx.strokeStyle = 'rgba(60,35,15,0.55)'; ctx.lineWidth = 2.2;
+    ctx.strokeStyle = 'rgba(60,35,15,0.5)'; ctx.lineWidth = 2;
     for (let i = 0; i < slices / 2; i++) { const t = i / (slices / 2) * Math.PI; ctx.beginPath(); ctx.moveTo(Math.cos(t) * R, Math.sin(t) * R); ctx.lineTo(-Math.cos(t) * R, -Math.sin(t) * R); ctx.stroke(); }
   }
-  ctx.globalAlpha = 0.25; ctx.fillStyle = '#fff8e0'; ctx.beginPath(); ctx.ellipse(-R * 0.3, -R * 0.35, R * 0.28, R * 0.1, -0.5, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 }
 
