@@ -961,6 +961,7 @@ function drawServe() {
 }
 
 /* ================= 6. 저녁 식탁 ================= */
+function fig(kind, x, y, s, face) { window.drawChar(ctx, kind, x, y - 44 * s, 2.6 * s, face); }
 function drawFigure(x, y, s, L, face) {
   ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
   ctx.fillStyle = L.shirt; rr(-50, 34, 100, 110, 32); ctx.fill();
@@ -1088,7 +1089,7 @@ function scRoom() {
   ctx.fillStyle = '#c3cdd0'; ctx.fillRect(52, 300, 106, 4);
   ctx.fillStyle = '#e6e2d0'; rr(70, 268, 26, 30, 3); ctx.fill();
   // 사람 + 책상
-  drawFigure(330, 236, 1, ME, 'sad');
+  fig('me', 330, 236, 1, 'sad');
   ctx.fillStyle = '#9fc3e6'; ctx.globalAlpha = 0.25; circle(330, 260, 120); ctx.fill(); ctx.globalAlpha = 1;
   ctx.fillStyle = '#2b3140'; rr(230, 250, 200, 110, 6); ctx.fill();
   ctx.fillStyle = '#9fc3e6'; rr(242, 262, 176, 86, 4); ctx.fill();
@@ -1098,8 +1099,7 @@ function scRoom() {
 function scKimchi() {
   ctx.fillStyle = '#3b3029'; ctx.fillRect(0, 0, W, H);
   const lg = ctx.createRadialGradient(480, 40, 10, 480, 40, 460); lg.addColorStop(0, 'rgba(255,214,140,0.3)'); lg.addColorStop(1, 'rgba(255,214,140,0)'); ctx.fillStyle = lg; ctx.fillRect(0, 0, W, H);
-  drawFigure(470, 220, 1, { ...ME, shirt: '#c8452f' }, 'good');
-  ctx.fillStyle = '#f2ece0'; rr(436, 262, 68, 90, 10); ctx.fill();
+  fig('me', 470, 220, 1, 'good');
   ctx.fillStyle = '#7a5a3e'; ctx.fillRect(80, 330, 800, 100);
   ctx.fillStyle = '#93704e'; ctx.fillRect(80, 330, 800, 8);
   // 김치통
@@ -1141,8 +1141,8 @@ function scHome() {
   for (let i = 0; i < 18; i++) { const x = wx + (i * 37) % ww, y = wy + ((i * 53 + introT * 300) % wh); ctx.moveTo(x, y); ctx.lineTo(x - 3, Math.min(wy + wh, y + 12)); }
   ctx.stroke(); ctx.strokeStyle = '#7a5a3e'; ctx.lineWidth = 6; ctx.strokeRect(wx, wy, ww, wh);
   ctx.fillStyle = '#6e5440'; ctx.fillRect(0, 380, W, 220);
-  FAMILY.forEach((f, i) => drawFigure(150 + i * 150, f.look.small ? 250 : 236, f.look.small ? 0.85 : 1, f.look, 'love'));
-  drawFigure(800, 236, 1, ME, 'love');
+  FAMILY.forEach((f, i) => fig(f.kind, 150 + i * 150, 236, 1, 'love'));
+  fig('me', 800, 236, 1, 'love');
   ctx.fillStyle = '#3f5a73'; rr(850, 300, 70, 90, 8); ctx.fill();
   ctx.strokeStyle = '#2b3d50'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(872, 300); ctx.lineTo(872, 284); ctx.lineTo(898, 284); ctx.lineTo(898, 300); ctx.stroke();
   ctx.fillStyle = '#f3c552'; ctx.fillRect(856, 330, 58, 10);
@@ -1152,9 +1152,8 @@ function scKitchen(me) {
   ctx.fillStyle = '#2b2b2d'; rr(620, 300, 260, 90, 8); ctx.fill();
   ctx.fillStyle = '#1e1f22'; ctx.beginPath(); ctx.ellipse(740, 300, 90, 26, 0, 0, 6.28); ctx.fill();
   ctx.strokeStyle = '#1c1c1e'; ctx.lineWidth = 12; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(826, 300); ctx.lineTo(900, 296); ctx.stroke();
-  drawFigure(260, 232, 1, FAMILY[0].look, me ? 'good' : 'love');
-  drawFigure(450, 226, 1, { ...ME, shirt: '#c8452f' }, me ? 'love' : 'good');
-  ctx.fillStyle = '#f2ece0'; rr(416, 268, 68, 92, 10); ctx.fill();
+  fig('grandma', 260, 232, 1, me ? 'good' : 'love');
+  fig('me', 450, 226, 1, me ? 'love' : 'good');
   ctx.fillStyle = '#7a5a3e'; ctx.fillRect(0, 380, 600, 30);
 }
 function drawIntro() {
