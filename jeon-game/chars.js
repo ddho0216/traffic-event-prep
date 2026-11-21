@@ -108,6 +108,7 @@ window.makeProp = function (name) {
 (function () {
   const CH = { grandma: { cx: 137, ht: 1.48 }, me: { cx: 119, ht: 1.62 }, sister: { cx: 118.5, ht: 1.58 }, mom: { cx: 124, ht: 1.56 }, dad: { cx: 123.5, ht: 1.72 } };
   const IM = {};
+  window.CHAR_IMGS = IM;
   Object.keys(CH).forEach(k => { const i = new Image(); i.src = 'assets/char_' + k + '.webp'; IM[k] = i; });
   const pixel = window.drawChar;
   window.drawChar = function (ctx, kind, x, y, s, mood) {

@@ -364,7 +364,7 @@ function btnState() {
   switch (stage) {
     case 0: return { label: '손질하러 가기', on: S.picks.length > 0 };
     case 1: return { label: '반죽하러 가기', on: allCut() };
-    case 2: return { label: '굽으러 가기', on: batterReady() };
+    case 2: return { label: '구우러 가기', on: batterReady() };
     case 3: return { label: '접시에 담기', on: S.pan.st === 'cook' && S.pan.cur === 1 };
     case 4: return { label: '식탁에 내기', on: true };
     case 5: return { label: '한 장 더 부치기', on: S.tableT > 3.2 };
@@ -410,7 +410,7 @@ function update(dt) {
     } else if (hold.k === 'bowl') {
       if (S.flour < 0) { if (msgT > 1) say('가루부터 골라.'); }
       else if (S.water < 15) { if (msgT > 1) say('물부터 부어. 주전자를 꾹.'); }
-      else if (S.mix < 1) { S.mix = Math.min(1, S.mix + dt * 0.7); S.rot += dt * 7; if (Math.random() < dt * 7) sfx.stir(); if (S.mix >= 1) { sfx.ding(); say(`반죽 ${BATTER_WORD[batterOf(S.water)]}. 굽으러 가자.`); } }
+      else if (S.mix < 1) { S.mix = Math.min(1, S.mix + dt * 0.7); S.rot += dt * 7; if (Math.random() < dt * 7) sfx.stir(); if (S.mix >= 1) { sfx.ding(); say(`반죽 ${BATTER_WORD[batterOf(S.water)]}. 구우러 가자.`); } }
       else S.rot += dt * 7;
     }
   }
@@ -1379,7 +1379,24 @@ cv.addEventListener('keydown', e => {
 
 /* ================= 루프 ================= */
 let last = performance.now();
+/* 그림·글꼴을 다 불러온 뒤에 시작 (처음에 대체 그림이 보였다 바뀌는 현상 방지) */
+let ready = false, readyT0 = performance.now(), fontsOk = false;
+(document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(() => { fontsOk = true; });
+function allImgs() { return [...Object.values(IMG), ...Object.values(window.CHAR_IMGS || {})]; }
+function loadedCount() { const a = allImgs(); return [a.filter(i => i.complete).length, a.length]; }
+function drawLoading() {
+  const [n, t] = loadedCount();
+  ctx.fillStyle = '#2e2b29'; ctx.fillRect(0, 0, W, H);
+  ctx.font = '22px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#f4ecdc'; ctx.fillText('불러오는 중…', 480, 280);
+  ctx.fillStyle = '#1d1712'; ctx.fillRect(330, 304, 300, 18);
+  ctx.fillStyle = '#e8a83a'; ctx.fillRect(333, 307, 294 * (t ? n / t : 0), 12);
+}
 function frame(now) {
+  if (!ready) {
+    const [n, t] = loadedCount();
+    if ((n >= t && fontsOk) || now - readyT0 > 12000) { ready = true; last = now; }
+    else { drawLoading(); requestAnimationFrame(frame); return; }
+  }
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   update(dt); render();
   requestAnimationFrame(frame);
