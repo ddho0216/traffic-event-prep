@@ -1141,8 +1141,8 @@ function scHome() {
   for (let i = 0; i < 18; i++) { const x = wx + (i * 37) % ww, y = wy + ((i * 53 + introT * 300) % wh); ctx.moveTo(x, y); ctx.lineTo(x - 3, Math.min(wy + wh, y + 12)); }
   ctx.stroke(); ctx.strokeStyle = '#7a5a3e'; ctx.lineWidth = 6; ctx.strokeRect(wx, wy, ww, wh);
   ctx.fillStyle = '#6e5440'; ctx.fillRect(0, 380, W, 220);
-  FAMILY.forEach((f, i) => fig(f.kind, 150 + i * 150, 236, 1, 'love'));
-  fig('me', 800, 236, 1, 'love');
+  FAMILY.forEach((f, i) => fig(f.kind, 140 + i * 160, 262, 0.8, 'love'));
+  fig('me', 790, 262, 0.8, 'love');
   ctx.fillStyle = '#3f5a73'; rr(850, 300, 70, 90, 8); ctx.fill();
   ctx.strokeStyle = '#2b3d50'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(872, 300); ctx.lineTo(872, 284); ctx.lineTo(898, 284); ctx.lineTo(898, 300); ctx.stroke();
   ctx.fillStyle = '#f3c552'; ctx.fillRect(856, 330, 58, 10);

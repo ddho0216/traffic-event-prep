@@ -103,3 +103,23 @@ window.makeProp = function (name) {
   return cv;
 };
 })();
+
+/* ---------- 보내주신 캐릭터 시트 정면 그림으로 인물 그리기 ---------- */
+(function () {
+  const CH = { grandma: { cx: 137, ht: 1.48 }, me: { cx: 119, ht: 1.62 }, sister: { cx: 118.5, ht: 1.58 }, mom: { cx: 124, ht: 1.56 }, dad: { cx: 123.5, ht: 1.72 } };
+  const IM = {};
+  Object.keys(CH).forEach(k => { const i = new Image(); i.src = 'assets/char_' + k + '.webp'; IM[k] = i; });
+  const pixel = window.drawChar;
+  window.drawChar = function (ctx, kind, x, y, s, mood) {
+    const im = IM[kind], c = CH[kind];
+    if (!im || !im.complete || !im.naturalWidth) return pixel(ctx, kind, x, y, s, mood);
+    const full = 64 * s / 0.42;              // 가장 큰 사람(아빠) 전신 높이
+    const bodyH = full * (c.ht / 1.72);       // 키 비례
+    const k = bodyH / im.naturalHeight;
+    const top = y + full - bodyH;             // 발 위치를 맞춰 키 차이가 보이게
+    const bob = mood === 'love' ? Math.abs(Math.sin(performance.now() / 160)) * 3 * s / 2.6 : 0;
+    ctx.save(); ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(im, x - c.cx * k, top - bob, im.naturalWidth * k, bodyH);
+    ctx.restore();
+  };
+})();
