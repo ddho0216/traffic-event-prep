@@ -72,20 +72,29 @@ const FLOURS = [
   { n: '찹쌀가루', d: '쫀득쫀득 찰진 반죽',   c: '#7fb069' },
   { n: '튀김가루', d: '바삭함이 강함',       c: '#3f6fb5' },
 ];
-const PLATES = [
-  { n: '하얀 접시' },
-  { n: '꽃무늬 접시' },
-  { n: '대나무 채반' },
-];
+const PLATES = [{ n: '접시 더미' }];
 const DIPS = [
-  { n: '초간장', c: '#4a2a1a' },
-  { n: '양념간장', c: '#6a2a18' },
-  { n: '그냥 먹기', c: null },
+  { n: '간장 종지', soy: true },
+  { n: '간장 + 청양고추', soy: true, chili: true },
+  { n: '그냥 먹기', soy: false },
 ];
+const OILS = [
+  { n: '올리브유', d: '은은한 풍미', img: 'prop_oil_olive' },
+  { n: '포도씨유', d: '잘 안 타는 기름', img: 'prop_oil_grape' },
+  { n: '카놀라유', d: '깔끔한 기본 기름', img: 'prop_oil_canola' },
+];
+const FLOUR_IMG = ['prop_flour_pancake', 'prop_flour_rice', 'prop_flour_fry'];
+const PROPS = ['board', 'bowl', 'chopsticks', 'dish', 'eggs', 'flour_fry', 'flour_pancake', 'flour_rice', 'knife', 'ladle', 'oil_canola', 'oil_grape', 'oil_olive', 'pan', 'pepper', 'plates', 'salt', 'soy', 'spatula', 'towel', 'whisk'];
 /* 사진에서 오려 낸 재료 이미지와 부엌 배경 (assets 폴더) */
 const IMG = {};
-['kitchen', 'top_hobak', ...FRIDGE.flatMap(k => ['ing_' + k, 'pc_' + k]), ...['kimchi', 'haemul', 'buchu', 'gamja'].flatMap(t => ['top_' + t, 1, 2, 3, 4, 5].map((n, i) => i ? `st_${t}_${n}` : n))].forEach(n => { const i = new Image(); i.src = 'assets/' + n + '.webp'; IMG[n] = i; });
+['kitchen', 'top_hobak', ...FRIDGE.flatMap(k => ['ing_' + k, 'pc_' + k]), ...['kimchi', 'haemul', 'buchu', 'gamja'].flatMap(t => ['top_' + t, 1, 2, 3, 4, 5].map((n, i) => i ? `st_${t}_${n}` : n)), ...PROPS.map(n => 'prop_' + n)].forEach(n => { const i = new Image(); i.src = 'assets/' + n + '.webp'; IMG[n] = i; });
 const okImg = n => IMG[n] && IMG[n].complete && IMG[n].naturalWidth > 0;
+/* 소품 그림: (cx, cy) 가운데에 mw×mh 안으로 맞춰 그리기 */
+function prop(n, cx, cy, mw, mh, rot = 0) {
+  if (!okImg(n)) return false;
+  const im = IMG[n], k = Math.min(mw / im.naturalWidth, mh / im.naturalHeight), w = im.naturalWidth * k, h = im.naturalHeight * k;
+  ctx.save(); ctx.translate(cx, cy); if (rot) ctx.rotate(rot); ctx.drawImage(im, -w / 2, -h / 2, w, h); ctx.restore(); return true;
+}
 const PW = { kimchi: 30, buchu: 26, zucchini: 24, potato: 20, squid: 22, onion: 26, carrot: 13, pepper: 26 };
 const STAGES = ['재료 고르기', '손질하기', '반죽 만들기', '굽기', '담기', '저녁 식탁'];
 
@@ -93,8 +102,8 @@ const STAGES = ['재료 고르기', '손질하기', '반죽 만들기', '굽기'
 const TIP = [
   '오랜만에 와서 네가 해 준다고? 냉장고 열어 봐라. 네 가지까지.',
   '도마 위를 톡톡 눌러서 썰어. 손 조심하고.',
-  '가루 고르고, 주전자를 꾹 눌러 물 붓고, 그릇을 꾹 눌러 섞어.',
-  '기름병 눌러 기름 두르고, 팬을 눌러 부어. 톡 뒤집기, 꾹 센불.',
+  '가루 고르고, 계란·소금·후추 넣고, 물 붓고, 그릇을 꾹 눌러 섞어.',
+  '기름 골라 두르고, 키친타올로 펴고, 팬을 눌러 부어. 톡 뒤집기, 꾹 센불.',
   '예쁘게 담자. 먹는 것도 눈이 먼저다.',
   '다들 와서 앉아라. 얘가 부쳤다.',
 ];
@@ -182,6 +191,11 @@ function reactions(r) {
   else if (has('kimchi')) out.push(['김치전 최고!', 'love']);
   else if (has('zucchini') || has('carrot')) out.push(['채소… 나 채소 싫은데.', 'meh']);
   else out.push(['음, 괜찮네.', 'good']);
+  if (r.salt === 0 && out[1][1] !== 'love') out[1] = ['좀 싱겁다. 소금 좀 더 치지.', 'meh'];
+  if (r.salt >= 3) out[2] = ['짜다! 물 좀 줘.', 'sad'];
+  else if (r.oilType === 0 && !bad && r.oil < 3) out[2] = ['올리브유 썼구나. 향이 은은하네.', 'love'];
+  if (r.eggs > 0 && !bad && !raw && out[0][1] !== 'love') out[0] = ['계란 넣으니 부드럽다.', 'good'];
+  if (r.pepper >= 2 && out[3][1] !== 'sad') out[3] = ['후추 냄새 좋다!', 'good'];
   return out;
 }
 
@@ -196,8 +210,8 @@ function say(s) { msg = s; msgT = 0; }
 function freshRound() {
   S = {
     picks: [], cutIdx: 0, cuts: {}, chopA: 1, pile: [], advT: 0, cutSig: '',
-    flour: -1, water: 0, mix: 0, rot: 0, bowlSpecks: [],
-    oil: 0, pan: { st: 'empty', sides: [0, 0], cur: 0, anim: 0, hold: false, warned: [0, 0] }, jeon: null,
+    flour: -1, water: 0, mix: 0, rot: 0, bowlSpecks: [], eggs: 0, salt: 0, pepper: 0,
+    oil: 0, oilType: -1, towel: false, pan: { st: 'empty', sides: [0, 0], cur: 0, anim: 0, hold: false, warned: [0, 0] }, jeon: null,
     plate: 0, dip: 0, cut: 0, result: null, tableT: 0, doneT: 0,
   };
   stage = 0; say(TIP[0]);
@@ -301,7 +315,7 @@ function toPlate() { sfx.ok(); goStage(4); }
 function buildResult() {
   const name = recipeName(S.picks);
   const qa = doneness(S.pan.sides[0]), qb = doneness(S.pan.sides[1]);
-  const r = { items: [...S.picks], qa, qb, oil: S.oil, batter: batterOf(S.water), flour: S.flour, name };
+  const r = { items: [...S.picks], qa, qb, oil: S.towel ? Math.min(S.oil, 2) : S.oil, oilType: S.oilType, batter: batterOf(S.water), flour: S.flour, eggs: S.eggs, salt: S.salt, pepper: S.pepper, name };
   let adj = '';
   if (qa === 'burnt' || qb === 'burnt') adj = '까맣게 탄';
   else if (qa === 'raw' || qb === 'raw') adj = '덜 익은';
@@ -378,7 +392,7 @@ function update(dt) {
     if (p.st === 'pour') { p.anim += dt / 0.4; if (p.anim >= 1) { p.st = 'cook'; p.anim = 0; } }
     if (p.st === 'flip') { p.anim += dt / 0.45; if (p.anim >= 1) { p.st = 'cook'; p.anim = 0; } }
     if (p.st !== 'empty') {
-      p.sides[p.cur] += 8 * (p.hold ? 2 : 1) * dt;
+      p.sides[p.cur] += 8 * (p.hold ? 2 : 1) * (S.oilType === 1 && p.sides[p.cur] > 70 ? 0.65 : 1) * dt;
       const v = p.sides[p.cur];
       if (v >= 55 && !p.warned[p.cur]) { p.warned[p.cur] = 1; sfx.ding(); say(p.cur === 0 ? '지금이다! 노릇하다. 톡 눌러 뒤집어.' : '다 익었다! 접시에 담자.'); }
       if (v > 95 && p.warned[p.cur] < 2) { p.warned[p.cur] = 2; say('타는 냄새 난다! 얼른!'); }
@@ -700,11 +714,7 @@ function drawCut() {
     txt(done ? '다 썰었음' : `${S.cuts[k]} / ${ING[k].chops}번`, 86, y + 46, 13, done ? '#8fd16a' : '#cfc4b0', 'left', FT);
   });
   // 도마 (원근)
-  ctx.fillStyle = 'rgba(0,0,0,0.32)'; ctx.beginPath(); ctx.moveTo(222, 338); ctx.lineTo(758, 338); ctx.lineTo(814, 530); ctx.lineTo(158, 530); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#cf9f66'; ctx.beginPath(); ctx.moveTo(212, 322); ctx.lineTo(752, 322); ctx.lineTo(802, 508); ctx.lineTo(160, 508); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#9a6e3e'; ctx.beginPath(); ctx.moveTo(160, 508); ctx.lineTo(802, 508); ctx.lineTo(804, 526); ctx.lineTo(158, 526); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = 'rgba(110,70,30,0.3)'; ctx.lineWidth = 1.6;
-  for (let i = 0; i < 9; i++) { const y = 334 + i * 20; ctx.beginPath(); ctx.moveTo(196 + i * 4, y); ctx.bezierCurveTo(340, y - 6, 560, y + 8, 776 - i * 4, y - 2); ctx.stroke(); }
+  if (okImg('prop_board')) ctx.drawImage(IMG.prop_board, 220, 250, 520, 338);
   const k = S.picks[S.cutIdx], cx = 470, cy = 432;
   if (k) {
     const n = S.cuts[k], tot = ING[k].chops, f = n / tot;
@@ -718,12 +728,7 @@ function drawCut() {
     const kx = cx - 90 + (Math.min(n, tot - 1) + 0.5) * (180 / tot);
     const down = S.chopA < 1 ? Math.sin(S.chopA * Math.PI) : 0;
     const ky = cy - 128 + down * 84;
-    drawArm(kx + 132, ky + 16, 900, 650, '#c8452f');
-    ctx.save(); ctx.translate(kx + 40, ky);
-    ctx.fillStyle = '#d5dade'; ctx.beginPath(); ctx.moveTo(-64, 0); ctx.lineTo(44, 0); ctx.lineTo(44, 36); ctx.quadraticCurveTo(-20, 42, -64, 32); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#eef1f3'; ctx.fillRect(-60, 2, 98, 6);
-    ctx.fillStyle = '#5a3a24'; rr(44, 4, 62, 20, 6); ctx.fill();
-    ctx.restore();
+    if (okImg('prop_knife')) ctx.drawImage(IMG.prop_knife, kx - 60, ky + 40 - 68, 128 * 1.5, 132 * 1.5);
     txt('도마를 톡톡 눌러 썰기', cx, 350, 17, '#f3c552', 'center', FS);
   } else {
     txt('손질 끝!', cx, cy + 10, 36, '#5a3a24', 'center', FS);
@@ -748,6 +753,7 @@ const BAGS = FLOURS.map((f, i) => ({ i, x: 24, y: 80 + i * 112, w: 190, h: 100 }
 const BIGBOWL = { x: 470, y: 404, r: 128 };
 const PITCHER = { x: 700, y: 236, w: 120, h: 150 };
 const GAUGE = { x: 874, y: 282, w: 16, h: 200 };
+const EGGS = { x: 222, y: 452, w: 104, h: 72 }, SALT = { x: 640, y: 420, w: 46, h: 70 }, PEPPER = { x: 694, y: 420, w: 44, h: 70 };
 function drawBag(x, y, f, on) {
   ctx.fillStyle = '#efe4c8'; ctx.beginPath(); ctx.moveTo(x + 14, y + 12); ctx.lineTo(x + 60, y + 12); ctx.lineTo(x + 66, y + 84); ctx.lineTo(x + 8, y + 84); ctx.closePath(); ctx.fill();
   ctx.fillStyle = f.c; ctx.fillRect(x + 12, y + 40, 50, 18);
@@ -759,23 +765,25 @@ function drawBatter() {
     const f = FLOURS[b.i], on = S.flour === b.i;
     ctx.fillStyle = on ? 'rgba(226,164,58,0.22)' : 'rgba(18,12,8,0.55)'; rr(b.x, b.y, b.w, b.h, 8); ctx.fill();
     if (on) { ctx.strokeStyle = '#e2a43a'; ctx.lineWidth = 3; rr(b.x, b.y, b.w, b.h, 8); ctx.stroke(); }
-    drawBag(b.x + 6, b.y + 4, f, on);
+    if (!prop(FLOUR_IMG[b.i], b.x + 40, b.y + 50, 64, 92)) drawBag(b.x + 6, b.y + 4, f, on);
     txt(f.n, b.x + 82, b.y + 42, 18, on ? '#f3c552' : '#f1e7d3', 'left', FS);
     txt(f.d, b.x + 82, b.y + 64, 12, '#bdb3a2', 'left', FT);
   });
   // 그릇
   const { x, y, r } = BIGBOWL;
-  ctx.save(); ctx.translate(x, y); ctx.scale(1, 0.56); ctx.translate(-x, -y);
-  ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(x, y + r * 0.75, r * 0.9, 16, 0, 0, 6.28); ctx.fill();
-  ctx.fillStyle = '#8fa0a6'; circle(x, y, r); ctx.fill();
-  ctx.fillStyle = '#b9c6ca'; circle(x, y, r - 8); ctx.fill();
-  ctx.fillStyle = '#6e7f86'; circle(x, y, r - 16); ctx.fill();
-  const tint = S.picks.includes('kimchi') ? '#e6a271' : S.picks.includes('buchu') ? '#dcd79c' : S.picks.includes('carrot') ? '#ecc48a' : '#efe2b8';
+  const bk = 1.375;
+  if (okImg('prop_bowl')) ctx.drawImage(IMG.prop_bowl, x - 100 * bk, y - 65 * bk, 214 * bk, 159 * bk);
+  ctx.save(); ctx.translate(x, y); ctx.scale(1, 0.31); ctx.translate(-x, -y);
+  ctx.fillStyle = '#b4b6b1'; circle(x, y, r - 16); ctx.fill();
+  const tint0 = S.picks.includes('kimchi') ? '#e6a271' : S.picks.includes('buchu') ? '#dcd79c' : S.picks.includes('carrot') ? '#ecc48a' : '#efe2b8';
+  const tint = S.eggs && !S.picks.includes('kimchi') ? '#f0d68a' : tint0;
   if (S.water > 0) {
     const lvl = (r - 18) * clamp(0.35 + S.water / 160, 0, 1);
     ctx.fillStyle = S.flour < 0 ? 'rgba(170,210,230,0.75)' : S.mix >= 1 ? tint : '#e9e0c6';
     circle(x, y, lvl); ctx.fill();
   }
+  if (S.eggs && S.mix < 0.8) { for (let i = 0; i < S.eggs; i++) { const ex = x - 30 + i * 50, ey = y + 10; ctx.globalAlpha = 1 - S.mix; ctx.fillStyle = '#fbf6ea'; circle(ex, ey, 30); ctx.fill(); ctx.fillStyle = '#f2b72a'; circle(ex, ey, 15); ctx.fill(); ctx.globalAlpha = 1; } }
+  if (S.mix < 0.9) { for (let i = 0; i < S.salt * 10; i++) { ctx.fillStyle = '#ffffff'; circle(x + Math.sin(i * 7.1) * 70, y + Math.cos(i * 3.3) * 60, 3); ctx.fill(); } for (let i = 0; i < S.pepper * 10; i++) { ctx.fillStyle = '#2a2420'; circle(x + Math.cos(i * 5.7) * 70, y + Math.sin(i * 2.9) * 60, 3); ctx.fill(); } }
   if (S.flour >= 0 && S.mix < 0.6) { ctx.fillStyle = '#f7f0dc'; ctx.globalAlpha = 1 - S.mix; [[-20, -10], [12, 6], [-4, 22], [24, -20]].forEach(([a, b]) => { circle(x + a, y + b, 22); ctx.fill(); }); ctx.globalAlpha = 1; }
   ctx.save(); circle(x, y, r - 18); ctx.clip(); ctx.translate(x, y);
   S.bowlSpecks.forEach(s => {
@@ -786,12 +794,18 @@ function drawBatter() {
   ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 6; circle(x, y, r + 9); ctx.stroke();
   ctx.strokeStyle = '#e2a43a'; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(x, y, r + 9, -Math.PI / 2, -Math.PI / 2 + S.mix * Math.PI * 2); ctx.stroke();
   ctx.restore();
-  if (hold && hold.k === 'bowl' && S.flour >= 0 && S.water >= 15) {
-    const a = S.rot, px = x + Math.cos(a) * 52, py = y + Math.sin(a) * 26;
-    drawArm(px + 150, py + 126, 940, 660, '#4f6f8a');
-    ctx.strokeStyle = '#c59a62'; ctx.lineWidth = 11; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px + 150, py + 126); ctx.stroke();
-    ctx.fillStyle = '#c59a62'; ctx.beginPath(); ctx.ellipse(px, py, 15, 9, 0.5, 0, 6.283); ctx.fill();
+  { // 휘핑기 (섞을 때 돌아감)
+    const mixing = hold && hold.k === 'bowl' && S.flour >= 0 && S.water >= 15;
+    const a = mixing ? S.rot : -0.5, px = x + Math.cos(a) * 60, py = y + Math.sin(a) * 18;
+    if (okImg('prop_whisk')) ctx.drawImage(IMG.prop_whisk, px - 33, py - 54, 106 * 1.1, 166 * 1.1);
   }
+  // 계란 트레이 · 소금 · 후추
+  prop('prop_eggs', EGGS.x + EGGS.w / 2, EGGS.y + EGGS.h / 2, EGGS.w, EGGS.h);
+  txt(S.eggs ? `계란 ${S.eggs}개` : '톡: 계란', EGGS.x + EGGS.w / 2, EGGS.y + EGGS.h + 16, 13, S.eggs ? '#f3c552' : '#f1e7d3', 'center', FS);
+  prop('prop_salt', SALT.x + SALT.w / 2, SALT.y + SALT.h / 2, SALT.w, SALT.h);
+  prop('prop_pepper', PEPPER.x + PEPPER.w / 2, PEPPER.y + PEPPER.h / 2, PEPPER.w, PEPPER.h);
+  txt(`소금 ${'●'.repeat(S.salt)}${'○'.repeat(3 - S.salt)}`, SALT.x + 20, SALT.y + SALT.h + 16, 12, '#f1e7d3', 'center', FT);
+  txt(`후추 ${'●'.repeat(S.pepper)}${'○'.repeat(3 - S.pepper)}`, PEPPER.x + 28, PEPPER.y + PEPPER.h + 32, 12, '#f1e7d3', 'center', FT);
   // 주전자
   const pouring = hold && hold.k === 'pitcher' && S.water < 100;
   ctx.save(); ctx.translate(PITCHER.x + 60, PITCHER.y + 90); ctx.rotate(pouring ? -0.7 : 0);
@@ -820,12 +834,14 @@ function drawBatter() {
   else if (S.water < 15) label = '주전자를 꾹 눌러 물 붓기';
   else if (S.mix >= 1) label = `반죽 완성 · ${BATTER_WORD[batterOf(S.water)]}`;
   else if (S.mix > 0) label = `섞는 중 ${Math.round(S.mix * 100)}%`;
-  txt(label, x, y + r * 0.56 + 42, 17, S.mix >= 1 ? '#f3c552' : '#f1e7d3', 'center', FS);
+  txt(label, x, 302, 17, S.mix >= 1 ? '#f3c552' : '#f1e7d3', 'center', FS);
 }
 
 /* ================= 4. 굽기 ================= */
 const PAN = { x: 470, y: 394, r: 150 };
 const OIL = { x: 30, y: 296, w: 130, h: 240 };
+const OILB = OILS.map((o, i) => ({ i, x: 22 + i * 48, y: 290, w: 46, h: 150 }));
+const TOWEL = { x: 168, y: 420, w: 120, h: 110 };
 function drawFry() {
   drawScene();
   const p = S.pan, cx = PAN.x, cy = PAN.y, r = PAN.r;
@@ -843,14 +859,13 @@ function drawFry() {
       ctx.beginPath(); ctx.ellipse(fx + Math.cos(a) * fl * 0.6, fy + Math.sin(a) * fl * 0.6, fl, 4, a, 0, 6.28); ctx.fill();
     }
   }
-  ctx.strokeStyle = '#1c1c1e'; ctx.lineWidth = 34; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(cx + r - 6, cy); ctx.lineTo(cx + r + 96, cy + 8); ctx.stroke();
-  ctx.fillStyle = '#131416'; circle(cx, cy + 26, r); ctx.fill();
-  ctx.fillStyle = '#1e1f22'; circle(cx, cy, r); ctx.fill();
-  const pg = ctx.createRadialGradient(cx - 40, cy - 50, 10, cx, cy, r - 12);
-  pg.addColorStop(0, '#4b4c52'); pg.addColorStop(1, '#2a2b2f');
-  ctx.fillStyle = pg; circle(cx, cy, r - 12); ctx.fill();
-  if (S.oil) { ctx.fillStyle = `rgba(232,190,80,${0.08 * S.oil})`; circle(cx, cy, r - 16); ctx.fill(); ctx.fillStyle = 'rgba(255,240,190,0.18)'; ctx.beginPath(); ctx.ellipse(cx - 50, cy - 60, 40, 10, -0.5, 0, 6.28); ctx.fill(); }
+  ctx.restore();
+  // 후라이팬 (소품 그림) — 안쪽 바닥이 (cx, cy)에 오도록
+  const pk = 1.9;
+  if (okImg('prop_pan')) ctx.drawImage(IMG.prop_pan, cx - 82 * pk, cy - 95 * pk, 207 * pk, 150 * pk);
+  if (!S.oil) { ctx.fillStyle = '#69717c'; ctx.beginPath(); ctx.ellipse(cx, cy + 4, 46, 30, 0, 0, 6.283); ctx.fill(); }
+  else { ctx.fillStyle = `rgba(232,196,90,${S.towel ? 0.22 : 0.08 * S.oil})`; ctx.beginPath(); ctx.ellipse(cx, cy, S.towel ? 112 : 50 + S.oil * 18, S.towel ? 58 : 26 + S.oil * 9, 0, 0, 6.283); ctx.fill(); ctx.fillStyle = 'rgba(255,245,200,0.35)'; ctx.beginPath(); ctx.ellipse(cx - 30, cy - 14, 26, 6, -0.3, 0, 6.283); ctx.fill(); }
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(1, 0.52); ctx.translate(-cx, -cy);
   const R = 112;
   if (p.st === 'pour') drawJeon(cx, cy, R * easeOut(p.anim), S.jeon, 0, p.sides[0]);
   else if (p.st === 'flip') {
@@ -858,29 +873,31 @@ function drawFry() {
     if (a < 0.5) drawJeon(cx, cy - lift, R, S.jeon, p.sides[1], p.sides[0], sy);
     else drawJeon(cx, cy - lift, R, S.jeon, p.sides[0], p.sides[1], sy);
   } else if (p.st === 'cook') drawJeon(cx, cy, R, S.jeon, p.sides[1 - p.cur], p.sides[p.cur]);
-  else { ctx.strokeStyle = `rgba(243,197,82,${0.5 + 0.35 * Math.sin(clock * 5)})`; ctx.lineWidth = 5; circle(cx, cy, r + 8); ctx.stroke(); }
+  else { ctx.strokeStyle = `rgba(243,197,82,${0.5 + 0.35 * Math.sin(clock * 5)})`; ctx.lineWidth = 5; circle(cx, cy, 124); ctx.stroke(); }
   ctx.restore();
   if (p.st === 'empty') txt('눌러서 반죽 붓기', cx, cy + 8, 22, '#f3c552', 'center', FS);
   if (p.hold) txt('센불!', cx, cy - r * 0.52 - 8, 20, '#ffb36b', 'center', FS);
-  // 뒤집개 + 손
-  if (p.st !== 'empty') {
-    const flipK = p.st === 'flip' ? Math.sin(p.anim * Math.PI) : 0, tx = cx + 70 - flipK * 70, ty = cy + 46 - flipK * 30;
-    drawArm(tx + 190, ty + 100, 930, 660, '#4f6f8a');
-    ctx.strokeStyle = '#8a6a44'; ctx.lineWidth = 9; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(tx + 20, ty + 10); ctx.lineTo(tx + 190, ty + 100); ctx.stroke();
-    ctx.save(); ctx.translate(tx, ty); ctx.rotate(0.5); ctx.fillStyle = '#c9ced3'; rr(-44, -16, 62, 32, 5); ctx.fill(); ctx.fillStyle = '#e6eaee'; ctx.fillRect(-40, -12, 54, 5); ctx.restore();
+  // 국자 (반죽 붓기) · 뒤집개
+  if (p.st === 'pour' && okImg('prop_ladle')) prop('prop_ladle', cx - 10, cy - 120, 140, 220, 0.7 - p.anim * 0.5);
+  else if (p.st === 'empty') prop('prop_ladle', 668, 470, 80, 126, -0.3);
+  if (p.st !== 'empty' && p.st !== 'pour') {
+    const flipK = p.st === 'flip' ? Math.sin(p.anim * Math.PI) : 0, tx = cx + 80 - flipK * 80, ty = cy + 40 - flipK * 30;
+    if (okImg('prop_spatula')) ctx.drawImage(IMG.prop_spatula, tx - 35, ty - 35, 169, 163);
   }
-  // 기름병
-  ctx.save(); ctx.translate(OIL.x + OIL.w / 2, OIL.y + 108);
-  ctx.fillStyle = 'rgba(230,190,90,0.9)'; rr(-34, -80, 68, 150, 14); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.fillRect(-26, -70, 8, 120);
-  ctx.fillStyle = '#e8d9b0'; rr(-14, -112, 28, 34, 4); ctx.fill();
-  ctx.fillStyle = '#c8452f'; rr(-16, -122, 32, 12, 3); ctx.fill();
-  ctx.fillStyle = '#f6efe2'; rr(-28, -20, 56, 36, 4); ctx.fill();
-  txt('식용유', 0, 4, 14, '#5a3a24', 'center', FS);
-  ctx.restore();
-  txt(S.pan.st === 'empty' ? '톡: 기름 두르기' : '기름', OIL.x + OIL.w / 2, OIL.y + 192, 14, '#f1e7d3', 'center', FS);
-  for (let i = 0; i < 3; i++) { ctx.fillStyle = i < S.oil ? '#e2a43a' : 'rgba(255,255,255,0.3)'; circle(OIL.x + OIL.w / 2 - 22 + i * 22, OIL.y + 212, 7); ctx.fill(); }
-  txt(['안 두름', '조금', '적당히', '듬뿍'][S.oil], OIL.x + OIL.w / 2, OIL.y + 240, 13, '#e9dcc6', 'center', FT);
+  // 기름 3종
+  OILB.forEach(b => {
+    const on = S.oilType === b.i;
+    ctx.save(); if (on) { ctx.shadowColor = '#f3c552'; ctx.shadowBlur = 18; }
+    prop(OILS[b.i].img, b.x + b.w / 2, b.y + b.h / 2 - (on ? 6 : 0), b.w, b.h);
+    ctx.restore();
+  });
+  const oname = S.oilType >= 0 ? OILS[S.oilType].n : '기름 고르기';
+  txt(oname, 92, 462, 15, S.oilType >= 0 ? '#f3c552' : '#f1e7d3', 'center', FS);
+  for (let i = 0; i < 3; i++) { ctx.fillStyle = i < S.oil ? '#e2a43a' : 'rgba(255,255,255,0.3)'; circle(70 + i * 22, 478, 6); ctx.fill(); }
+  txt(S.pan.st === 'empty' ? '같은 병 한 번 더: 양' : '', 92, 500, 12, '#e9dcc6', 'center', FT);
+  // 키친타올 (기름 고루 펴기)
+  prop('prop_towel', TOWEL.x + TOWEL.w / 2, TOWEL.y + TOWEL.h / 2, TOWEL.w, TOWEL.h);
+  txt(S.towel ? '기름 폈음' : '톡: 기름 펴기', TOWEL.x + TOWEL.w / 2, TOWEL.y + TOWEL.h + 12, 12, S.towel ? '#8fd16a' : '#f1e7d3', 'center', FS);
   // 오른쪽 정보
   const ix = 736;
   ctx.fillStyle = 'rgba(18,12,8,0.62)'; rr(ix - 16, 78, 236, 376, 10); ctx.fill();
@@ -922,6 +939,12 @@ function drawPlateShape(type, x, y, rx, ry) {
   }
 }
 function drawDipBowl(d, x, y, s = 1) {
+  if (okImg('prop_dish')) {
+    if (!d.soy) return;
+    prop('prop_dish', x, y, 64 * s, 42 * s);
+    if (d.chili) [[-8, -3, 0.4], [6, 2, 2.1]].forEach(([a, b, rr2]) => { ctx.save(); ctx.translate(x + a * s, y + b * s); ctx.rotate(rr2); drawPiece('pepper', 13 * s); ctx.restore(); });
+    return;
+  }
   ctx.fillStyle = '#efe9df'; ctx.beginPath(); ctx.ellipse(x, y, 26 * s, 14 * s, 0, 0, 6.28); ctx.fill();
   if (d.c) { ctx.fillStyle = d.c; ctx.beginPath(); ctx.ellipse(x, y, 20 * s, 10 * s, 0, 0, 6.28); ctx.fill();
     if (d.n === '양념간장') { ctx.fillStyle = '#d04a2a'; for (let i = 0; i < 6; i++) { circle(x - 10 * s + i * 4 * s, y - 2 * s + (i % 2) * 4 * s, 1.4 * s); ctx.fill(); } ctx.fillStyle = '#5f8f2e'; ctx.fillRect(x + 2 * s, y - 4 * s, 6 * s, 1.6 * s); } }
@@ -933,14 +956,14 @@ function drawServe() {
     const on = S.plate === o.i;
     ctx.fillStyle = on ? 'rgba(226,164,58,0.22)' : 'rgba(18,12,8,0.55)'; rr(o.x, o.y, o.w, o.h, 8); ctx.fill();
     if (on) { ctx.strokeStyle = '#e2a43a'; ctx.lineWidth = 3; rr(o.x, o.y, o.w, o.h, 8); ctx.stroke(); }
-    drawPlateShape(o.i, o.x + 46, o.y + 44, 34, 20);
-    txt(PLATES[o.i].n, o.x + 90, o.y + 50, 17, on ? '#f3c552' : '#f1e7d3', 'left', FS);
+    prop('prop_plates', o.x + 50, o.y + 44, 80, 70);
+    txt(PLATES[o.i].n, o.x + 100, o.y + 50, 17, on ? '#f3c552' : '#f1e7d3', 'left', FS);
   });
   DIP_OPTS.forEach(o => {
     const on = S.dip === o.i;
     ctx.fillStyle = on ? 'rgba(226,164,58,0.22)' : 'rgba(18,12,8,0.55)'; rr(o.x, o.y, o.w, o.h, 8); ctx.fill();
     if (on) { ctx.strokeStyle = '#e2a43a'; ctx.lineWidth = 3; rr(o.x, o.y, o.w, o.h, 8); ctx.stroke(); }
-    drawDipBowl(DIPS[o.i], o.x + 44, o.y + 46, 1);
+    if (DIPS[o.i].soy) drawDipBowl(DIPS[o.i], o.x + 44, o.y + 46, 1); else { ctx.save(); ctx.globalAlpha = 0.35; prop('prop_dish', o.x + 44, o.y + 46, 64, 42); ctx.restore(); }
     txt(DIPS[o.i].n, o.x + 84, o.y + 52, 17, on ? '#f3c552' : '#f1e7d3', 'left', FS);
   });
   txt('접시', 119, 72, 14, '#bdb3a2', 'center', FS);
@@ -950,6 +973,8 @@ function drawServe() {
   drawPlateShape(S.plate, 470, 390, 196, 92);
   drawJeon(450, 380, 128, S.jeon, S.pan.sides[0], S.pan.sides[1], 0.5, S.cut ? 6 : 0);
   drawDipBowl(DIPS[S.dip], 612, 430, 1.3);
+  if (DIPS[S.dip].soy) prop('prop_soy', 700, 380, 50, 120);
+  if (S.cut) prop('prop_knife', 262, 450, 100, 104, 0.3);
   ctx.font = `22px ${FS}`; const nw = ctx.measureText(recipeName(S.picks)).width + 40;
   ctx.fillStyle = 'rgba(18,12,8,0.62)'; rr(470 - nw / 2, 296, nw, 36, 18); ctx.fill();
   txt(recipeName(S.picks), 470, 322, 22, '#f1e7d3', 'center', FS);
@@ -1011,10 +1036,7 @@ function drawTable() {
   drawJeon(460, 384, 96, S.jeon, S.pan.sides[0], S.pan.sides[1], 0.42, S.cut ? 6 : 0);
   drawDipBowl(DIPS[S.dip], 640, 410, 1.1);
   // 내 손과 젓가락 (1인칭)
-  drawArm(820, 506, 930, 660, '#4f6f8a');
-  ctx.strokeStyle = '#d9b27a'; ctx.lineWidth = 4; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(812, 498); ctx.lineTo(600, 420); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(826, 508); ctx.lineTo(612, 432); ctx.stroke();
+  prop('prop_chopsticks', 720, 470, 190, 108);
   // 말풍선
   const r = S.result;
   FAMILY.forEach((f, i) => {
@@ -1257,11 +1279,15 @@ function hit(x, y) {
   if (stage === 1 && inR(x, y, BOARD)) return { k: 'board' };
   if (stage === 2) {
     for (const b of BAGS) if (inR(x, y, b)) return { k: 'flour', i: b.i };
+    if (inR(x, y, EGGS)) return { k: 'egg' };
+    if (inR(x, y, SALT)) return { k: 'salt' };
+    if (inR(x, y, PEPPER)) return { k: 'pepper' };
     if (inR(x, y, { x: PITCHER.x - 20, y: PITCHER.y, w: PITCHER.w + 40, h: PITCHER.h + 30 })) return { k: 'pitcher' };
-    if (((x - BIGBOWL.x) / (BIGBOWL.r + 12)) ** 2 + ((y - BIGBOWL.y) / (BIGBOWL.r * 0.56 + 14)) ** 2 < 1) return { k: 'bowl' };
+    if (inR(x, y, { x: 336, y: 322, w: 288, h: 206 })) return { k: 'bowl' };
   }
   if (stage === 3) {
-    if (inR(x, y, OIL)) return { k: 'oil' };
+    for (const b of OILB) if (inR(x, y, b)) return { k: 'oil', i: b.i };
+    if (inR(x, y, TOWEL)) return { k: 'towel' };
     if (((x - PAN.x) / (PAN.r + 14)) ** 2 + ((y - PAN.y) / (PAN.r * 0.52 + 12)) ** 2 < 1) return { k: 'pan' };
   }
   if (stage === 4) {
@@ -1286,8 +1312,16 @@ function act(h) {
     case 'flour': S.flour = h.i; sfx.pick(); say(`${FLOURS[h.i].n}. ${FLOURS[h.i].d}.`); break;
     case 'oil':
       if (S.pan.st !== 'empty') { say('기름은 붓기 전에 두르는 거다.'); break; }
-      S.oil = (S.oil + 1) % 4; sfx.oil();
-      say(['기름 안 두르면 눌어붙는다.', '조금만 둘렀다.', '적당하다. 이 정도면 됐다.', '듬뿍! 바삭하겠지만 엄마가 뭐라 하겠다.'][S.oil]); break;
+      if (S.oilType !== h.i) { S.oilType = h.i; S.oil = 1; } else S.oil = S.oil % 3 + 1;
+      S.towel = false; sfx.oil();
+      say(`${OILS[h.i].n} ${['', '조금', '적당히', '듬뿍'][S.oil]}. ${OILS[h.i].d}.`); break;
+    case 'towel':
+      if (S.pan.st !== 'empty') { say('지금은 팬이 뜨겁다. 나중에 닦자.'); break; }
+      if (!S.oil) { say('기름부터 둘러야 펴지.'); break; }
+      S.towel = true; sfx.pick(); say('키친타올로 기름을 고루 폈다. 남는 기름은 닦였다.'); break;
+    case 'egg': S.eggs = (S.eggs + 1) % 3; if (S.mix > 0.6) S.mix = 0.6; sfx.pick(); say(S.eggs ? `계란 ${S.eggs}개. 반죽이 부드러워진다.` : '계란 뺐다.'); break;
+    case 'salt': S.salt = (S.salt + 1) % 4; if (S.mix > 0.6) S.mix = 0.6; sfx.pick(); say(['소금 뺐다. 싱거울 거다.', '소금 살짝.', '소금 적당히.', '소금 많이! 짤 거다.'][S.salt]); break;
+    case 'pepper': S.pepper = (S.pepper + 1) % 4; if (S.mix > 0.6) S.mix = 0.6; sfx.pick(); say(['후추 뺐다.', '후추 톡.', '후추 톡톡.', '후추 잔뜩!'][S.pepper]); break;
     case 'plate': S.plate = h.i; sfx.pick(); break;
     case 'dip': S.dip = h.i; sfx.pick(); break;
     case 'cut': S.cut = h.i; sfx.chop(); break;
