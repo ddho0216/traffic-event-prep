@@ -84,7 +84,7 @@ const DIPS = [
 ];
 /* 사진에서 오려 낸 재료 이미지와 부엌 배경 (assets 폴더) */
 const IMG = {};
-['kitchen', ...FRIDGE.flatMap(k => ['ing_' + k, 'pc_' + k])].forEach(n => { const i = new Image(); i.src = 'assets/' + n + '.webp'; IMG[n] = i; });
+['kitchen', 'top_hobak', ...FRIDGE.flatMap(k => ['ing_' + k, 'pc_' + k]), ...['kimchi', 'haemul', 'buchu', 'gamja'].flatMap(t => ['top_' + t, 1, 2, 3, 4, 5].map((n, i) => i ? `st_${t}_${n}` : n))].forEach(n => { const i = new Image(); i.src = 'assets/' + n + '.webp'; IMG[n] = i; });
 const okImg = n => IMG[n] && IMG[n].complete && IMG[n].naturalWidth > 0;
 const PW = { kimchi: 30, buchu: 26, zucchini: 24, potato: 20, squid: 22, onion: 26, carrot: 13, pepper: 26 };
 const STAGES = ['재료 고르기', '손질하기', '반죽 만들기', '굽기', '담기', '저녁 식탁'];
@@ -490,7 +490,52 @@ function tintColor(col, items) {
   w *= clamp(bright * 1.5, 0, 1);
   return `rgb(${m.map((v, i) => Math.round(lerp(v, t[i], w))).join(',')})`;
 }
+function jeonType(items) {
+  if (items.includes('kimchi')) return 'kimchi';
+  if (items.includes('squid')) return 'haemul';
+  if (items.includes('buchu')) return 'buchu';
+  if (items.includes('potato')) return 'gamja';
+  if (items.includes('zucchini')) return 'hobak';
+  return 'haemul';
+}
+function jeonStage(topV, edgeV) {
+  if (topV < 5) return edgeV < 30 ? 1 : 2;          // 뒤집기 전: 날반죽 → 테두리 익음
+  if (topV > 95 || edgeV > 95) return 5;            // 탐
+  return edgeV < 50 ? 3 : 4;                        // 뒤집은 뒤: 중간 → 노릇 완숙
+}
+function drawJeonImg(x, y, R, jeon, topV, edgeV, sy, slices) {
+  const t = jeonType(jeon.items), st = jeonStage(topV, edgeV);
+  ctx.save(); ctx.translate(x, y); ctx.scale(1, sy);
+  ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(3, 6, R, R, 0, 0, 6.283); ctx.fill();
+  if (t === 'hobak') {
+    if (!okImg('top_hobak')) { ctx.restore(); return false; }
+    const pos = [[0, 0], ...Array.from({ length: 7 }, (_, i) => [Math.cos(i / 7 * 6.283) * 0.62, Math.sin(i / 7 * 6.283) * 0.62])];
+    pos.forEach(([px, py]) => {
+      ctx.drawImage(IMG.top_hobak, px * R - R * 0.33, py * R - R * 0.33, R * 0.66, R * 0.66);
+      if (st !== 4 && st !== 3) { ctx.fillStyle = st === 5 ? 'rgba(25,20,15,0.72)' : 'rgba(240,225,200,0.45)'; ctx.beginPath(); ctx.arc(px * R, py * R, R * 0.31, 0, 6.283); ctx.fill(); }
+    });
+    ctx.restore(); return true;
+  }
+  const name = st === 4 ? 'top_' + t : `st_${t}_${st}`;
+  if (!okImg(name)) { ctx.restore(); return false; }
+  const im = IMG[name];
+  if (slices) {
+    const n = slices, gap = R * 0.035;
+    for (let i = 0; i < n; i++) {
+      const a0 = i / n * 6.283, a1 = (i + 1) / n * 6.283, am = (a0 + a1) / 2;
+      ctx.save(); ctx.translate(Math.cos(am) * gap, Math.sin(am) * gap);
+      ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, R, a0, a1); ctx.closePath(); ctx.save(); ctx.clip();
+      ctx.drawImage(im, -R, -R, R * 2, R * 2); ctx.restore();
+      ctx.strokeStyle = '#1e140c'; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
+    }
+  } else {
+    ctx.drawImage(im, -R, -R, R * 2, R * 2);
+    ctx.strokeStyle = 'rgba(30,20,12,0.85)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, R * 0.965, 0, 6.283); ctx.stroke();
+  }
+  ctx.restore(); return true;
+}
 function drawJeon(x, y, R, jeon, topV, edgeV, sy = 1, slices = 0) {
+  if (drawJeonImg(x, y, R, jeon, topV, edgeV, sy, slices)) return;
   ctx.save(); ctx.translate(x, y); ctx.scale(1, sy);
   const it = jeon.items;
   // 그림자
@@ -858,7 +903,7 @@ function drawFry() {
 /* ================= 5. 담기 ================= */
 const PL_OPTS = PLATES.map((p, i) => ({ i, x: 24, y: 80 + i * 100, w: 190, h: 88 }));
 const DIP_OPTS = DIPS.map((d, i) => ({ i, x: 746, y: 80 + i * 100, w: 190, h: 88 }));
-const CUT_OPTS = [{ i: 0, n: '통째로', x: 330, y: 494, w: 130, h: 42 }, { i: 1, n: '여덟 조각', x: 480, y: 494, w: 130, h: 42 }];
+const CUT_OPTS = [{ i: 0, n: '통째로', x: 330, y: 494, w: 130, h: 42 }, { i: 1, n: '6조각', x: 480, y: 494, w: 130, h: 42 }];
 function drawPlateShape(type, x, y, rx, ry) {
   if (type === 2) {
     ctx.fillStyle = '#c9a463'; ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, 6.28); ctx.fill();
@@ -903,7 +948,7 @@ function drawServe() {
   // 미리보기
   ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(474, 404, 196, 90, 0, 0, 6.28); ctx.fill();
   drawPlateShape(S.plate, 470, 390, 196, 92);
-  drawJeon(450, 380, 128, S.jeon, S.pan.sides[0], S.pan.sides[1], 0.5, S.cut ? 8 : 0);
+  drawJeon(450, 380, 128, S.jeon, S.pan.sides[0], S.pan.sides[1], 0.5, S.cut ? 6 : 0);
   drawDipBowl(DIPS[S.dip], 612, 430, 1.3);
   ctx.font = `22px ${FS}`; const nw = ctx.measureText(recipeName(S.picks)).width + 40;
   ctx.fillStyle = 'rgba(18,12,8,0.62)'; rr(470 - nw / 2, 296, nw, 36, 18); ctx.fill();
@@ -962,7 +1007,7 @@ function drawTable() {
     ctx.fillStyle = '#fbfaf6'; ctx.beginPath(); ctx.ellipse(x, y - 4, 22, 9, 0, 0, 6.28); ctx.fill();
   });
   drawPlateShape(S.plate, 470, 392, 150, 58);
-  drawJeon(460, 384, 96, S.jeon, S.pan.sides[0], S.pan.sides[1], 0.42, S.cut ? 8 : 0);
+  drawJeon(460, 384, 96, S.jeon, S.pan.sides[0], S.pan.sides[1], 0.42, S.cut ? 6 : 0);
   drawDipBowl(DIPS[S.dip], 640, 410, 1.1);
   // 내 손과 젓가락 (1인칭)
   drawArm(820, 506, 930, 660, '#4f6f8a');
@@ -1129,7 +1174,7 @@ function drawIntro() {
 
 /* ================= 첫 화면, 도감 ================= */
 const START = { x: 380, y: 452, w: 200, h: 54 };
-const demoJeon = makeJeon(['kimchi', 'squid', 'onion']);
+const demoJeon = makeJeon(['kimchi', 'squid', 'onion']), demoJeon2 = makeJeon(['buchu', 'squid']);
 function drawTitle() {
   drawWall(); drawWindow();
   ctx.fillStyle = 'rgba(20,16,14,0.7)'; ctx.fillRect(0, 0, W, H);
@@ -1140,7 +1185,7 @@ function drawTitle() {
   ctx.restore();
   txt('잠깐 귀국한 비 오는 날, 가족에게 부쳐 주는 저녁 반찬', 480, 216, 18, '#d9cdb8', 'center', FT);
   drawJeon(160, 340, 74, demoJeon, 70, 78);
-  drawJeon(800, 340, 74, demoJeon, 62, 72);
+  drawJeon(800, 340, 74, demoJeon2, 62, 72);
   STAGES.forEach((s, i) => {
     const y = 268 + i * 28;
     ctx.fillStyle = '#e2a43a'; circle(404, y - 6, 10); ctx.fill();
