@@ -471,10 +471,11 @@ nav.tabs .grpbtn{cursor:default}nav.tabs .grpbtn:hover{color:var(--text)}
 .ver{margin-left:10px;padding:1px 7px;border:1px solid var(--line,#263442);border-radius:10px;font:600 11px var(--mono);color:var(--muted);vertical-align:middle}
 
 /* 자동 대응 화면: 맨 위에 '움직이는 방법' 카드가 하나 더 있다 */
-.lv-agent .lv-how{grid-column:1/3;grid-row:2}
-.lv-agent .lv-gate{grid-column:1/3;grid-row:1}
-.lv-agent .lv-graph{grid-row:3}.lv-agent .lv-term{grid-row:4}.lv-agent .lv-comp{grid-row:5}.lv-agent .lv-log{grid-row:6}
-.lv-agent .lv-todo{grid-row:3/5}.lv-agent .lv-sms{grid-row:5/7}
+/* 자동 대응 배치(A안): 맨 위 그래프 + 진행 상황, 그 아래 확인 요청, 설명 카드, 터미널은 아래 (자동이라 터미널을 만질 일이 적음) */
+.lv-agent .lv-graph{grid-column:1;grid-row:1}.lv-agent .lv-todo{grid-column:2;grid-row:1/3}
+.lv-agent .lv-gate{grid-column:1;grid-row:2}
+.lv-agent .lv-how{grid-column:1/3;grid-row:3}
+.lv-agent .lv-term{grid-column:1;grid-row:4}.lv-agent .lv-comp{grid-column:1;grid-row:5}.lv-agent .lv-log{grid-column:1;grid-row:6}.lv-agent .lv-sms{grid-column:2;grid-row:4/7}
 .lv-howg{display:grid;grid-template-columns:minmax(0,4fr) minmax(0,8fr);gap:18px}
 .lv-howg h4{margin:10px 0 4px;font-size:13px}.lv-howg h4:first-child{margin-top:0}.lv-howg p,.lv-howg li{font-size:12.5px;line-height:1.6;color:var(--muted);margin:0}.lv-howg ul{margin:0;padding-left:18px}
 .lv-rule{width:100%;border-collapse:collapse;font-size:12.5px}.lv-rule th{text-align:left;color:var(--muted);font-weight:500;padding:4px 8px;border-bottom:1px solid var(--line)}
