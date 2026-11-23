@@ -162,6 +162,11 @@ function makeLive(root, P, AGENT) {
         trigger: `${UPL} in이 평소(약 3.3G)의 2배를 넘으면 급증으로 보고, 3분 뒤 알림이 뜨면 바로 시작합니다. (기준 값은 제가 정한 가정)`,
         guards: ["이벤트 일정이 있는 시간이면 차단하지 않고 사람에게 넘김", "클린존 가입 고객사면 블랙홀 대신 우회", "블랙홀은 공격받는 IP 1개(/32)에만 적용", "링크가 평소 범위로 돌아온 것을 확인하기 전에는 완료 문자를 보내지 않음", "블랙홀은 스스로 풀지 않고, 48시간 뒤 사람에게 해제 알림만 남김"],
         limit: "블랙홀을 걸면 그 IP의 정상 접속도 함께 끊깁니다. 실제 현장이라면 이 단계만큼은 사람 확인을 거치게 둘지 정해야 합니다. 여기서는 규칙이 끝까지 가는 모습을 보여 드리려고 자동으로 두었습니다.",
+        human: { sms: "발송 전", act: "실행 전", fin: "발송 전" },
+        gates: {
+          exec: () => ({ title: "블랙홀 차단을 실행할까요?", where: DEV, cmd: [`set routing-options static route ${VICTIM}/32 discard`, "commit"], undo: [`delete routing-options static route ${VICTIM}/32`, "commit"], impact: `이 IP(${VICTIM})로 가는 정상 접속도 함께 끊깁니다 (가상물산). 24~48시간 유지할 예정입니다`, alts: [["더 지켜보기", `링크 in ${gb(valueIn(cur()))}G · 공격이 계속 들어오는 중`], ["클린존 우회", "불가 (가상물산은 미가입, 가정)"]] }),
+          up: () => ({ title: "상위 연동망에 블랙홀을 요청할까요?", where: "상위 연동망 (외부 조직)", cmd: [`블랙홀 요청: ${VICTIM}/32 · 커뮤니티 65535:666`], undo: ["상위 연동망에 해제 요청"], impact: "외부 조직이 우리 요청대로 트래픽을 버립니다. 주소를 잘못 보내면 다른 고객 IP까지 막힐 수 있습니다", alts: [["우리 장비 블랙홀만 유지", "공격량이 회선 용량을 넘지 않을 때만 가능"]] })
+        },
         steps: {
           ev: { rule: "알림 수신 → 이벤트 일정 조회", tool: "이벤트 일정표 조회", why: () => "10/29 03시대에 일정 없음 → 정상 증가가 아님" },
           ip: { rule: "일정 없음 → 대상 IP의 고객사·공격량 조회, 구성을 기록에 저장", tool: "IP 대장 조회 · 트래픽 구성 통계", why: () => `${VICTIM} = 가상물산 · TCP SYN 95% · ${gb(atkRaw(cur()))} Gbps`, after: () => SC.save() },
@@ -304,6 +309,10 @@ function makeLive(root, P, AGENT) {
         trigger: `${ID}(${DV} ${PORT})가 Link down이 되고 3분 뒤 알림이 뜨면 바로 시작합니다.`,
         guards: ["우리 쪽 확인(광값·CRC·ping)을 끝낸 뒤에만 연동망에 문의", "연동망 회신을 받기 전에는 원인을 정하지 않음", "장비 설정은 바꾸지 않음 (조회 명령만 실행)", "그래프가 돌아오고 광값·ping을 다시 확인하기 전에는 완료 문자를 보내지 않음"],
         limit: "일시적인 오류와 광 케이블·SFP 고장은 연동망 회신(모두 없음)과 광값(빛 없음)이 똑같이 나와서 규칙만으로는 구분하지 못합니다. 이럴 때는 안전한 쪽인 현장 교체 요청을 고릅니다.",
+        human: { sms: "발송 전", cause: "교체 요청일 때", fin: "발송 전" },
+        gates: {
+          fix: () => ({ title: "현장에 광 케이블·SFP 교체를 요청할까요?", where: "현장 작업 (사람 투입)", cmd: [`작업 요청: ${DV} ${PORT} 광 케이블·SFP 점검·교체`], undo: ["요청 취소 연락"], impact: "현장 인력이 서버실에 들어가 작업합니다. 같은 랙의 다른 장비에 손이 갈 수 있습니다", alts: [["복구 대기·재확인", "연동망 회신이 모두 '없음'이라 원인이 우리 쪽일 가능성이 큽니다"]] })
+        },
         steps: {
           ip: { rule: "알림 수신 → 어느 장비·회선인지 확인", tool: CMDS.ip, why: () => `${DV} ${PORT}: Admin up / Link down` },
           tr: { rule: "회선 확인 → 다운 전·후 트래픽 읽기", tool: "그래프 값 읽기", why: () => `${gb(val(dS - 5))}G → ${gb(val(dS))}G` },
@@ -444,6 +453,10 @@ function makeLive(root, P, AGENT) {
         trigger: `${ID} 트래픽이 전날 같은 시각보다 크게 줄고, 3분 뒤 알림이 뜨면 바로 시작합니다. (기준 값은 제가 정한 가정)`,
         guards: ["경기 일정이 있는 시간이면 정상 하락일 수 있어 사람에게 넘김", "우리 쪽 광값·CRC를 먼저 확인한 뒤에만 상대 사업자에 문의", "회신을 받은 뒤에만 고객사에 안내", "장비 설정은 바꾸지 않음 (조회 명령만 실행)", "회복을 확인하기 전에는 완료 문자를 보내지 않음"],
         limit: "상대 사업자에게 묻고 답을 받는 일은 실제로는 전화·메신저라서 자동화하기 어렵습니다. 여기서는 가상 회신으로 대신했습니다.",
+        human: { sms: "발송 전", notice: "발송 전", fin: "발송 전" },
+        gates: {
+          notice: () => ({ title: "영향 고객사에 상황 안내를 보낼까요?", where: `${cust().join("·") || "영향 고객사"}`, cmd: [`안내 메일: 국내 연동(IX) 트래픽 급감 · 해외 연동으로 일부 우회 중 · 상대 사업자 복구 작업 중`], undo: null, impact: "고객사에 그대로 전달됩니다. 보낸 뒤에는 되돌릴 수 없습니다", alts: [["회복 뒤 한 번에 안내", "짧게 끝날 것이 확실할 때만"]] })
+        },
         steps: {
           ev: { rule: "알림 수신 → 경기 일정 조회", tool: "이벤트 일정표 조회", why: () => "해당 시간 경기 일정 없음 → 하프타임 같은 정상 하락이 아님" },
           tr: { rule: "일정 없음 → 전날 같은 시각과 비교", tool: "그래프 값 읽기", why: () => `전날 ${gb(prev(dS) || 0)}G → ${gb(val(dS))}G` },
@@ -572,6 +585,10 @@ function makeLive(root, P, AGENT) {
         trigger: `${D1}이 응답하지 않고, 3분 뒤 알림이 뜨면 바로 시작합니다.`,
         guards: ["고객 영향이 없어도 장비가 꺼진 것은 반드시 알림 (발생 문자)", "전원 모듈 교체는 사람이 하므로 요청(티켓)만 올림", "한 대로 버티는 동안 짝 장비를 따로 확인", "두 장비와 짝 연결이 모두 정상인 것을 확인하기 전에는 완료 문자를 보내지 않음"],
         limit: "전원 모듈 교체처럼 손으로 해야 하는 일은 자동화할 수 없습니다. 자동 대응은 확인·보고·요청까지만 합니다.",
+        human: { sms: "발송 전", report: "요청 전", fin: "발송 전" },
+        gates: {
+          report: () => ({ title: "조장 보고와 전원 모듈 교체 요청을 올릴까요?", where: "조장 · 현장 (사람 투입)", cmd: [`교체 요청(티켓): ${D1} 전원 모듈 · ${DEV[D1].rack}`], undo: ["티켓 취소"], impact: `현장 인력이 투입됩니다. 지금은 짝 장비 ${D2} 한 대로 버티는 중입니다`, alts: [["짝 장비 확인 뒤 요청", "한 대로 버티는 시간이 길어집니다"]] })
+        },
         steps: {
           ip: { rule: "알림 수신 → 꺼진 장비에 접속 시도", tool: `${D1} ${CMDS.desc}`, why: () => `${D1} 응답 없음 (전원 꺼짐)` },
           partner: { rule: "접속 안 됨 → 짝 장비에서 같은 명령", tool: `${D2} ${CMDS.desc}`, why: () => `${D2}의 고객 회선은 그대로 Up, 짝 연결만 Down` },
@@ -590,7 +607,7 @@ function makeLive(root, P, AGENT) {
 
   /* ================= 공통 화면 ================= */
   root.innerHTML = (`
-<div class="lv-bar"><h2><span id="lvTitle"></span> <span class="tag warn">시험판</span>${AGENT ? ' <span class="tag">자동 대응 · 규칙 기반 (AI 호출 없음)</span>' : ' <span class="tag">직접 대응</span>'}</h2>
+<div class="lv-bar"><h2><span id="lvTitle"></span> <span class="tag warn">시험판</span>${AGENT ? ' <span class="tag">자동 대응 · 규칙 기반 (AI 호출 없음) · 사람 확인 포함</span>' : ' <span class="tag">직접 대응</span>'}</h2>
   <span class="muted" id="lvSub"></span>
   <span class="seg" id="lvScen"></span>
   <span class="lv-ctl"><button class="btn primary" id="lvPlay" type="button">▶ 시작</button><button class="btn" id="lvStep" type="button" title="가상 시계를 1분 앞으로">+1분</button>
@@ -599,7 +616,7 @@ function makeLive(root, P, AGENT) {
   <span class="lv-clock"><span class="muted">가상 시각</span> <b class="mono" id="lvClock"></b></span></div>
 <div class="lv-alert idle" id="lvAlert"></div>
 <div class="lv-grid">
-  ${AGENT ? '<div class="card lv-how"><h3>자동 대응이 움직이는 방법 <span class="muted">사람이 하던 순서를 규칙표로 옮겨 그대로 실행합니다. ▶ 시작을 누르면 알림이 뜬 뒤부터 스스로 진행합니다</span></h3><div id="lvHow"></div></div>' : ""}
+  ${AGENT ? '<div class="card lv-how"><h3>자동 대응이 움직이는 방법 <span class="muted">조사·초안은 자동으로, 되돌리기 어렵거나 밖으로 나가는 일은 근무자 확인 뒤에 실행합니다. ▶ 시작을 누르면 알림이 뜬 뒤부터 진행합니다</span></h3><div id="lvHow"></div></div><div class="card lv-gate" id="lvGate"></div>' : ""}
   <div class="card lv-graph"><h3 id="lvGraphH"></h3><div id="lvChart"></div></div>
   <div class="card lv-term"><h3 id="lvTermH"></h3>
     <pre id="lvTermOut"></pre>
@@ -679,6 +696,7 @@ function makeLive(root, P, AGENT) {
       const me = last[SC.id];
       fr = fr.map(r => [r[0].replace("내가 ", "자동 ").replace("내 조치", "자동 조치"), r[1]]).concat([
         ["자동 대응이 걸린 시간", `발생 문자 ${used == null ? "안 보냄" : used + "분"} · 끝까지 ${total}분 (알림 기준)`],
+        ["사람 확인", S.ag.approvals.length ? `${S.ag.approvals.length}건 · 평균 ${(S.ag.approvals.reduce((q, a) => q + a.wait, 0) / S.ag.approvals.length).toFixed(1)}분 만에 확인 · 확인자 ${[...new Set(S.ag.approvals.map(a => a.by))].join(", ")}${S.ag.approvals.some(a => a.edited) ? " · 고쳐서 실행 포함" : ""}` : "없음"],
         ["직접 대응했을 때 (최근 기록)", me ? `발생 문자 ${me.sms == null ? "안 보냄" : me.sms + "분"} · 끝까지 ${me.total}분` : "아직 없음 ('직접 대응'에서 같은 시나리오를 끝내면 여기에 비교됩니다)"]]);
     }
     E("lvResBody").innerHTML = `<table class="kv2">${fr.map(r => `<tr><th>${r[0]}</th><td>${esc(r[1])}</td></tr>`).join("")}</table>${AGENT && SC.auto.limit ? `<p class="note"><b>자동화의 한계</b> ${esc(SC.auto.limit)}</p>` : ""}<p class="note">${SC.note}</p>`;
@@ -707,42 +725,113 @@ function makeLive(root, P, AGENT) {
   const BEAT = 0.3;
   const MAN_LIST = [["ddos", null, "DDoS 공격 수신"], ["linkDown", "ask", "업링크 회선 다운"], ["drop", null, "트래픽 급감"], ["redundancy", null, "이중화"]];   // 직접 대응: 회선 다운은 복구 원인을 먼저 고른다
   const AG_LIST = [["ddos", null, "DDoS 공격 수신"], ["linkDown", { cause: "work" }, "회선 다운 · 상대 작업"], ["linkDown", { cause: "fiber" }, "회선 다운 · 광 고장"], ["drop", null, "트래픽 급감"], ["redundancy", null, "이중화"]];
-  function agentSend(st) { S.stage = st; fill(); S.sent[st] = S.t; addLog(`${st} 문자 발송 (자동 · 가상)`); E("lvSendMsg").textContent = `${st} 문자를 자동으로 보냈습니다 (${fmt(S.t)})`; SC.onSend(st); }
+  function agentSend(st, text, who) { S.stage = st; fill(); if (text) E("lvDraft").value = text; S.sent[st] = S.t; addLog(`${st} 문자 발송 (${who ? who + " 확인" : "자동"} · 가상)`); E("lvSendMsg").textContent = `${st} 문자를 보냈습니다 (${fmt(S.t)}${who ? " · 확인 " + who : ""})`; SC.onSend(st); }
+  /* ----- 사람 확인: 되돌리기 어렵거나 밖으로 나가는 행동은 근무자가 확인한 뒤에만 실행한다 -----
+     확인 요청 카드에 명령·근거·영향·대안·되돌리는 방법을 보여 주고, 기한(가상 2분)이 지나도 자동 실행하지 않고 다시 알린다. */
+  const GATE_MIN = 2;
+  const sendGate = st => ({ title: `${st} 문자를 보낼까요?`, where: "고객사 · 내부 전파", send: st, text: SC.draft(st), undo: null, impact: "받는 사람에게 그대로 전달됩니다. 보낸 뒤에는 되돌릴 수 없습니다", alts: st === "발생" ? [["조금 더 확인 뒤 보내기", `기한: 알림 후 ${SC.deadline}분 · 남은 ${Math.max(0, SC.alertAt + SC.deadline - S.t).toFixed(1)}분`]] : [["나중에 보내기", "상황이 바뀌면 초안을 다시 만들어야 합니다"]] });
+  function gateOpen(g, key, run) {
+    const ev = SC.rows().filter(r => S.ag.did[r[0]]).slice(-4).map(r => [r[1].replace(/<[^>]+>/g, ""), S.ag.did[r[0]].why]);
+    S.ag.pending = Object.assign({ key, run, at: S.t, due: S.t + GATE_MIN, realert: 0, ev, editing: false }, g);
+    addLog(`확인 요청: ${g.title.replace(/[?？]$/, "")}`); renderGate(); todo();
+  }
+  function gateLeft() { const g = S.ag.pending; if (!g) return ""; const sec = Math.max(0, Math.round((g.due - S.t) * 60)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`; }
+  function renderGate() {
+    const el = E("lvGate"); if (!el) return;
+    const g = S.ag.pending, st = S.ag.stopped;
+    if (st) { el.className = "card lv-gate done"; el.innerHTML = `<div class="gt-stop"><span class="tag ${st.kind === "reject" ? "bad" : "warn"}">${st.kind === "reject" ? "실행 안 함" : "직접 대응으로 넘김"}</span><b>${esc(st.title)}</b><span class="muted">${esc(st.by)} · ${fmt(st.at)}${st.reason ? " · 사유: " + esc(st.reason) : ""}</span>${st.kind === "handoff" ? `<button class="btn sm" type="button" data-g="open">직접 대응 화면 열기</button>` : ""}</div><p class="note">자동 대응을 여기서 멈췄습니다. 이후 처리는 근무자가 직접 합니다.</p>`; return; }
+    if (!g) { const n = S.ag.approvals.length; el.className = "card lv-gate idle"; el.innerHTML = `<div class="gt-idle"><span class="tag">확인 대기 0건</span><span class="muted">사람 확인이 필요한 단계에서는 실행 전에 멈추고 여기에 확인 요청을 띄웁니다.${n ? ` 지금까지 확인 ${n}건 (${S.ag.approvals.map(a => a.what).join(" · ")})` : ""}</span></div>`; return; }
+    const who = store.get("auto:who", "");
+    const cmd = g.send ? `<textarea class="gt-txt" id="${P}GateTxt" rows="7" ${g.editing ? "" : "readonly"}>${esc(g.text)}</textarea>` : `<textarea class="gt-cmd" id="${P}GateTxt" rows="${g.cmd.length}" ${g.editing ? "" : "readonly"}>${esc(g.cmd.join("\n"))}</textarea>`;
+    el.className = "card lv-gate open";
+    el.innerHTML = `<div class="gt-hd"><span class="tag warn">확인 요청</span><h3>${esc(g.title)}</h3><span class="gt-due">확인 기한 <b class="mono" id="${P}GateT">${gateLeft()}</b>${g.realert ? `<em>다시 알림 ${g.realert}회</em>` : ""}</span></div>
+      <div class="gt-grid"><div>
+        <div class="gt-l">${g.send ? "보낼 문자" : "실행할 일"} · ${esc(g.where || "")}${g.editing ? ' <span class="tag info">고치는 중</span>' : ""}</div>${cmd}
+        <div class="gt-l">영향</div><div class="gt-impact">${esc(g.impact)}</div>
+        <div class="gt-l">되돌리는 방법</div>${g.undo ? `<pre class="gt-cmd">${esc(g.undo.join("\n"))}</pre>` : '<div class="gt-impact soft">되돌릴 수 없음 · 보내기 전에 내용을 꼭 확인</div>'}
+      </div><div>
+        <div class="gt-l">자동으로 모은 근거</div><div class="gt-ev">${g.ev.length ? g.ev.map(e => `<div><span>${esc(e[0])}</span>${esc(e[1])}</div>`).join("") : '<div><span>근거</span>아직 모은 근거가 없습니다</div>'}</div>
+        <div class="gt-l">다른 선택지</div><div class="gt-alt">${g.alts.map(a => `<div><b>${esc(a[0])}</b><span>${esc(a[1])}</span></div>`).join("")}</div>
+      </div></div>
+      <div class="gt-act"><label>확인자 <input type="text" id="${P}GateWho" value="${esc(who)}" placeholder="근무자 이름"></label><label class="gt-why">사유 <input type="text" id="${P}GateWhy" placeholder="실행 안 함을 고를 때 꼭 적기"></label></div>
+      <div class="btnrow"><button class="btn primary" type="button" data-g="ok">${g.editing ? "고친 내용으로 실행" : "확인하고 실행"}</button>${g.editing ? "" : '<button class="btn" type="button" data-g="edit">고쳐서 실행</button>'}<button class="btn" type="button" data-g="hand">직접 대응으로 넘기기</button><button class="btn bad" type="button" data-g="no">실행 안 함</button><span class="muted" id="${P}GateMsg"></span></div>`;
+  }
+  /* 근무자 결정: ok(확인하고 실행) · edit(고쳐서 실행) · hand(직접 대응으로) · no(실행 안 함, 사유 필수) */
+  function gateDecide(kind, opt) {
+    const g = S.ag.pending; if (!g) return "확인 요청 없음";
+    opt = opt || {};
+    const msg = t => { const m = document.getElementById(P + "GateMsg"); if (m) m.textContent = t; return t; };
+    if (kind === "edit") { g.editing = true; renderGate(); const t = document.getElementById(P + "GateTxt"); if (t) t.focus(); return "고치는 중"; }
+    const whoEl = document.getElementById(P + "GateWho"), who = String(opt.who != null ? opt.who : whoEl ? whoEl.value : "").trim();
+    if (!who) return msg("확인자 이름을 적어 주세요");
+    store.set("auto:who", who);
+    if (kind === "no") {
+      const whyEl = document.getElementById(P + "GateWhy"), why = String(opt.why != null ? opt.why : whyEl ? whyEl.value : "").trim();
+      if (!why) return msg("실행 안 함을 고르려면 사유를 적어 주세요");
+      S.ag.pending = null; S.ag.stopped = { kind: "reject", title: g.title, by: who, at: S.t, reason: why };
+      addLog(`실행 안 함 (확인자 ${who}): ${g.title.replace(/[?？]$/, "")} · 사유 ${why}`, true); stop(); renderGate(); todo(); return "실행 안 함";
+    }
+    if (kind === "hand") {
+      S.ag.pending = null; S.ag.stopped = { kind: "handoff", title: g.title, by: who, at: S.t };
+      addLog(`직접 대응으로 넘김 (확인자 ${who}): ${g.title.replace(/[?？]$/, "")}`, true); stop(); renderGate(); todo(); return "직접 대응으로 넘김";
+    }
+    const txtEl = document.getElementById(P + "GateTxt"), edited = opt.text != null ? opt.text : (g.editing && txtEl ? txtEl.value : null);
+    S.ag.pending = null;
+    S.ag.approvals.push({ what: g.send ? `${g.send} 문자` : g.title.replace(/[을를]\s?\S+까요[?？]$/, ""), by: who, wait: +(S.t - g.at).toFixed(1), edited: !!edited });
+    addLog(`근무자 확인 (${who}, ${(S.t - g.at).toFixed(1)}분 만에${edited ? ", 고쳐서" : ""}) → 실행: ${g.title.replace(/[?？]$/, "")}`, true);
+    if (edited && !g.send) term(`[근무자가 고친 명령]\n${edited}`);
+    g.run(edited, who); renderGate(); if (!S.finished) todo(); return "실행함";
+  }
+  if (AGENT) E("lvGate").addEventListener("click", e => {
+    const b = e.target.closest("[data-g]"); if (!b) return;
+    if (b.dataset.g === "open") { const sc = SC.id, o = SC.lastOpts; if (typeof showTab === "function") showTab("live"); if (window.LIVE) window.LIVE.load(sc, o); return; }
+    gateDecide({ ok: "ok", edit: "edit", hand: "hand", no: "no" }[b.dataset.g]);
+  });
   function agentNote(key, did) { const p = SC.auto.steps[key] || {}; S.ag.did[key] = { did, why: p.why ? p.why() : "" }; }
   function agentStep() {
-    if (!AGENT || S.finished || !alerted() || S.t < S.ag.next) return;
+    if (!AGENT || S.finished || S.ag.stopped || !alerted()) return;
+    if (S.ag.pending) {   // 확인을 기다리는 동안에는 아무것도 실행하지 않는다. 기한이 지나도 자동 실행하지 않고 다시 알린다
+      const g = S.ag.pending, t = document.getElementById(P + "GateT"); if (t) t.textContent = gateLeft();
+      if (S.t >= g.due) { g.realert++; g.due = S.t + GATE_MIN; addLog(`확인 기한 지남 → 실행하지 않고 조장에게 다시 알림 (${g.realert}회)`); renderGate(); }
+      return;
+    }
+    if (S.t < S.ag.next) return;
     S.ag.next = S.t + BEAT;
     if (S.ack == null) { S.ack = S.t; addLog("알림 수신 → 자동 대응 시작"); fill(); paint(); todo(); return; }
-    if (S.ag.mid) { S.ag.mid = false; if (S.sent.경과 == null && SC.stageOk("경과")) { agentSend("경과"); todo(); return; } }
+    if (S.ag.mid) { S.ag.mid = false; if (S.sent.경과 == null && SC.stageOk("경과")) { gateOpen(sendGate("경과"), "mid", (txt, who) => agentSend("경과", txt, who)); return; } }
     const r = SC.rows().find(x => !done(x[0])); if (!r) return;
     const key = r[0], p = SC.auto.steps[key] || {}, wait = () => { const w = p.waitText || "조건이 맞을 때까지 기다리는 중"; if (S.ag.wait !== w) { S.ag.wait = w; todo(); } };
     if (p.ready && !p.ready()) return wait();
     const btns = [...String(r[3] || "").matchAll(/<button[^>]*data-a="([^"]+)"([^>]*)>([^<]*)</g)].filter(m => !m[2].includes("disabled")).map(m => [m[1], m[3]]);
     const b = p.pick ? btns.find(x => p.pick().includes(x[0])) : btns[0];
     S.ag.wait = "";
+    const post = () => { if (done(key)) { if (p.mid) S.ag.mid = true; if (p.after) p.after(); } if (!S.finished) todo(); };
+    const gates = SC.auto.gates || {};
+    if (b && gates[b[0]]) { gateOpen(gates[b[0]](), key, () => { SC.act(b[0]); agentNote(key, b[1]); post(); }); return; }
     if (b) { SC.act(b[0]); agentNote(key, b[1]); }
-    else if (key === "sms") { agentSend("발생"); agentNote(key, "발생 문자 발송"); }
-    else if (key === "fin" && SC.stageOk("완료")) { agentNote(key, "완료 문자 발송"); agentSend("완료"); }
+    else if (key === "sms") { gateOpen(sendGate("발생"), key, (txt, who) => { agentSend("발생", txt, who); agentNote(key, "발생 문자 발송 (근무자 확인)"); post(); }); return; }
+    else if (key === "fin" && SC.stageOk("완료")) { gateOpen(sendGate("완료"), key, (txt, who) => { agentNote(key, "완료 문자 발송 (근무자 확인)"); agentSend("완료", txt, who); post(); }); return; }
     else return wait();
-    if (done(key)) { if (p.mid) S.ag.mid = true; if (p.after) p.after(); }
-    if (!S.finished) todo();
+    post();
   }
   function agentLine(key, isNow) {
     const d = S.ag.did[key], p = SC.auto.steps[key] || {};
+    if (isNow && S.ag.pending) return `<div class="lv-why now"><b>확인 대기</b> ${esc(S.ag.pending.title)} <span class="muted">· 위 확인 요청 카드에서 결정</span></div>`;
     if (d && done(key)) return `<div class="lv-why"><b>근거</b> ${esc(d.why)} <span class="muted">· 한 일: ${esc(d.did)}</span></div>`;
     if (isNow && S.ack != null) return `<div class="lv-why now"><b>규칙</b> ${esc(p.rule || "")}${S.ag.wait ? ` <span class="muted">· ${esc(S.ag.wait)}</span>` : ""}</div>`;
     return "";
   }
   function renderHow() {
     const a = SC.auto, rows = SC.rows(), first = rows.findIndex(r => !done(r[0]));
-    const st = (k, i) => done(k) ? `<span class="tag ok">완료 ${fmt(S.done[k])}</span>` : i === first && S.ack != null && !S.finished ? (S.ag.wait ? '<span class="tag warn">기다리는 중</span>' : '<span class="tag bad">진행 중</span>') : '<span class="tag">대기</span>';
+    const st = (k, i) => done(k) ? `<span class="tag ok">완료 ${fmt(S.done[k])}</span>` : i === first && S.ack != null && !S.finished ? (S.ag.stopped ? '<span class="tag bad">멈춤</span>' : S.ag.pending ? '<span class="tag warn">확인 대기</span>' : S.ag.wait ? '<span class="tag warn">기다리는 중</span>' : '<span class="tag bad">진행 중</span>') : '<span class="tag">대기</span>';
     E("lvHow").innerHTML = `<div class="lv-howg"><div>
       <h4>① 무엇을 보고 시작하나</h4><p>${esc(a.trigger)}</p>
       <h4>③ 안전장치 <span class="muted">이럴 땐 하지 않거나 사람에게 넘깁니다</span></h4><ul>${a.guards.map(g => `<li>${esc(g)}</li>`).join("")}</ul>
-      <h4>④ 자동화한 방법</h4><p>'직접 대응'에서 사람이 누르던 단계를 그대로 규칙표(조건 → 행동)로 옮겼습니다. 0.3분(가상)마다 아직 안 끝난 첫 단계를 찾아, 조건이 맞으면 실행하고 맞지 않으면 기다립니다. 정해 둔 규칙만 따르고 AI는 부르지 않아서, 같은 상황이면 항상 같은 결과가 나옵니다.</p>
+      <h4>④ 자동화한 방법</h4><p>'직접 대응'에서 사람이 누르던 단계를 규칙표(조건 → 행동)로 옮겼습니다. 조회·근거 모으기·초안은 자동으로 하고, 아래 기준에 해당하는 일은 실행 직전에 멈춰 근무자 확인을 받습니다. 확인 기한이 지나도 자동 실행하지 않고 다시 알립니다. AI는 부르지 않아서 같은 상황이면 항상 같은 결과가 나옵니다.</p>
+      <h4>⑤ 사람이 꼭 확인하는 일</h4><ul><li>서비스가 끊기는 차단 (블랙홀은 그 IP의 정상 접속도 끊음)</li><li>장비 설정 변경 (commit · shutdown)</li><li>고객에게 나가는 문자 · 안내</li><li>외부 조직에 보내는 요청 (상위 연동망 등)</li><li>현장 교체 요청 · 블랙홀 해제 (사람 투입 · 재공격 위험)</li><li>규칙이 확신하지 못할 때 (원인 구분 불가 · 일정과 겹침)</li></ul>
     </div><div>
       <h4>② 규칙표 <span class="muted">사람이 하던 순서 그대로</span></h4>
-      <table class="lv-rule"><tr><th>#</th><th>단계</th><th>조건 → 행동</th><th>쓰는 것</th><th>상태</th></tr>${rows.map((r, i) => { const p = a.steps[r[0]] || {}; return `<tr class="${i === first && S.ack != null && !S.finished ? "now" : ""}"><td>${i + 1}</td><td>${r[1]}</td><td>${esc(p.rule || "")}</td><td class="muted">${esc(p.tool || "")}</td><td>${st(r[0], i)}</td></tr>`; }).join("")}</table>
+      <table class="lv-rule"><tr><th>#</th><th>단계</th><th>조건 → 행동</th><th>실행 방식</th><th>상태</th></tr>${rows.map((r, i) => { const p = a.steps[r[0]] || {}, h = (a.human || {})[r[0]]; return `<tr class="${i === first && S.ack != null && !S.finished ? "now" : ""}"><td>${i + 1}</td><td>${r[1]}</td><td>${esc(p.rule || "")}</td><td>${h ? `<span class="tag warn">사람 확인</span><div class="muted s">${esc(h)}</div>` : '<span class="tag">자동</span>'}</td><td>${st(r[0], i)}</td></tr>`; }).join("")}</table>
     </div></div>`;
   }
   function renderScen() { E("lvScen").innerHTML = (AGENT ? AG_LIST : MAN_LIST).map((x, i) => `<button class="btn${x[0] === SC.id && (!AGENT || !x[1] || x[1].cause === S.cause) ? " primary" : ""}" data-i="${i}" type="button">${x[2]}</button>`).join(""); }
@@ -754,7 +843,7 @@ function makeLive(root, P, AGENT) {
 
   /* ----- 시나리오 불러오기 ----- */
   function load(id, opts) {
-    stop(); SC = SCEN[id] || SCEN.ddos; S = Object.assign({ t: SC.start, running: false, speed, ack: null, done: {}, log: [], sent: {}, stage: "발생", finished: false, term: [] }, SC.init(opts)); if (AGENT) S.ag = { next: 0, did: {}, mid: false, wait: "" };
+    stop(); SC = SCEN[id] || SCEN.ddos; S = Object.assign({ t: SC.start, running: false, speed, ack: null, done: {}, log: [], sent: {}, stage: "발생", finished: false, term: [] }, SC.init(opts)); if (AGENT) S.ag = { next: 0, did: {}, mid: false, wait: "", pending: null, stopped: null, approvals: [] };
     lastMin = -1; E("lvResult").hidden = true;
     E("lvTitle").textContent = SC.name;
     E("lvGraphH").innerHTML = `${esc(SC.linkTitle)} <span class="muted">${esc(SC.linkDesc)}</span><span class="tag" id="${P}Now"></span>`;
@@ -763,12 +852,12 @@ function makeLive(root, P, AGENT) {
     E("lvCardTitle").textContent = SC.cardTitle; E("lvSave").hidden = !SC.cardSave; E("lvSaved").hidden = true; E("lvSave").textContent = "기록에 저장";
     E("lvStage").innerHTML = SC.stages.map((s, i) => `<button class="btn${i === 0 ? " primary" : ""}" data-st="${s}" type="button">${s}</button>`).join("");
     E("lvTermOut").textContent = ""; E("lvSendMsg").textContent = ""; E("lvPlay").textContent = "▶ 시작";
-    term(SC.intro); fill(); renderLog(); paint(); todo(); renderScen();
+    term(SC.intro); fill(); renderLog(); paint(); todo(); renderScen(); if (AGENT) renderGate();
   }
   function reset(autoplay) { load(SC.id, SC.lastOpts); if (autoplay) loop(); }
   const origLoad = load;
   const loadPub = (id, opts) => { origLoad(id, opts); if (SCEN[id]) SCEN[id].lastOpts = opts; };
-  const api = { get state() { return S; }, get scenario() { return SC; }, advance: m => { let n = Math.round(m * 4); while (n-- > 0) tick(0.25); }, jump: m => { S.t = Math.min(SC.end, m); lastMin = -1; tick(0); }, reset, load: loadPub, consts: { get alertAt() { return SC.alertAt; } } };
+  const api = { get state() { return S; }, get scenario() { return SC; }, get pending() { return AGENT ? S.ag.pending : null; }, decide: (k, o) => gateDecide(k, o), advance: m => { let n = Math.round(m * 4); while (n-- > 0) tick(0.25); }, jump: m => { S.t = Math.min(SC.end, m); lastMin = -1; tick(0); }, reset, load: loadPub, consts: { get alertAt() { return SC.alertAt; } } };
   SC = SCEN.ddos; loadPub("ddos");
   return api;
 }
