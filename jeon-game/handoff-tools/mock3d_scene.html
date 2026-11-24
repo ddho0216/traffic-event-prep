@@ -1,0 +1,134 @@
+<!doctype html><meta charset="utf-8"><style>body{margin:0}canvas{display:block}</style><canvas id="c"></canvas><script src="three.min.js"></script><script>
+const T=THREE, Q=new URLSearchParams(location.search);
+const W=960, H=600;
+
+const HT={grandma:1.48,me:1.62,sister:1.58,mom:1.56,dad:1.72};
+async function img(src){const i=new Image();i.src=src;await i.decode();return i;}
+function mask(im){const c=document.createElement('canvas');c.width=im.width;c.height=im.height;const x=c.getContext('2d');x.drawImage(im,0,0);const d=x.getImageData(0,0,c.width,c.height).data,a=new Uint8Array(c.width*c.height);for(let i=0;i<a.length;i++)a[i]=d[i*4+3]>127?1:0;return{a,w:c.width,h:c.height};}
+function at(m,u,v,r=0){u=Math.round(u);v=Math.round(v);for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const uu=u+dx,vv=v+dy;if(uu>=0&&vv>=0&&uu<m.w&&vv<m.h&&m.a[vv*m.w+uu])return true;}return false;}
+async function build(ch,META){
+  const V={};
+  for(const v of ['front','back','right','left','top']){const im=await img(`views/${ch}_${v}.png`);V[v]=Object.assign({im,m:mask(im)},META[ch][v]);}
+  // 위에서 본 모습의 중심(머리 중심) 찾기
+  const tm=V.top.m;let sx=0,sy=0,n=0;for(let v=0;v<tm.h*0.45;v++)for(let u=0;u<tm.w;u++)if(tm.a[v*tm.w+u]){const c=V.top.im;}
+  const kT=(V.front.w/V.front.h)/V.top.w;
+  const P={
+    front:(x,y,z)=>[V.front.cx+x*V.front.h,(1-y)*V.front.h],
+    back:(x,y,z)=>[V.back.cx-x*V.back.h,(1-y)*V.back.h],
+    right:(x,y,z)=>[V.right.cx+z*V.right.h,(1-y)*V.right.h],
+    left:(x,y,z)=>[V.left.cx-z*V.left.h,(1-y)*V.left.h],
+    top:(x,y,z)=>[V.top.cx+x/kT,V.top.h*0.5+z/kT],
+  };
+  const N=200, d=1/N;
+  const hx=(V.front.w/V.front.h)*0.55, hz=Math.max(V.right.w,V.left.w)/V.front.h*0.8;
+  const S=HT[ch];
+  const nx=Math.ceil(2*hx/d), nz=Math.ceil(2*hz/d), ny=N;
+  const occ=new Uint8Array(nx*ny*nz), id=(i,j,k)=>(j*nz+k)*nx+i;
+  const useTop=Q.get('top')!=='0';
+  for(let j=0;j<ny;j++){const y=(j+0.5)*d;
+    for(let i=0;i<nx;i++){const x=-hx+(i+0.5)*d;
+      const f=P.front(x,y,0),b=P.back(x,y,0);
+      if(!at(V.front.m,f[0],f[1])||!at(V.back.m,b[0],b[1],1))continue;
+      for(let k=0;k<nz;k++){const z=-hz+(k+0.5)*d;
+        const r=P.right(x,y,z),l=P.left(x,y,z);
+        if(!at(V.right.m,r[0],r[1])||!at(V.left.m,l[0],l[1],1))continue;
+        if(useTop&&y>0.35&&y<0.85){const t=P.top(x,y,z);if(!at(V.top.m,t[0],t[1],5))continue;}
+        occ[id(i,j,k)]=1;}}}
+  const has=(i,j,k)=>i>=0&&j>=0&&k>=0&&i<nx&&j<ny&&k<nz&&occ[id(i,j,k)];
+  // 부드러운 법선: 점유도를 3축으로 흐리게 한 뒤 기울기
+  const D=new Float32Array(occ.length);for(let i=0;i<occ.length;i++)D[i]=occ[i];
+  const blur=(axis,r)=>{const tmp=new Float32Array(D.length);const st=axis===0?1:axis===2?nx:nx*nz,len=axis===0?nx:axis===2?nz:ny;
+    for(let idx=0;idx<D.length;idx++){const i=idx%nx,k=Math.floor(idx/nx)%nz,j=Math.floor(idx/(nx*nz));const p=axis===0?i:axis===2?k:j;let s=0,c=0;for(let o=-r;o<=r;o++){const q=p+o;if(q<0||q>=len)continue;s+=D[idx+o*st];c++;}tmp[idx]=s/(2*r+1);}D.set(tmp);};
+  const RB=+Q.get('r')||4;blur(0,RB);blur(2,RB);blur(1,RB);
+  const dval=(i,j,k)=>(i<0||j<0||k<0||i>=nx||j>=ny||k>=nz)?0:D[id(i,j,k)];
+  const VD={front:[0,0,1],back:[0,0,-1],left:[1,0,0],right:[-1,0,0],top:[0,1,0]};
+  const F=[[[0,0,1],[[0,0,1],[1,0,1],[1,1,1],[0,1,1]],1],[[0,0,-1],[[1,0,0],[0,0,0],[0,1,0],[1,1,0]],0.96],
+           [[1,0,0],[[1,0,1],[1,0,0],[1,1,0],[1,1,1]],0.84],[[-1,0,0],[[0,0,0],[0,0,1],[0,1,1],[0,1,0]],0.84],
+           [[0,1,0],[[0,1,1],[1,1,1],[1,1,0],[0,1,0]],1.04],[[0,-1,0],[[0,0,0],[1,0,0],[1,0,1],[0,0,1]],0.5]];
+  const B={};for(const v of ['front','back','left','right','top'])B[v]={pos:[],uv:[],col:[]};
+  for(let j=0;j<ny;j++)for(let k=0;k<nz;k++)for(let i=0;i<nx;i++){
+    if(!occ[id(i,j,k)])continue;
+    let n=null;
+    for(const [nv,cs,sh] of F){
+      if(has(i+nv[0],j+nv[1],k+nv[2]))continue;
+      if(!n){const gx=dval(i-1,j,k)-dval(i+1,j,k),gy=dval(i,j-1,k)-dval(i,j+1,k),gz=dval(i,j,k-1)-dval(i,j,k+1);const L=Math.hypot(gx,gy,gz)||1;n=[gx/L,gy/L,gz/L];}
+      // 축 법선과 부드러운 법선을 섞어서 가장 맞는 시점 하나 고르기
+      const m=[n[0]*0.8+nv[0]*0.2,n[1]*0.8+nv[1]*0.2,n[2]*0.8+nv[2]*0.2];
+      let best='front',bd=-9;for(const v in VD){let dd=VD[v][0]*m[0]+VD[v][1]*m[1]+VD[v][2]*m[2];if(v==='top')dd-=0.35;if(dd>bd){bd=dd;best=v;}}
+      if(Q.get('side')==='ext'&&(best==='left'||best==='right')){const zc=-hz+(k+0.5)*d;best=zc>=0?'front':'back';}
+      const q=cs.map(([a,b,c])=>[-hx+(i+a)*d,(j+b)*d,-hz+(k+c)*d]);
+      const tgt=B[best],vv=V[best];
+      for(const t of [0,1,2,0,2,3]){const [x,y,z]=q[t];tgt.pos.push(x*S,y*S,z*S);const p=P[best](x,y,z);tgt.uv.push(p[0]/vv.w,1-p[1]/vv.h);tgt.col.push(sh,sh,sh);}
+    }
+  }
+  const g=new T.Group(), S0=0;
+  for(const v in B){const bb=B[v];if(!bb.pos.length)continue;
+    const geo=new T.BufferGeometry();geo.setAttribute('position',new T.Float32BufferAttribute(bb.pos,3));geo.setAttribute('uv',new T.Float32BufferAttribute(bb.uv,2));geo.setAttribute('color',new T.Float32BufferAttribute(bb.col,3));
+    const tx=new T.Texture(V[v].im);tx.needsUpdate=true;tx.magFilter=T.NearestFilter;tx.minFilter=T.LinearFilter;
+    g.add(new T.Mesh(geo,new T.MeshBasicMaterial({map:tx,vertexColors:true})));}
+  g.userData.tris=g.children.reduce((a,m)=>a+m.geometry.attributes.position.count/3,0);
+  return g;
+}
+
+const R=new T.WebGLRenderer({canvas:document.getElementById('c'),antialias:true,preserveDrawingBuffer:true});
+R.setPixelRatio(2); R.setSize(960,600); R.outputEncoding=T.sRGBEncoding;
+const SHOT=Q.get('shot')||'cut';
+const scene=new T.Scene(); scene.background=new T.Color(0x2e2620);
+scene.add(new T.HemisphereLight(0xffe6c0,0x3a2a20,0.62));
+const sun=new T.DirectionalLight(0xffd8a0,0.5); sun.position.set(-2,4,3); scene.add(sun);
+const OLM=new T.MeshBasicMaterial({color:0x1d1712,side:T.BackSide});
+function mesh(geo,col,x,y,z,ol=0.012,rot){const m=new T.Mesh(geo,new T.MeshLambertMaterial({color:col,flatShading:true}));m.position.set(x,y,z);if(rot)m.rotation.set(...rot);scene.add(m);
+  if(ol){const o=new T.Mesh(geo,OLM);o.position.copy(m.position);o.rotation.copy(m.rotation);o.scale.setScalar(1+ol/Math.max(0.05,geo.boundingSphere?geo.boundingSphere.radius:0.5));geo.computeBoundingSphere();o.scale.setScalar(1+ol/geo.boundingSphere.radius);scene.add(o);}return m;}
+async function tex(n){const t=await new T.TextureLoader().loadAsync('tex/'+n+'.png');t.encoding=T.sRGBEncoding;t.anisotropy=8;return t;}
+// 보내주신 그림 → 외곽선 따라 두께 있는 3D 조각
+async function cutout(n,height,x,y,z,ry=0,rx=0,depth=0.03){
+  const C=CONT[n],t=await tex(n),sc=height/C.h;
+  const sh=new T.Shape(C.pts.map(([u,v])=>new T.Vector2((u-C.w/2)*sc,(C.h-v)*sc)));
+  const g=new T.ExtrudeGeometry(sh,{depth,bevelEnabled:false});
+  const pos=g.attributes.position,uv=g.attributes.uv;
+  for(let i=0;i<pos.count;i++){uv.setXY(i,pos.getX(i)/(C.w*sc)+0.5,pos.getY(i)/(C.h*sc));}
+  const front=new T.MeshLambertMaterial({map:t}), side=new T.MeshLambertMaterial({color:0x2a211a});
+  const m=new T.Mesh(g,[front,side]);m.position.set(x,y,z);m.rotation.set(rx,ry,0);scene.add(m);return m;}
+let CONT;
+(async()=>{
+  CONT=await (await fetch('contours.json')).json();
+  const META=await (await fetch('views/meta.json')).json();
+  // 부엌 (코드로 만든 로우폴리)
+  mesh(new T.BoxGeometry(8,3,0.1),0xe9dfc8,0,1.3,-2.6,0);                     // 타일 벽
+  for(let i=-8;i<=8;i++) mesh(new T.BoxGeometry(0.015,3,0.02),0xc8b896,i*0.4,1.3,-2.54,0);
+  for(let j=0;j<7;j++) mesh(new T.BoxGeometry(8,0.015,0.02),0xc8b896,0,0.05+j*0.4,-2.54,0);
+  mesh(new T.BoxGeometry(8,0.9,0.7),0x6b4a2e,0,-0.45,-2.2,0.01); mesh(new T.BoxGeometry(8,0.06,0.78),0xd9cdb0,0,0.02,-2.2,0.01);
+  mesh(new T.BoxGeometry(1.3,0.12,0.6),0xdcd6c6,-1.6,0.1,-2.2,0.01); mesh(new T.CylinderGeometry(0.32,0.34,0.3,10),0xb9bec4,-1.75,0.31,-2.2,0.01);
+  mesh(new T.BoxGeometry(3.2,0.06,0.32),0x7a5230,1.3,1.15,-2.42,0.01);
+  // 선반 위 소품 (소품 시트 그림)
+  await cutout('prop_soy',0.42,0.2,1.18,-2.42); await cutout('prop_oil_olive',0.46,0.5,1.18,-2.42); await cutout('prop_oil_grape',0.46,0.75,1.18,-2.42); await cutout('prop_oil_canola',0.46,1.0,1.18,-2.42);
+  await cutout('prop_flour_pancake',0.5,1.45,1.18,-2.42); await cutout('prop_flour_rice',0.5,1.8,1.18,-2.42); await cutout('prop_flour_fry',0.5,2.15,1.18,-2.42);
+  await cutout('prop_salt',0.25,2.5,1.18,-2.42); await cutout('prop_pepper',0.25,2.7,1.18,-2.42);
+  // 가족 (캐릭터 시트를 입힌 3D)
+  const xs={grandma:-1.9,mom:-0.75,dad:0.55,sister:1.8};
+  for(const ch of ['grandma','mom','dad','sister']){const m=await build(ch,META);m.position.set(xs[ch],-0.9,-1.55);m.rotation.y=-xs[ch]*0.07;scene.add(m);}
+  // 앞 조리대
+  mesh(new T.BoxGeometry(6,0.9,1.6),0x7a5230,0,-0.5,0.3,0.01);
+  mesh(new T.BoxGeometry(6.2,0.08,1.8),0xa06f3e,0,-0.03,0.3,0.012);
+  if(SHOT==='cut'){
+    mesh(new T.BoxGeometry(1.9,0.06,1.0),0xcf9f66,-0.1,0.04,0.45,0.01); mesh(new T.CylinderGeometry(0.1,0.1,0.06,10),0xcf9f66,0.95,0.04,0.45,0.01);
+    const ings=['ing_kimchi','ing_buchu','ing_zucchini','ing_potato','ing_onion','ing_pepper'];
+    for(let i=0;i<ings.length;i++) await cutout(ings[i],0.3,-0.75+i*0.28,0.07,0.68,0,-0.35);
+    await cutout('prop_knife',0.62,0.55,0.08,0.95,-0.5,-Math.PI/2+0.05,0.02);
+    mesh(new T.SphereGeometry(0.42,12,6,0,6.283,Math.PI/2,Math.PI/2),0x9aa3a6,1.75,0.4,0.25,0.01,[0,0,0]).material.side=T.DoubleSide;
+  } else {
+    // 후라이팬 (12각) + 보내주신 전 그림을 입힌 12각 전
+    mesh(new T.BoxGeometry(1.6,0.1,1.2),0x2a2b2f,0,0.04,0.35,0.01);
+    mesh(new T.CylinderGeometry(0.62,0.52,0.12,12),0x2c2d32,0,0.16,0.35,0.012);
+    mesh(new T.BoxGeometry(0.8,0.05,0.09),0x8a5a2c,0.95,0.2,0.4,0.01,[0,-0.15,0]);
+    const jt=await tex('top_kimchi');
+    const jg=new T.CylinderGeometry(0.44,0.44,0.05,12);
+    const top=new T.MeshLambertMaterial({map:jt}), side=new T.MeshLambertMaterial({color:0xb5652a});
+    const j=new T.Mesh(jg,[side,top,side]); j.position.set(0,0.25,0.35); scene.add(j);
+    await cutout('prop_spatula',0.6,0.45,0.27,0.75,-0.6,-Math.PI/2+0.25,0.02);
+  }
+  const cam=new T.PerspectiveCamera(48,960/600,0.05,50);
+  if(SHOT==='cut'){cam.position.set(0,1.35,2.3);cam.lookAt(0,0.3,-0.3);} else {cam.position.set(0,1.45,1.95);cam.lookAt(0,0.1,0);}
+  R.render(scene,cam); window.__ready=true;
+})();
+</script>

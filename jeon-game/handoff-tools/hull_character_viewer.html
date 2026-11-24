@@ -1,0 +1,110 @@
+<!doctype html><meta charset="utf-8"><style>body{margin:0;background:#8a8a8a}canvas{display:block}</style>
+<canvas id="c"></canvas>
+<script src="three.min.js"></script>
+<script>
+const T=THREE, Q=new URLSearchParams(location.search);
+const W=+Q.get('w')||1400, H=+Q.get('h')||560, MODE=Q.get('mode')||'turn', ONLY=Q.get('ch');
+const R=new T.WebGLRenderer({canvas:document.getElementById('c'),antialias:false,preserveDrawingBuffer:true});
+R.setPixelRatio(1); R.setSize(W,H); R.setClearColor(0x8a8a8a);
+const HT={grandma:1.48,me:1.62,sister:1.58,mom:1.56,dad:1.72};
+async function img(src){const i=new Image();i.src=src;await i.decode();return i;}
+function mask(im){const c=document.createElement('canvas');c.width=im.width;c.height=im.height;const x=c.getContext('2d');x.drawImage(im,0,0);const d=x.getImageData(0,0,c.width,c.height).data,a=new Uint8Array(c.width*c.height);for(let i=0;i<a.length;i++)a[i]=d[i*4+3]>127?1:0;return{a,w:c.width,h:c.height};}
+function at(m,u,v,r=0){u=Math.round(u);v=Math.round(v);for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const uu=u+dx,vv=v+dy;if(uu>=0&&vv>=0&&uu<m.w&&vv<m.h&&m.a[vv*m.w+uu])return true;}return false;}
+async function build(ch,META){
+  const V={};
+  for(const v of ['front','back','right','left','top']){const im=await img(`views/${ch}_${v}.png`);V[v]=Object.assign({im,m:mask(im)},META[ch][v]);}
+  // 위에서 본 모습의 중심(머리 중심) 찾기
+  const tm=V.top.m;let sx=0,sy=0,n=0;for(let v=0;v<tm.h*0.45;v++)for(let u=0;u<tm.w;u++)if(tm.a[v*tm.w+u]){const c=V.top.im;}
+  const kT=(V.front.w/V.front.h)/V.top.w;
+  const P={
+    front:(x,y,z)=>[V.front.cx+x*V.front.h,(1-y)*V.front.h],
+    back:(x,y,z)=>[V.back.cx-x*V.back.h,(1-y)*V.back.h],
+    right:(x,y,z)=>[V.right.cx+z*V.right.h,(1-y)*V.right.h],
+    left:(x,y,z)=>[V.left.cx-z*V.left.h,(1-y)*V.left.h],
+    top:(x,y,z)=>[V.top.cx+x/kT,V.top.h*0.5+z/kT],
+  };
+  const N=200, d=1/N;
+  const hx=(V.front.w/V.front.h)*0.55, hz=Math.max(V.right.w,V.left.w)/V.front.h*0.8;
+  const S=HT[ch];
+  const nx=Math.ceil(2*hx/d), nz=Math.ceil(2*hz/d), ny=N;
+  const occ=new Uint8Array(nx*ny*nz), id=(i,j,k)=>(j*nz+k)*nx+i;
+  const useTop=Q.get('top')!=='0';
+  for(let j=0;j<ny;j++){const y=(j+0.5)*d;
+    for(let i=0;i<nx;i++){const x=-hx+(i+0.5)*d;
+      const f=P.front(x,y,0),b=P.back(x,y,0);
+      if(!at(V.front.m,f[0],f[1])||!at(V.back.m,b[0],b[1],1))continue;
+      for(let k=0;k<nz;k++){const z=-hz+(k+0.5)*d;
+        const r=P.right(x,y,z),l=P.left(x,y,z);
+        if(!at(V.right.m,r[0],r[1])||!at(V.left.m,l[0],l[1],1))continue;
+        if(useTop&&y>0.35&&y<0.85){const t=P.top(x,y,z);if(!at(V.top.m,t[0],t[1],5))continue;}
+        occ[id(i,j,k)]=1;}}}
+  const has=(i,j,k)=>i>=0&&j>=0&&k>=0&&i<nx&&j<ny&&k<nz&&occ[id(i,j,k)];
+  // 부드러운 법선: 점유도를 3축으로 흐리게 한 뒤 기울기
+  const D=new Float32Array(occ.length);for(let i=0;i<occ.length;i++)D[i]=occ[i];
+  const blur=(axis,r)=>{const tmp=new Float32Array(D.length);const st=axis===0?1:axis===2?nx:nx*nz,len=axis===0?nx:axis===2?nz:ny;
+    for(let idx=0;idx<D.length;idx++){const i=idx%nx,k=Math.floor(idx/nx)%nz,j=Math.floor(idx/(nx*nz));const p=axis===0?i:axis===2?k:j;let s=0,c=0;for(let o=-r;o<=r;o++){const q=p+o;if(q<0||q>=len)continue;s+=D[idx+o*st];c++;}tmp[idx]=s/(2*r+1);}D.set(tmp);};
+  const RB=+Q.get('r')||4;blur(0,RB);blur(2,RB);blur(1,RB);
+  const dval=(i,j,k)=>(i<0||j<0||k<0||i>=nx||j>=ny||k>=nz)?0:D[id(i,j,k)];
+  const VD={front:[0,0,1],back:[0,0,-1],left:[1,0,0],right:[-1,0,0],top:[0,1,0]};
+  const F=[[[0,0,1],[[0,0,1],[1,0,1],[1,1,1],[0,1,1]],1],[[0,0,-1],[[1,0,0],[0,0,0],[0,1,0],[1,1,0]],0.96],
+           [[1,0,0],[[1,0,1],[1,0,0],[1,1,0],[1,1,1]],0.84],[[-1,0,0],[[0,0,0],[0,0,1],[0,1,1],[0,1,0]],0.84],
+           [[0,1,0],[[0,1,1],[1,1,1],[1,1,0],[0,1,0]],1.04],[[0,-1,0],[[0,0,0],[1,0,0],[1,0,1],[0,0,1]],0.5]];
+  const B={};for(const v of ['front','back','left','right','top'])B[v]={pos:[],uv:[],col:[]};
+  for(let j=0;j<ny;j++)for(let k=0;k<nz;k++)for(let i=0;i<nx;i++){
+    if(!occ[id(i,j,k)])continue;
+    let n=null;
+    for(const [nv,cs,sh] of F){
+      if(has(i+nv[0],j+nv[1],k+nv[2]))continue;
+      if(!n){const gx=dval(i-1,j,k)-dval(i+1,j,k),gy=dval(i,j-1,k)-dval(i,j+1,k),gz=dval(i,j,k-1)-dval(i,j,k+1);const L=Math.hypot(gx,gy,gz)||1;n=[gx/L,gy/L,gz/L];}
+      // 축 법선과 부드러운 법선을 섞어서 가장 맞는 시점 하나 고르기
+      const m=[n[0]*0.8+nv[0]*0.2,n[1]*0.8+nv[1]*0.2,n[2]*0.8+nv[2]*0.2];
+      let best='front',bd=-9;for(const v in VD){let dd=VD[v][0]*m[0]+VD[v][1]*m[1]+VD[v][2]*m[2];if(v==='top')dd-=0.35;if(dd>bd){bd=dd;best=v;}}
+      if(Q.get('side')==='ext'&&(best==='left'||best==='right')){const zc=-hz+(k+0.5)*d;best=zc>=0?'front':'back';}
+      const q=cs.map(([a,b,c])=>[-hx+(i+a)*d,(j+b)*d,-hz+(k+c)*d]);
+      const tgt=B[best],vv=V[best];
+      for(const t of [0,1,2,0,2,3]){const [x,y,z]=q[t];tgt.pos.push(x*S,y*S,z*S);const p=P[best](x,y,z);tgt.uv.push(p[0]/vv.w,1-p[1]/vv.h);tgt.col.push(sh,sh,sh);}
+    }
+  }
+  const g=new T.Group(), S0=0;
+  for(const v in B){const bb=B[v];if(!bb.pos.length)continue;
+    const geo=new T.BufferGeometry();geo.setAttribute('position',new T.Float32BufferAttribute(bb.pos,3));geo.setAttribute('uv',new T.Float32BufferAttribute(bb.uv,2));geo.setAttribute('color',new T.Float32BufferAttribute(bb.col,3));
+    const tx=new T.Texture(V[v].im);tx.needsUpdate=true;tx.magFilter=T.NearestFilter;tx.minFilter=T.LinearFilter;
+    g.add(new T.Mesh(geo,new T.MeshBasicMaterial({map:tx,vertexColors:true})));}
+  g.userData.tris=g.children.reduce((a,m)=>a+m.geometry.attributes.position.count/3,0);
+  return g;
+}
+(async()=>{
+  const META=await (await fetch('views/meta.json')).json();
+  const list=ONLY?[ONLY]:['grandma','me','sister','mom','dad'];
+  const scene=new T.Scene(), models={};
+  for(const ch of list){models[ch]=await build(ch,META);}
+  window.__tris=Object.fromEntries(list.map(c=>[c,models[c].userData.tris]));
+  if(MODE==='turn'){ // 한 인물: 앞 / 뒤 / 오른쪽 / 왼쪽 / 3/4 / 위
+    const m=models[list[0]];scene.add(m);const S=HT[list[0]];
+    const views=[[0,0],[Math.PI,0],[-Math.PI/2,0],[Math.PI/2,0],[-0.7,0.25],[0.75,0.15]];
+    const cw=Math.floor(W/views.length);R.setScissorTest(true);
+    views.forEach(([a,el],i)=>{const cam=new T.OrthographicCamera(-S*0.42,S*0.42,S*0.42*H/cw,-S*0.42*H/cw,0.1,20);
+      const r=4;cam.position.set(Math.sin(a)*Math.cos(el)*r,S*0.5+Math.sin(el)*r,Math.cos(a)*Math.cos(el)*r);cam.lookAt(0,S*0.5,0);
+      cam.top=S*0.56;cam.bottom=-S*0.56;const asp=cw/H;cam.left=-S*0.56*asp;cam.right=S*0.56*asp;cam.updateProjectionMatrix();
+      R.setViewport(i*cw,0,cw,H);R.setScissor(i*cw,0,cw,H);R.render(scene,cam);});
+  } else if(MODE==='bust'){
+    const angs=[-0.4,-0.2,0,0.2,0.4];const cw=Math.floor(W/list.length),rh=Math.floor(H/angs.length);R.setScissorTest(true);
+    list.forEach((c,ci)=>{const m=models[c],S=HT[c];
+      angs.forEach((a,r)=>{scene.children.forEach(o=>scene.remove(o));m.position.set(0,0,0);m.rotation.y=a;scene.add(m);
+        const cam=new T.PerspectiveCamera(16,cw/rh,0.1,50);cam.position.set(0,S*0.86,3.2);cam.lookAt(0,S*0.8,0);
+        R.setViewport(ci*cw,H-(r+1)*rh,cw,rh);R.setScissor(ci*cw,H-(r+1)*rh,cw,rh);R.render(scene,cam);});});
+  } else if(MODE==='game'){
+    const xs={grandma:-2.2,me:-1.1,sister:0,mom:1.1,dad:2.2};const angs=[-0.35,0,0.35];
+    const rh=Math.floor(H/3);R.setScissorTest(true);
+    angs.forEach((a,r)=>{list.forEach(c=>{const m=models[c];m.position.set(xs[c],0,0);m.rotation.y=a;scene.add(m);});
+      const cam=new T.PerspectiveCamera(22,W/rh,0.1,50);cam.position.set(0,1.45,7.5);cam.lookAt(0,1.2,0);
+      R.setViewport(0,H-(r+1)*rh,W,rh);R.setScissor(0,H-(r+1)*rh,W,rh);R.render(scene,cam);});
+  } else { // 다같이: 원근 3/4 시점
+    const xs={grandma:-1.6,me:-0.8,sister:0,mom:0.8,dad:1.6};
+    list.forEach(c=>{const m=models[c];m.position.x=xs[c];m.rotation.y=-0.35;scene.add(m);});
+    const cam=new T.PerspectiveCamera(30,W/H,0.1,50);cam.position.set(1.6,1.7,6.2);cam.lookAt(0,0.8,0);
+    R.render(scene,cam);
+  }
+  window.__ready=true;
+})();
+</script>
