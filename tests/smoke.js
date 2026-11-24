@@ -28,6 +28,9 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   await page.waitForTimeout(150);
   const tip = await page.locator('#p-IDC_B_FS1_UP1 .tip').innerText();
   check('hover하면 in/out 값이 뜸', /IN/.test(tip) && /OUT/.test(tip), tip.replace(/\n/g, ' | '));
+  const tipOrder = await page.evaluate(async () => { const out = []; for (const l of LINKS) { const ov = document.querySelector(`#p-${l.id} .ov`), r = ov.getBoundingClientRect(); for (const f of [0.15, 0.5, 0.85]) { ov.dispatchEvent(new PointerEvent('pointermove', { clientX: r.left + r.width * f, clientY: r.top + r.height / 2, bubbles: true })); const t = document.querySelector(`#p-${l.id} .tip`), rows = [...t.querySelectorAll('[data-r]')].map(e => e.dataset.r), svg = document.querySelector(`#p-${l.id} svg`), cy = c => +svg.querySelector(c).getAttribute('cy'); const first = rows[0], yIn = cy('.ci'), yOut = cy('.co'); const topOne = yIn < yOut ? 'in' : 'out'; if (yIn !== yOut) out.push(first === topOne); } } return { n: out.length, ok: out.every(Boolean) }; });
+  check('그래프에 마우스를 올렸을 때 말풍선의 IN/OUT 줄 순서가 그래프에서 두 선이 놓인 위·아래와 같음 (15개 그래프 × 3지점)', tipOrder.n >= 30 && tipOrder.ok, JSON.stringify(tipOrder));
+  check('관제 맨 위에 "파란 띠 = …" 안내 문구가 없음', !(await page.locator('#tab-monitor').innerText()).includes('파란 띠 = 이벤트 시간'));
 
   const [csv] = await Promise.all([page.waitForEvent('download'), page.click('#csvAll')]);
   const csvPath = await csv.path();
@@ -620,7 +623,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('서버실-3D: "전원·냉방 설비" 버튼이 UPS·분전반·항온항습기(3개)를 보여 주고 UPS 설명이 오른쪽에 나옴', fc.fac === 'UPS-A' && fc.n === 3 && fc.tx > 4 && fc.panel.includes('무정전전원장치') && fc.panel.includes('가상'), JSON.stringify(fc));
   await page.click('#glFit'); await flyDone();
   const vr = await page.evaluate(() => document.querySelector('#appVer').textContent);
-  check('화면 위에 버전 표시(v2.15.1)가 있음', vr === 'v2.15.1', vr);
+  check('화면 위에 버전 표시(v2.15.2)가 있음', vr === 'v2.15.2', vr);
   await page.mouse.move(cv.x + 300, cv.y + 300); await page.mouse.down(); await page.mouse.move(cv.x + 420, cv.y + 300, { steps: 5 }); await page.mouse.up();
   const az = await page.evaluate(() => G.cs.az);
   check('서버실-3D: 드래그하면 시점이 회전하고 좌우 70도를 넘지 않음', Math.abs(az) > 5 && Math.abs(az) <= 70, az);

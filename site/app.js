@@ -203,7 +203,9 @@ function renderPanel(l) {
     xh.setAttribute("x1", X(i)); xh.setAttribute("x2", X(i)); xh.style.display = "";
     co.setAttribute("cx", X(i)); co.setAttribute("cy", Y(l.out[i])); co.style.display = "";
     ci.setAttribute("cx", X(i)); ci.setAttribute("cy", Y(l.in[i])); ci.style.display = "";
-    tip.innerHTML = `${ymdhm(msOf(i))}<br><span class="i">IN&nbsp; ${l.in[i].toFixed(2)} G</span><br><span class="o">OUT ${l.out[i].toFixed(2)} G</span> (${(l.out[i] / l.cap * 100).toFixed(0)}%)`;
+    // 말풍선 줄 순서는 그래프에서 두 선이 놓인 위·아래와 같게: 값이 큰(위에 있는) 선이 윗줄
+    const rowIn = `<span class="i" data-r="in">IN&nbsp; ${l.in[i].toFixed(2)} G</span>`, rowOut = `<span class="o" data-r="out">OUT ${l.out[i].toFixed(2)} G</span> (${(l.out[i] / l.cap * 100).toFixed(0)}%)`;
+    tip.innerHTML = `${ymdhm(msOf(i))}<br>${l.in[i] > l.out[i] ? rowIn + "<br>" + rowOut : rowOut + "<br>" + rowIn}`;
     tip.style.display = "block";
     const pr = root.getBoundingClientRect();
     let left = ev.clientX - pr.left + 14; if (left + 170 > pr.width) left = ev.clientX - pr.left - 175;
