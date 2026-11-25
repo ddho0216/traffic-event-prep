@@ -33,23 +33,23 @@ function makeLive(root, P, AGENT) {
     function execBh(echo) {
       if (S.bh != null) return;
       S.bh = S.t; if (echo) term(`admin@${DEV}> set routing-options static route ${VICTIM}/32 discard\n[edit]\nadmin@${DEV}> commit\ncommit complete`);
-      addLog(`블랙홀 차단 (${VICTIM}/32)`, true); if (!S.done.way) { S.choice = "블랙홀"; S.done.way = S.t; } if (S.upstream != null) mark("act"); else todo(); paint();
+      addLog(`블랙셧다운 차단 (${VICTIM}/32)`, true); if (!S.done.way) { S.choice = "블랙셧다운"; S.done.way = S.t; } if (S.upstream != null) mark("act"); else todo(); paint();
     }
-    function reqUp() { if (S.bh == null || S.upstream != null) return; S.upstream = S.t; addLog("상위 연동망에 블랙홀 요청 (65535:666)", true); mark("act"); }
-    const DUE_H = 48;   // 블랙홀은 바로 풀지 않고 24~48시간 유지한 뒤 푼다 (현장 원칙). 이 시나리오는 48시간 뒤로 알림을 설정한다
+    function reqUp() { if (S.bh == null || S.upstream != null) return; S.upstream = S.t; addLog("상위 연동망에 블랙셧다운 요청 (65535:666)", true); mark("act"); }
+    const DUE_H = 48;   // 블랙셧다운은 바로 풀지 않고 24~48시간 유지한 뒤 푼다 (현장 원칙). 이 시나리오는 48시간 뒤로 알림을 설정한다
     const dueOf = () => parseT("2026-10-29T" + fmt(S.t)) + DUE_H * 3600000;
     const dueStr = ms => `${ymdhm(ms).slice(5, 10).replace("-", "/")} ${ymdhm(ms).slice(11)}`;
-    function check() {   // 블랙홀을 걸면 공격이 버려져 링크가 평소로 돌아온다. 링크 in이 평소 범위로 돌아온 것을 확인하면 안정화로 본다 (공격이 끝나기를 기다리지 않는다)
+    function check() {   // 블랙셧다운을 걸면 공격이 버려져 링크가 평소로 돌아온다. 링크 in이 평소 범위로 돌아온 것을 확인하면 안정화로 본다 (공격이 끝나기를 기다리지 않는다)
       const m = cur(), v = valueIn(m);
       if (S.bh == null || S.checked != null) return;
-      if (v >= 5) { addLog(`정상화 확인: 링크 in이 아직 평소 범위가 아님 (${gb(v)}G)`); E("lvSendMsg").textContent = `링크 in이 아직 평소 범위가 아닙니다 (${gb(v)}G). 블랙홀이 적용되기까지 1~2분 걸립니다. 잠시 뒤 다시 확인하세요`; return; }
-      S.checked = S.t; addLog("정상화 확인 · 링크 in 평소 범위 복귀 (블랙홀로 공격이 버려지는 중, 블랙홀은 24~48시간 유지)", true); todo(); fill();
+      if (v >= 5) { addLog(`정상화 확인: 링크 in이 아직 평소 범위가 아님 (${gb(v)}G)`); E("lvSendMsg").textContent = `링크 in이 아직 평소 범위가 아닙니다 (${gb(v)}G). 블랙셧다운이 적용되기까지 1~2분 걸립니다. 잠시 뒤 다시 확인하세요`; return; }
+      S.checked = S.t; addLog("정상화 확인 · 링크 in 평소 범위 복귀 (블랙셧다운으로 공격이 버려지는 중, 블랙셧다운은 24~48시간 유지)", true); todo(); fill();
     }
     function setReminder() {
       if (!done("fin") || S.rem != null) return;
       const due = dueOf(), all = store.get("reminders", []).filter(x => x.key !== "ddos:" + VICTIM);
-      all.push({ key: "ddos:" + VICTIM, what: "블랙홀 해제 확인", detail: `${VICTIM}/32 · ${DEV}`, set: parseT("2026-10-29T" + fmt(S.t)), due });
-      store.set("reminders", all); S.rem = due; if (typeof renderTasks === "function") renderTasks(); addLog(`블랙홀 해제 알림 설정 (${dueStr(due)}, ${DUE_H}시간 뒤)`); mark("rem"); finish();
+      all.push({ key: "ddos:" + VICTIM, what: "블랙셧다운 해제 확인", detail: `${VICTIM}/32 · ${DEV}`, set: parseT("2026-10-29T" + fmt(S.t)), due });
+      store.set("reminders", all); S.rem = due; if (typeof renderTasks === "function") renderTasks(); addLog(`블랙셧다운 해제 알림 설정 (${dueStr(due)}, ${DUE_H}시간 뒤)`); mark("rem"); finish();
     }
     return {
       id: "ddos", name: "DDoS 공격 수신", clock0: 180, date: "10/29", start: ONSET - 2, end: 60, alertAt: ALERT, deadline: 8, stages: ["발생", "경과", "완료"], speedNote: true,
@@ -70,13 +70,13 @@ function makeLive(root, P, AGENT) {
         const hot = valueIn(upto) > 6;
         g += `<polyline fill="none" stroke="${hot ? "#ff8f84" : "#59b4f5"}" stroke-width="2" points="${pts.join(" ")}"/><circle cx="${x(upto)}" cy="${y(Math.min(cap, valueIn(upto)))}" r="3.5" fill="${hot ? "#ff8f84" : "#59b4f5"}"/>`;
         if (upto >= ONSET) g += `<line x1="${x(ONSET)}" x2="${x(ONSET)}" y1="${T}" y2="${H - B}" stroke="#e8a23b" stroke-dasharray="3 3"/><text x="${x(ONSET) + 3}" y="${T + 10}" fill="#e8a23b" font-size="10">급증 시작</text>`;
-        if (S.bh != null && S.bh <= S.t) g += `<line x1="${x(S.bh)}" x2="${x(S.bh)}" y1="${T}" y2="${H - B}" stroke="#47c28b" stroke-dasharray="3 3"/><text x="${x(S.bh) + 3}" y="${T + 22}" fill="#47c28b" font-size="10">블랙홀 ${fmt(S.bh)}</text>`;
+        if (S.bh != null && S.bh <= S.t) g += `<line x1="${x(S.bh)}" x2="${x(S.bh)}" y1="${T}" y2="${H - B}" stroke="#47c28b" stroke-dasharray="3 3"/><text x="${x(S.bh) + 3}" y="${T + 22}" fill="#47c28b" font-size="10">블랙셧다운 ${fmt(S.bh)}</text>`;
         const v = valueIn(upto); return { svg: g + "</svg>", now: `${gb(v)}G`, bad: v > 6 };
       },
       alertBar() {
         const m = cur(), v = valueIn(m), back = S.bh != null && m >= ATK_END + 2 && v < 5;
         if (!alerted()) return ["idle", '● 알림 없음 · 정상 감시 중 <span class="muted">(급증이 기준을 넘고 1~3분이 지나야 알림이 뜹니다)</span>'];
-        if (back) return ["ok", `● ${UPL} 정상 범위로 복귀 <span class="muted">${fmt(m)} · in ${gb(v)}G · 블랙홀은 유지 중 (24~48시간 뒤 해제)</span>`];
+        if (back) return ["ok", `● ${UPL} 정상 범위로 복귀 <span class="muted">${fmt(m)} · in ${gb(v)}G · 블랙셧다운은 유지 중 (24~48시간 뒤 해제)</span>`];
         return ["hot", `<span class="lv-dot"></span>${UPL} in 급증 감지 <span class="muted">${fmt(ALERT)} · 급증 시작 ${fmt(ONSET)} · 지연 ${ALERT - ONSET}분 · 평소 3.3G → ${gb(v)}G</span>` +
           (S.ack == null ? `<button class="btn" id="lvAck" type="button">확인하기</button>` : `<span class="muted" style="margin-left:auto">내가 확인 ${fmt(S.ack)}</span>`)];
       },
@@ -87,7 +87,7 @@ function makeLive(root, P, AGENT) {
         if (atk < 0.1) return { sub: `${fmt(m)} 기준`, html: '<p class="muted lv-empty">지금 들어오는 공격 트래픽이 없습니다.</p>' };
         const w = k => (noise(m * 3 + k) - 0.5) * 3, a = 22 + w(1), b = 14 + w(2), c = 9 + w(3), o = 100 - a - b - c, syn = 95 + w(4) * 0.3, n = 4200 + Math.round((Math.min(m, ATK_END) - ONSET) * 60), gone = discarded(m);
         return {
-          sub: `${fmt(m)} 기준 · 유입 ${gb(atk)}Gbps (${(atk * 1e9 / (PKT * 8) / 1e6).toFixed(1)}Mpps)${gone > 0.05 ? ` · 블랙홀로 버려지는 양 ${gb(gone)}Gbps` : ""} · 출발지 ${n.toLocaleString()}개`,
+          sub: `${fmt(m)} 기준 · 유입 ${gb(atk)}Gbps (${(atk * 1e9 / (PKT * 8) / 1e6).toFixed(1)}Mpps)${gone > 0.05 ? ` · 블랙셧다운으로 버려지는 양 ${gb(gone)}Gbps` : ""} · 출발지 ${n.toLocaleString()}개`,
           html: `<div class="lv-3"><div><div class="muted lv-h">출발지 대역 (상위)</div>${bar("203.0.113.0/24", a, "#e8a23b")}${bar("192.0.2.0/24", b, "#e8a23b")}${bar("203.0.114.0/24", c, "#e8a23b")}${bar("그 밖 " + Math.round(n * 0.99).toLocaleString() + "개", o, "#2b4358")}</div>
       <div><div class="muted lv-h">프로토콜 · 플래그</div>${bar("TCP SYN", syn, "#ff8f84")}${bar("TCP ACK", 3)}${bar("UDP", 1)}${bar("기타", 1)}</div>
       <div><div class="muted lv-h">목적지 포트 · 패킷 크기</div>${bar("443", 91)}${bar("80", 6)}${bar("패킷 60~80B", 93)}${bar("패킷 1000B+", 2)}</div></div>`
@@ -106,13 +106,13 @@ function makeLive(root, P, AGENT) {
           ["ev", "이벤트 일정인지 확인", done("ev") ? `일정 없음 (${fmt(S.done.ev)})` : "일정에 없으면 이상 징조입니다", done("ev") ? "" : `<button class="btn sm" data-a="ev" ${can ? "" : "disabled"}>일정 조회</button>`],
           ["ip", "대상·유형·공격량 파악", done("ip") ? `가상물산 ${VICTIM} · TCP · ${gb(atkRaw(Math.max(ONSET + 2, Math.min(S.done.ip, ATK_END - 1))))} Gbps (${fmt(S.done.ip)})` : "누구 IP로 오는지 조회하고, 구성 카드의 값을 봅니다", done("ip") ? "" : `<button class="btn sm" data-a="ip" ${can ? "" : "disabled"}>${VICTIM} 누구 IP?</button>`],
           ["sms", "발생 문자 보내기", done("sms") ? `발송 ${fmt(S.done.sms)} (알림 후 ${Math.round(S.done.sms - ALERT)}분)` : `알림 후 ${SC.deadline}분 안에 보냅니다`, ""],
-          ["way", "차단 방법 판단", done("way") ? `블랙홀 선택 (${fmt(S.done.way)})` : "클린존 가입 여부에 따라 달라집니다",
-            done("way") ? "" : `<span class="lv-opts"><button class="btn sm" data-a="clean" ${can ? "" : "disabled"}>클린존 우회</button><button class="btn sm" data-a="bh" ${can ? "" : "disabled"}>블랙홀</button><button class="btn sm" data-a="wait" ${can ? "" : "disabled"}>더 지켜보기</button></span>`],
-          ["act", "차단 실행 · 상위 연동망 요청", done("act") ? `차단 ${fmt(S.bh)} · 요청 ${fmt(S.upstream)}` : "블랙홀 명령을 넣고 상위 연동망에 요청합니다",
-            done("act") ? "" : `<span class="lv-opts"><button class="btn sm" data-a="exec" ${can && S.bh == null ? "" : "disabled"}>블랙홀 실행 (가상)</button><button class="btn sm" data-a="up" ${S.bh != null && S.upstream == null ? "" : "disabled"}>연동망 요청</button></span>`],
-          ["fin", "정상화 확인 · 완료 문자", done("fin") ? `완료 문자 ${fmt(S.done.fin)} (블랙홀은 유지)` : S.checked != null ? "링크가 평소로 돌아온 것을 확인했습니다. 바로 완료 문자를 보냅니다 (블랙홀은 그대로 둡니다)" : "블랙홀을 걸면 공격이 버려져서 링크가 곧 평소로 돌아옵니다. 링크 in이 평소 범위로 돌아온 것을 확인하면 안정화로 보고 바로 완료 문자를 보냅니다. 공격이 끝나기를 기다리지 않고, 블랙홀은 24~48시간 유지합니다",
+          ["way", "차단 방법 판단", done("way") ? `블랙셧다운 선택 (${fmt(S.done.way)})` : "클린존 가입 여부에 따라 달라집니다",
+            done("way") ? "" : `<span class="lv-opts"><button class="btn sm" data-a="clean" ${can ? "" : "disabled"}>클린존 우회</button><button class="btn sm" data-a="bh" ${can ? "" : "disabled"}>블랙셧다운</button><button class="btn sm" data-a="wait" ${can ? "" : "disabled"}>더 지켜보기</button></span>`],
+          ["act", "차단 실행 · 상위 연동망 요청", done("act") ? `차단 ${fmt(S.bh)} · 요청 ${fmt(S.upstream)}` : "블랙셧다운 명령을 넣고 상위 연동망에 요청합니다",
+            done("act") ? "" : `<span class="lv-opts"><button class="btn sm" data-a="exec" ${can && S.bh == null ? "" : "disabled"}>블랙셧다운 실행 (가상)</button><button class="btn sm" data-a="up" ${S.bh != null && S.upstream == null ? "" : "disabled"}>연동망 요청</button></span>`],
+          ["fin", "정상화 확인 · 완료 문자", done("fin") ? `완료 문자 ${fmt(S.done.fin)} (블랙셧다운은 유지)` : S.checked != null ? "링크가 평소로 돌아온 것을 확인했습니다. 바로 완료 문자를 보냅니다 (블랙셧다운은 그대로 둡니다)" : "블랙셧다운을 걸면 공격이 버려져서 링크가 곧 평소로 돌아옵니다. 링크 in이 평소 범위로 돌아온 것을 확인하면 안정화로 보고 바로 완료 문자를 보냅니다. 공격이 끝나기를 기다리지 않고, 블랙셧다운은 24~48시간 유지합니다",
             done("fin") || S.checked != null ? "" : `<button class="btn sm" data-a="check" ${S.bh != null ? "" : "disabled"}>정상화 확인</button>`],
-          ["rem", `블랙홀 해제 알림 설정 (${DUE_H}시간 뒤)`, done("rem") ? `설정함 · ${dueStr(S.rem)} 해제 예정 (알림 > 내 업무에서 확인)` : `블랙홀은 24~48시간 뒤에 풉니다. 해제할 때가 되면 알림을 받도록 설정합니다. 설정하면 알림(종 모양)의 "내 업무"에서 확인해 보실 수 있습니다. 해제하기 전에는 공격이 끝났는지, 같은 고객의 다른 IP로 옮겨 가지 않았는지 확인합니다`,
+          ["rem", `블랙셧다운 해제 알림 설정 (${DUE_H}시간 뒤)`, done("rem") ? `설정함 · ${dueStr(S.rem)} 해제 예정 (알림 > 내 업무에서 확인)` : `블랙셧다운은 24~48시간 뒤에 풉니다. 해제할 때가 되면 알림을 받도록 설정합니다. 설정하면 알림(종 모양)의 "내 업무"에서 확인해 보실 수 있습니다. 해제하기 전에는 공격이 끝났는지, 같은 고객의 다른 IP로 옮겨 가지 않았는지 확인합니다`,
             done("rem") ? "" : `<button class="btn sm" data-a="rem" ${done("fin") ? "" : "disabled"}>${DUE_H}시간 뒤 알림 설정</button>`]
         ];
       },
@@ -121,7 +121,7 @@ function makeLive(root, P, AGENT) {
         else if (a === "ip") { S.victim = true; addLog(`${VICTIM} 조회 → 가상물산 (클린존 미가입, 가정)`); mark("ip"); paint(); }
         else if (a === "clean") { S.victim = true; addLog("클린존 우회 시도 → 가상물산은 미가입이라 불가 (가정)"); E("lvSendMsg").textContent = "가상물산은 클린존 미가입이라 우회할 수 없습니다 (제가 정한 가정)"; todo(); }
         else if (a === "wait") { S.wait = true; addLog("더 지켜보기 선택"); E("lvSendMsg").textContent = "지켜보는 동안에도 시간은 흐르고 공격은 이어집니다"; }
-        else if (a === "bh") { S.choice = "블랙홀"; addLog("차단 방법: 블랙홀 선택"); mark("way"); }
+        else if (a === "bh") { S.choice = "블랙셧다운"; addLog("차단 방법: 블랙셧다운 선택"); mark("way"); }
         else if (a === "exec") execBh(true);
         else if (a === "up") reqUp();
         else if (a === "check") check();
@@ -130,7 +130,7 @@ function makeLive(root, P, AGENT) {
       draft(stage) {
         const m = cur(), atk = S.bh != null && S.rel == null && atkRaw(m) > 0 ? atkRaw(m) : atkRaw(Math.min(m, ATK_END - 1)), acts = S.log.filter(x => x.act).map(x => ({ t: fmt(x.m), txt: x.text }));
         const cause = (stage === "발생" ? "국제망 DDoS 공격 (확인 중)" : "국제망 DDoS 공격") + (S.saved && stage !== "발생" ? ` · 출발지 상위 ${S.saved.top.split(", ")[0]} 등` : "");
-        const impact = stage === "발생" ? "파악중" : stage === "경과" ? (S.bh != null && S.rel == null ? "일부 IP 접속 영향 (대상 IP 블랙홀 중)" : "파악중") : (S.bh != null ? `일부 IP 접속 영향 (대상 IP 블랙홀 ${fmt(S.bh)}부터 유지 중, 24~48시간 뒤 해제 예정)` : "영향 없음");
+        const impact = stage === "발생" ? "파악중" : stage === "경과" ? (S.bh != null && S.rel == null ? "일부 IP 접속 영향 (대상 IP 블랙셧다운 중)" : "파악중") : (S.bh != null ? `일부 IP 접속 영향 (대상 IP 블랙셧다운 ${fmt(S.bh)}부터 유지 중, 24~48시간 뒤 해제 예정)` : "영향 없음");
         return smsNotice({ stage, center: "분당", title: "DDoS 공격 수신", target: `${DEV}(10.0.0.1)`, from: `10/29 ${fmt(ONSET)}`, to: stage === "완료" ? `10/29 ${fmt(S.t)}` : "", cause, attack: `TCP (${gb(atk)} Gbps / ${(atk * 1e9 / (PKT * 8) / 1e6).toFixed(1)} Mpps)`, actions: stage === "발생" ? [] : acts, impact, voc: stage === "발생" ? "파악중" : "없음" });
       },
       stageOk: st => ({ 발생: true, 경과: done("sms"), 완료: S.checked != null })[st],
@@ -150,31 +150,31 @@ function makeLive(root, P, AGENT) {
           ["알림 → 내가 확인", ackd == null ? "확인 안 함" : `${ackd.toFixed(1)}분`],
           ["알림 → 발생 문자", used == null ? "안 보냄" : `${used.toFixed(1)}분 (${used <= SC.deadline ? "기한 8분 안" : "기한 초과"})`],
           ["알림 → 차단", S.bh == null ? "차단 안 함" : `${(S.bh - ALERT).toFixed(1)}분`],
-          ["블랙홀", S.bh == null ? "-" : `${fmt(S.bh)}부터 유지 중 (바로 풀지 않고 24~48시간 유지)`],
+          ["블랙셧다운", S.bh == null ? "-" : `${fmt(S.bh)}부터 유지 중 (바로 풀지 않고 24~48시간 유지)`],
           ["클린존 가입 확인", S.victim ? "확인함" : "확인 안 함 (차단 전에 확인하는 순서입니다)"],
-          ["서비스영향 문구", "일부 IP 접속 영향 (블랙홀 대상 IP 1개). 서비스영향은 문제가 있을 때만 적습니다 (고객 전화·다운 등)"],
-          ["블랙홀 해제 알림", S.rem ? `${dueStr(S.rem)}에 해제 확인 (알림 > 내 업무)` : "설정 안 함 (해제 시점을 놓칠 수 있습니다)"],
+          ["서비스영향 문구", "일부 IP 접속 영향 (블랙셧다운 대상 IP 1개). 서비스영향은 문제가 있을 때만 적습니다 (고객 전화·다운 등)"],
+          ["블랙셧다운 해제 알림", S.rem ? `${dueStr(S.rem)}에 해제 확인 (알림 > 내 업무)` : "설정 안 함 (해제 시점을 놓칠 수 있습니다)"],
           ["사건 기록 저장", S.saved ? `#${S.saved.id} 저장함` : "안 함 (끝난 뒤에는 값을 다시 볼 수 없습니다)"],
           ["문자 순서", `발생${S.sent.경과 != null ? " → 경과" : ""} → 완료`]
         ];
       },
       auto: {
         trigger: `${UPL} in이 평소(약 3.3G)의 2배를 넘으면 급증으로 보고, 3분 뒤 알림이 뜨면 바로 시작합니다. (기준 값은 제가 정한 가정)`,
-        guards: ["이벤트 일정이 있는 시간이면 차단하지 않고 사람에게 넘김", "클린존 가입 고객사면 블랙홀 대신 우회", "블랙홀은 공격받는 IP 1개(/32)에만 적용", "링크가 평소 범위로 돌아온 것을 확인하기 전에는 완료 문자를 보내지 않음", "블랙홀은 스스로 풀지 않고, 48시간 뒤 사람에게 해제 알림만 남김"],
-        limit: "블랙홀을 걸면 그 IP의 정상 접속도 함께 끊깁니다. 실제 현장이라면 이 단계만큼은 사람 확인을 거치게 둘지 정해야 합니다. 여기서는 규칙이 끝까지 가는 모습을 보여 드리려고 자동으로 두었습니다.",
+        guards: ["이벤트 일정이 있는 시간이면 차단하지 않고 사람에게 넘김", "클린존 가입 고객사면 블랙셧다운 대신 우회", "블랙셧다운은 공격받는 IP 1개(/32)에만 적용", "링크가 평소 범위로 돌아온 것을 확인하기 전에는 완료 문자를 보내지 않음", "블랙셧다운은 스스로 풀지 않고, 48시간 뒤 사람에게 해제 알림만 남김"],
+        limit: "블랙셧다운을 걸면 그 IP의 정상 접속도 함께 끊깁니다. 실제 현장이라면 이 단계만큼은 사람 확인을 거치게 둘지 정해야 합니다. 여기서는 규칙이 끝까지 가는 모습을 보여 드리려고 자동으로 두었습니다.",
         human: { sms: "발송 전", act: "실행 전", fin: "발송 전" },
         gates: {
-          exec: () => ({ title: "블랙홀 차단을 실행할까요?", where: DEV, cmd: [`set routing-options static route ${VICTIM}/32 discard`, "commit"], undo: [`delete routing-options static route ${VICTIM}/32`, "commit"], impact: `이 IP(${VICTIM})로 가는 정상 접속도 함께 끊깁니다 (가상물산). 24~48시간 유지할 예정입니다`, alts: [["더 지켜보기", `링크 in ${gb(valueIn(cur()))}G · 공격이 계속 들어오는 중`], ["클린존 우회", "불가 (가상물산은 미가입, 가정)"]] }),
-          up: () => ({ title: "상위 연동망에 블랙홀을 요청할까요?", where: "상위 연동망 (외부 조직)", cmd: [`블랙홀 요청: ${VICTIM}/32 · 커뮤니티 65535:666`], undo: ["상위 연동망에 해제 요청"], impact: "외부 조직이 우리 요청대로 트래픽을 버립니다. 주소를 잘못 보내면 다른 고객 IP까지 막힐 수 있습니다", alts: [["우리 장비 블랙홀만 유지", "공격량이 회선 용량을 넘지 않을 때만 가능"]] })
+          exec: () => ({ title: "블랙셧다운 차단을 실행할까요?", where: DEV, cmd: [`set routing-options static route ${VICTIM}/32 discard`, "commit"], undo: [`delete routing-options static route ${VICTIM}/32`, "commit"], impact: `이 IP(${VICTIM})로 가는 정상 접속도 함께 끊깁니다 (가상물산). 24~48시간 유지할 예정입니다`, alts: [["더 지켜보기", `링크 in ${gb(valueIn(cur()))}G · 공격이 계속 들어오는 중`], ["클린존 우회", "불가 (가상물산은 미가입, 가정)"]] }),
+          up: () => ({ title: "상위 연동망에 블랙셧다운을 요청할까요?", where: "상위 연동망 (외부 조직)", cmd: [`블랙셧다운 요청: ${VICTIM}/32 · 커뮤니티 65535:666`], undo: ["상위 연동망에 해제 요청"], impact: "외부 조직이 우리 요청대로 트래픽을 버립니다. 주소를 잘못 보내면 다른 고객 IP까지 막힐 수 있습니다", alts: [["우리 장비 블랙셧다운만 유지", "공격량이 회선 용량을 넘지 않을 때만 가능"]] })
         },
         steps: {
           ev: { rule: "알림 수신 → 이벤트 일정 조회", tool: "이벤트 일정표 조회", why: () => "10/29 03시대에 일정 없음 → 정상 증가가 아님" },
           ip: { rule: "일정 없음 → 대상 IP의 고객사·공격량 조회, 구성을 기록에 저장", tool: "IP 대장 조회 · 트래픽 구성 통계", why: () => `${VICTIM} = 가상물산 · TCP SYN 95% · ${gb(atkRaw(cur()))} Gbps`, after: () => SC.save() },
           sms: { rule: "대상 파악 완료 → 발생 문자 (기한 8분)", tool: "문자 양식 자동 채움 · 발송", why: () => `알림 후 ${(S.done.sms - ALERT).toFixed(1)}분에 발송 (기한 8분)` },
-          way: { rule: "클린존 가입 → 우회 / 미가입 → 블랙홀", tool: "클린존 가입 명단 조회", pick: () => ["bh"], why: () => "가상물산은 클린존 미가입 (가정) → 블랙홀" },
-          act: { rule: "블랙홀로 결정 → 장비에 /32 discard 설정 → 상위 연동망에 요청", tool: "장비 명령 (set … discard, commit) · 연동망 요청", why: () => `차단 ${fmt(S.bh)}${S.upstream != null ? ` · 연동망 요청 ${fmt(S.upstream)}` : ""}`, mid: true },
-          fin: { rule: "링크 in이 5G 아래로 내려옴 → 정상화 확인 → 완료 문자", tool: "그래프 값 읽기 · 문자 발송", ready: () => S.checked != null || valueIn(cur()) < 5, waitText: "블랙홀이 적용되어 링크가 평소로 돌아오기를 기다리는 중", why: () => `링크 in ${gb(valueIn(cur()))}G (평소 범위) 확인 후 완료 문자` },
-          rem: { rule: "완료 문자 발송 → 48시간 뒤 해제 알림 등록", tool: "알림(내 업무) 등록", why: () => "블랙홀은 24~48시간 유지한 뒤 사람이 풉니다" }
+          way: { rule: "클린존 가입 → 우회 / 미가입 → 블랙셧다운", tool: "클린존 가입 명단 조회", pick: () => ["bh"], why: () => "가상물산은 클린존 미가입 (가정) → 블랙셧다운" },
+          act: { rule: "블랙셧다운으로 결정 → 장비에 /32 discard 설정 → 상위 연동망에 요청", tool: "장비 명령 (set … discard, commit) · 연동망 요청", why: () => `차단 ${fmt(S.bh)}${S.upstream != null ? ` · 연동망 요청 ${fmt(S.upstream)}` : ""}`, mid: true },
+          fin: { rule: "링크 in이 5G 아래로 내려옴 → 정상화 확인 → 완료 문자", tool: "그래프 값 읽기 · 문자 발송", ready: () => S.checked != null || valueIn(cur()) < 5, waitText: "블랙셧다운이 적용되어 링크가 평소로 돌아오기를 기다리는 중", why: () => `링크 in ${gb(valueIn(cur()))}G (평소 범위) 확인 후 완료 문자` },
+          rem: { rule: "완료 문자 발송 → 48시간 뒤 해제 알림 등록", tool: "알림(내 업무) 등록", why: () => "블랙셧다운은 24~48시간 유지한 뒤 사람이 풉니다" }
         }
       },
       note: "가상 시나리오의 결과입니다. 기준(8분 등)은 현장에서 들은 값이고, 클린존·차단 절차는 제가 정한 가정입니다."
@@ -828,7 +828,7 @@ function makeLive(root, P, AGENT) {
       <h4>① 무엇을 보고 시작하나</h4><p>${esc(a.trigger)}</p>
       <h4>③ 안전장치 <span class="muted">이럴 땐 하지 않거나 사람에게 넘깁니다</span></h4><ul>${a.guards.map(g => `<li>${esc(g)}</li>`).join("")}</ul>
       <h4>④ 자동화한 방법</h4><p>'직접 대응'에서 사람이 누르던 단계를 규칙표(조건 → 행동)로 옮겼습니다. 조회·근거 모으기·초안은 자동으로 하고, 아래 기준에 해당하는 일은 실행 직전에 멈춰 근무자 확인을 받습니다. 확인 기한이 지나도 자동 실행하지 않고 다시 알립니다. AI는 부르지 않아서 같은 상황이면 항상 같은 결과가 나옵니다.</p>
-      <h4>⑤ 사람이 꼭 확인하는 일</h4><ul><li>서비스가 끊기는 차단 (블랙홀은 그 IP의 정상 접속도 끊음)</li><li>장비 설정 변경 (commit · shutdown)</li><li>고객에게 나가는 문자 · 안내</li><li>외부 조직에 보내는 요청 (상위 연동망 등)</li><li>현장 교체 요청 · 블랙홀 해제 (사람 투입 · 재공격 위험)</li><li>규칙이 확신하지 못할 때 (원인 구분 불가 · 일정과 겹침)</li></ul>
+      <h4>⑤ 사람이 꼭 확인하는 일</h4><ul><li>서비스가 끊기는 차단 (블랙셧다운은 그 IP의 정상 접속도 끊음)</li><li>장비 설정 변경 (commit · shutdown)</li><li>고객에게 나가는 문자 · 안내</li><li>외부 조직에 보내는 요청 (상위 연동망 등)</li><li>현장 교체 요청 · 블랙셧다운 해제 (사람 투입 · 재공격 위험)</li><li>규칙이 확신하지 못할 때 (원인 구분 불가 · 일정과 겹침)</li></ul>
     </div><div>
       <h4>② 규칙표 <span class="muted">사람이 하던 순서 그대로</span></h4>
       <table class="lv-rule"><tr><th>#</th><th>단계</th><th>조건 → 행동</th><th>실행 방식</th><th>상태</th></tr>${rows.map((r, i) => { const p = a.steps[r[0]] || {}, h = (a.human || {})[r[0]]; return `<tr class="${i === first && S.ack != null && !S.finished ? "now" : ""}"><td>${i + 1}</td><td>${r[1]}</td><td>${esc(p.rule || "")}</td><td>${h ? `<span class="tag warn">사람 확인</span><div class="muted s">${esc(h)}</div>` : '<span class="tag">자동</span>'}</td><td>${st(r[0], i)}</td></tr>`; }).join("")}</table>

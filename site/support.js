@@ -7,8 +7,8 @@
   sv("smCenter").innerHTML = CENTERS.map(c => `<option>${c}</option>`).join("");
   const SAMPLE = {
     발생: { title: "DDoS 공격 수신", target: "IDC_B_FS1(10.0.0.1)", from: "10/29 03:20", cause: "국제망 DDoS 공격 (확인 중)", impact: "파악중", voc: "파악중", acts: "" },
-    경과: { title: "DDoS 공격 수신", target: "IDC_B_FS1(10.0.0.1)", from: "10/29 03:20", cause: "국제망 DDoS 공격", impact: "대상 IP 접속 불가(블랙홀 중)", voc: "없음", acts: "03:30 블랙홀 차단 (198.51.100.77/32)\n03:31 상위 연동망에 블랙홀 요청" },
-    완료: { title: "DDoS 공격 수신", target: "IDC_B_FS1(10.0.0.1)", from: "10/29 03:20", to: "10/29 03:41", cause: "국제망 DDoS 공격", impact: "블랙홀 구간(03:30~03:41) 대상 IP 접속 불가", voc: "없음", acts: "03:30 블랙홀 차단 (198.51.100.77/32)\n03:31 상위 연동망에 블랙홀 요청\n03:41 공격 종료 확인 · 블랙홀 해제" }
+    경과: { title: "DDoS 공격 수신", target: "IDC_B_FS1(10.0.0.1)", from: "10/29 03:20", cause: "국제망 DDoS 공격", impact: "대상 IP 접속 불가(블랙셧다운 중)", voc: "없음", acts: "03:30 블랙셧다운 차단 (198.51.100.77/32)\n03:31 상위 연동망에 블랙셧다운 요청" },
+    완료: { title: "DDoS 공격 수신", target: "IDC_B_FS1(10.0.0.1)", from: "10/29 03:20", to: "10/29 03:41", cause: "국제망 DDoS 공격", impact: "블랙셧다운 구간(03:30~03:41) 대상 IP 접속 불가", voc: "없음", acts: "03:30 블랙셧다운 차단 (198.51.100.77/32)\n03:31 상위 연동망에 블랙셧다운 요청\n03:41 공격 종료 확인 · 블랙셧다운 해제" }
   };
   let stage = "발생", kind = "incident";   // kind: incident(장애 전파) / daily(주요고객 트래픽) / event(이벤트 최대 트래픽)
   const RD_END = "2026-10-22T08:00";
