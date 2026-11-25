@@ -202,35 +202,35 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const before = parseFloat((await lv()).now);
   await page.evaluate(() => LIVE.advance(3));
   L = await lv();
-  check('블랙셧다운을 실행하면 몇 분 뒤 그래프의 in이 평소 값으로 떨어지고, 경로가 Discard로 바뀜', before > 8 && parseFloat(L.now) < 5 && (await (async () => { await page.fill('#lvTermIn', 'show route 198.51.100.77'); await page.press('#lvTermIn', 'Enter'); return (await lv()).term.includes('Discard'); })()), `${before} → ${L.now}`);
+  check('블랙홀을 실행하면 몇 분 뒤 그래프의 in이 평소 값으로 떨어지고, 경로가 Discard로 바뀜', before > 8 && parseFloat(L.now) < 5 && (await (async () => { await page.fill('#lvTermIn', 'show route 198.51.100.77'); await page.press('#lvTermIn', 'Enter'); return (await lv()).term.includes('Discard'); })()), `${before} → ${L.now}`);
   await page.click('#lvTodo [data-a=up]');
   L = await lv();
-  check('상위 연동망 요청까지 하면 5번 단계 완료, 조치 내용이 내 기록에 남음', L.prog.includes('5 / 7') && L.log.includes('블랙셧다운 차단') && L.log.includes('65535:666'));
-  check('공격이 끝나기 전(03:30)에는 블랙셧다운으로 버려지는 양이 구성 카드에 보임', (await page.locator('#lvCompSub').innerText()).includes('블랙셧다운으로 버려지는 양'));
-  // 블랙셧다운은 바로 풀지 않는다: 정상화 확인 → 완료 문자(블랙셧다운 유지) → 48시간 뒤 해제 알림 설정 → 결과
-  check('블랙셧다운 실행 뒤 해야 할 일에 "블랙셧다운 해제" 버튼이 없고, 6번은 정상화 확인·완료 문자, 7번은 해제 알림 설정(48시간 뒤)', (await page.locator('#lvTodo [data-a=rel]').count()) === 0 && (await page.locator('#lvTodo').innerText()).includes('정상화 확인 · 완료 문자') && (await page.locator('#lvTodo').innerText()).includes('블랙셧다운 해제 알림 설정 (48시간 뒤)') && (await page.locator('#lvTodo').innerText()).includes('24~48시간'));
+  check('상위 연동망 요청까지 하면 5번 단계 완료, 조치 내용이 내 기록에 남음', L.prog.includes('5 / 7') && L.log.includes('블랙홀 차단') && L.log.includes('65535:666'));
+  check('공격이 끝나기 전(03:30)에는 블랙홀로 버려지는 양이 구성 카드에 보임', (await page.locator('#lvCompSub').innerText()).includes('블랙홀로 버려지는 양'));
+  // 블랙홀은 바로 풀지 않는다: 정상화 확인 → 완료 문자(블랙홀 유지) → 48시간 뒤 해제 알림 설정 → 결과
+  check('블랙홀 실행 뒤 해야 할 일에 "블랙홀 해제" 버튼이 없고, 6번은 정상화 확인·완료 문자, 7번은 해제 알림 설정(48시간 뒤)', (await page.locator('#lvTodo [data-a=rel]').count()) === 0 && (await page.locator('#lvTodo').innerText()).includes('정상화 확인 · 완료 문자') && (await page.locator('#lvTodo').innerText()).includes('블랙홀 해제 알림 설정 (48시간 뒤)') && (await page.locator('#lvTodo').innerText()).includes('24~48시간'));
   check('7번 안내: "설정하면 알림(종 모양)의 내 업무에서 확인해 보실 수 있습니다"', (await page.locator('#lvTodo').innerText()).includes('설정하면 알림(종 모양)의 "내 업무"에서 확인해 보실 수 있습니다'));
   check('완료 문자와 알림 설정은 정상화 확인 전에는 막혀 있음 (완료 단계 버튼 비활성, 알림 설정 버튼 비활성)', (await page.locator('#lvStage [data-st=완료]').isDisabled()) && (await page.locator('#lvTodo [data-a=rem]').isDisabled()));
   await page.evaluate(() => LIVE.jump(42));
   await page.click('#lvTodo [data-a=check]');
   await page.evaluate(() => LIVE.advance(3));
   await page.fill('#lvTermIn', 'show route 198.51.100.77'); await page.press('#lvTermIn', 'Enter');
-  check('정상화를 확인해도 블랙셧다운은 그대로 유지됨 (경로가 계속 Discard)', (await lv()).term.split('show route 198.51.100.77').pop().includes('Discard') && (await page.locator('#lvAlert').innerText()).includes('블랙셧다운은 유지 중'));
+  check('정상화를 확인해도 블랙홀은 그대로 유지됨 (경로가 계속 Discard)', (await lv()).term.split('show route 198.51.100.77').pop().includes('Discard') && (await page.locator('#lvAlert').innerText()).includes('블랙홀은 유지 중'));
   await page.click('#lvStage [data-st=완료]');
   const dn = await page.inputValue('#lvDraft');
-  check('완료 문자: 시작~끝 일시, 직접 한 조치 시간표(블랙셧다운 차단·연동망 요청), 블랙셧다운이 유지 중(24~48시간 뒤 해제 예정)이라고 서비스영향에 "일부 IP 접속 영향"으로 적힘, 해제 조치는 없음', /■ 일시 : 10\/29 03:20 ~ 10\/29 03:4\d/.test(dn) && dn.includes('블랙셧다운 차단') && dn.includes('65535:666') && !dn.includes('블랙셧다운 해제') && /서비스영향 : 일부 IP 접속 영향 \(대상 IP 블랙셧다운 03:2\d부터 유지 중, 24~48시간 뒤 해제 예정\)/.test(dn) && !dn.includes('이중화 경로는 영향 없음') && dn.includes('_완료]'));
+  check('완료 문자: 시작~끝 일시, 직접 한 조치 시간표(블랙홀 차단·연동망 요청), 블랙홀이 유지 중(24~48시간 뒤 해제 예정)이라고 서비스영향에 "일부 IP 접속 영향"으로 적힘, 해제 조치는 없음', /■ 일시 : 10\/29 03:20 ~ 10\/29 03:4\d/.test(dn) && dn.includes('블랙홀 차단') && dn.includes('65535:666') && !dn.includes('블랙홀 해제') && /서비스영향 : 일부 IP 접속 영향 \(대상 IP 블랙홀 03:2\d부터 유지 중, 24~48시간 뒤 해제 예정\)/.test(dn) && !dn.includes('이중화 경로는 영향 없음') && dn.includes('_완료]'));
   await page.click('#lvSend');
   await page.keyboard.press('Escape');
   check('완료 문자를 보내도 대응이 끝나지 않고(결과 창 없음) 7번 알림 설정이 열림', !(await page.evaluate(() => !document.getElementById('lvResult').hidden)) && (await page.locator('#lvTodo [data-a=rem]').isEnabled()) && (await page.locator('#lvProg').innerText()).includes('6 / 7'));
   await page.click('#lvTodo [data-a=rem]');
   const res = await page.evaluate(() => ({ vis: !document.getElementById('lvResult').hidden, txt: document.getElementById('lvResBody').innerText, rem: JSON.parse(localStorage.getItem('reminders') || '[]') }));
-  check('알림을 설정하면 대응 결과가 나옴: 알림→확인·문자·차단 시간, 블랙셧다운 유지, 해제 알림 시각, 클린존 확인, 기록 저장', res.vis && ['알림 → 발생 문자', '기한 8분 안', '알림 → 차단', '블랙셧다운', '유지 중', '블랙셧다운 해제 알림', '10/31', '클린존 가입 확인', '확인함', '사건 기록 저장', '발생 → 완료'].every(w => res.txt.includes(w)), res.txt.slice(0, 120).replace(/\n/g, ' | '));
+  check('알림을 설정하면 대응 결과가 나옴: 알림→확인·문자·차단 시간, 블랙홀 유지, 해제 알림 시각, 클린존 확인, 기록 저장', res.vis && ['알림 → 발생 문자', '기한 8분 안', '알림 → 차단', '블랙홀', '유지 중', '블랙홀 해제 알림', '10/31', '클린존 가입 확인', '확인함', '사건 기록 저장', '발생 → 완료'].every(w => res.txt.includes(w)), res.txt.slice(0, 120).replace(/\n/g, ' | '));
   check('설정한 해제 알림이 브라우저에 저장됨 (48시간 뒤 = 설정 시각 + 48시간)', res.rem.length === 1 && res.rem[0].key === 'ddos:198.51.100.77' && res.rem[0].due - res.rem[0].set === 48 * 3600000, JSON.stringify(res.rem));
   await page.keyboard.press('Escape');
   // 알림(종 모양)에서 확인: 설정 직후는 "해제 예정", 48시간이 지난 시각으로 보면 "확인 필요"
   await page.click('#bell'); await page.click('[data-np=tasks]');
   const bellTask = await page.locator('#taskTbl').innerText();
-  check('알림 > 내 업무에 "블랙셧다운 해제 확인 (198.51.100.77/32)"가 "10/31 … 해제 예정 · 48시간 뒤"로 보임', bellTask.includes('블랙셧다운 해제 확인') && bellTask.includes('198.51.100.77/32') && bellTask.includes('해제 예정') && bellTask.includes('10/31'), bellTask.slice(-160).replace(/\n/g, ' '));
+  check('알림 > 내 업무에 "블랙홀 해제 확인 (198.51.100.77/32)"가 "10/31 … 해제 예정 · 48시간 뒤"로 보임', bellTask.includes('블랙홀 해제 확인') && bellTask.includes('198.51.100.77/32') && bellTask.includes('해제 예정') && bellTask.includes('10/31'), bellTask.slice(-160).replace(/\n/g, ' '));
   const badge0 = await page.locator('#bellN').innerText();
   await page.evaluate(() => { state.end = idxOf(parseT('2026-10-31T09:00')); renderTasks(); });
   const badge1 = await page.locator('#bellN').innerText();
@@ -239,16 +239,16 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('보는 시각이 해제 예정 시각(48시간 뒤)을 지나면 알림 배지 숫자가 1 늘고, 경고 이력과 내 업무에 "해제 알림 · 확인 필요"가 나옴', +badge1 === +badge0 + 1 && alertTxt.includes('해제 알림') && alertTxt.includes('설정 후 48시간이 지났습니다') && (await page.locator('#taskTbl').innerText()).includes('해제 확인 필요'), badge0 + ' -> ' + badge1);
   await page.evaluate(() => { state.end = NOW_IDX; renderTasks(); localStorage.removeItem('reminders'); renderTasks(); });
   await page.keyboard.press('Escape'); await page.evaluate(() => { document.getElementById('notif').hidden = true; });
-  // 블랙셧다운을 걸면 공격이 끝나기를 기다리지 않고 링크가 평소로 돌아온 것을 확인해 바로 완료 문자를 보낸다. 문자를 늦게 보내면 기한 초과
+  // 블랙홀을 걸면 공격이 끝나기를 기다리지 않고 링크가 평소로 돌아온 것을 확인해 바로 완료 문자를 보낸다. 문자를 늦게 보내면 기한 초과
   await page.evaluate(() => LIVE.reset(false));
   await page.evaluate(() => LIVE.jump(25)); await page.click('#lvAck');
-  check('블랙셧다운을 걸기 전에는 "정상화 확인"이 막혀 있음', await page.locator('#lvTodo [data-a=check]').isDisabled());
+  check('블랙홀을 걸기 전에는 "정상화 확인"이 막혀 있음', await page.locator('#lvTodo [data-a=check]').isDisabled());
   await page.click('#lvTodo [data-a=bh]'); await page.click('#lvTodo [data-a=exec]');
   await page.click('#lvTodo [data-a=check]');
-  check('블랙셧다운 직후(링크 in이 아직 내려오기 전)에 정상화 확인을 누르면 "아직 평소 범위가 아닙니다"라고 알려 줌', (await page.locator('#lvSendMsg').innerText()).includes('아직 평소 범위가 아닙니다') && (await page.locator('#lvStage [data-st=완료]').isDisabled()));
+  check('블랙홀 직후(링크 in이 아직 내려오기 전)에 정상화 확인을 누르면 "아직 평소 범위가 아닙니다"라고 알려 줌', (await page.locator('#lvSendMsg').innerText()).includes('아직 평소 범위가 아닙니다') && (await page.locator('#lvStage [data-st=완료]').isDisabled()));
   await page.evaluate(() => LIVE.advance(3)); const low = parseFloat((await lv()).now);
   await page.click('#lvTodo [data-a=check]');
-  check('블랙셧다운 뒤 링크 in이 평소로 돌아오면(공격은 아직 이어지는 중) 바로 정상화 확인이 되고 완료 문자를 보낼 수 있음', low < 5 && (await page.locator('#lvCompSub').innerText()).includes('블랙셧다운으로 버려지는 양') && !(await page.locator('#lvStage [data-st=완료]').isDisabled()) && (await page.locator('#lvTodo').innerText()).includes('링크가 평소로 돌아온 것을 확인했습니다'), String(low));
+  check('블랙홀 뒤 링크 in이 평소로 돌아오면(공격은 아직 이어지는 중) 바로 정상화 확인이 되고 완료 문자를 보낼 수 있음', low < 5 && (await page.locator('#lvCompSub').innerText()).includes('블랙홀로 버려지는 양') && !(await page.locator('#lvStage [data-st=완료]').isDisabled()) && (await page.locator('#lvTodo').innerText()).includes('링크가 평소로 돌아온 것을 확인했습니다'), String(low));
   await page.evaluate(() => LIVE.reset(false));
   await page.evaluate(() => LIVE.jump(33)); await page.click('#lvAck'); await page.click('#lvSend');
   check('발생 문자를 8분 뒤에 보내면 "기한 초과"로 표시됨', (await lv()).timer.includes('기한 초과'));
@@ -477,9 +477,9 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const au1 = await page.evaluate(() => { AUTO.load('ddos'); AUTO.advance(1.5); const before = AUTO.state.ack; AUTO.advance(6); const s = AUTO.state; return { before, ack: s.ack, done: Object.keys(s.done), sent: Object.keys(s.sent), pend: AUTO.pending && AUTO.pending.title, card: document.querySelector('#avGate').textContent, onTop: (() => { const r = id => document.querySelector(id).getBoundingClientRect(); return r('#avChart').top < r('#avGate').top && r('#avGate').top < r('#avHow').top && r('#avHow').top < r('#avTermOut').top && Math.abs(r('#avTodo').top - r('#avChart').top) < 80; })() }; });
   check('자동 대응(DDoS): 알림 전에는 아무것도 안 하고, 알림 뒤 일정·대상 조회는 자동으로 하지만 발생 문자는 보내기 전에 멈춰 확인 요청 카드(보낼 문자·영향·되돌릴 수 없음)를 띄움. 배치는 그래프·진행 상황 → 확인 요청 → 설명 → 터미널 순서', au1.before == null && au1.ack != null && ['ev', 'ip'].every(k => au1.done.includes(k)) && !au1.done.includes('sms') && au1.sent.length === 0 && au1.pend === '발생 문자를 보낼까요?' && au1.card.includes('보낼 문자') && au1.card.includes('되돌릴 수 없음') && au1.onTop, JSON.stringify(au1).slice(0, 300));
   const au1b = await page.evaluate(() => { const noName = AUTO.decide('ok', { who: '' }); const ok = AUTO.decide('ok', { who: '김근무' }); AUTO.advance(3); const g = AUTO.pending; return { noName, ok, sent: Object.keys(AUTO.state.sent), title: g && g.title, cmd: g && g.cmd.join(' '), undo: g && g.undo.join(' '), impact: g && g.impact, bh: AUTO.state.bh, log: AUTO.state.log.map(l => l.text).join(' | ') }; });
-  check('확인자 이름 없이는 실행되지 않고, 이름을 적고 확인하면 발생 문자가 나가며 기록에 확인자가 남음. 다음 블랙셧다운 차단은 명령·되돌리는 명령·영향(정상 접속도 끊김)을 보여 주며 실행 전에 멈춤', au1b.noName.includes('확인자 이름') && au1b.ok === '실행함' && au1b.sent.includes('발생') && au1b.log.includes('김근무') && au1b.title === '블랙셧다운 차단을 실행할까요?' && au1b.cmd.includes('discard') && au1b.undo.includes('delete') && au1b.impact.includes('정상 접속도') && au1b.bh == null, JSON.stringify(au1b).slice(0, 400));
+  check('확인자 이름 없이는 실행되지 않고, 이름을 적고 확인하면 발생 문자가 나가며 기록에 확인자가 남음. 다음 블랙홀 차단은 명령·되돌리는 명령·영향(정상 접속도 끊김)을 보여 주며 실행 전에 멈춤', au1b.noName.includes('확인자 이름') && au1b.ok === '실행함' && au1b.sent.includes('발생') && au1b.log.includes('김근무') && au1b.title === '블랙홀 차단을 실행할까요?' && au1b.cmd.includes('discard') && au1b.undo.includes('delete') && au1b.impact.includes('정상 접속도') && au1b.bh == null, JSON.stringify(au1b).slice(0, 400));
   const au1c = await page.evaluate(() => { AUTO.advance(2.3); const re = AUTO.pending.realert, bh = AUTO.state.bh; const noWhy = AUTO.decide('no', { who: '김근무', why: '' }); const edit = AUTO.decide('ok', { who: '김근무', text: 'set routing-options static route 198.51.100.77/32 discard\ncommit comment "근무자 확인"' }); return { re, bh, noWhy, edit, bh2: AUTO.state.bh, term: document.querySelector('#avTermOut').textContent }; });
-  check('확인 기한이 지나도 자동 실행하지 않고 다시 알림. 실행 안 함은 사유가 있어야 하고, 고쳐서 실행하면 고친 명령이 터미널에 남고 블랙셧다운이 걸림', au1c.re >= 1 && au1c.bh == null && au1c.noWhy.includes('사유') && au1c.edit === '실행함' && au1c.bh2 != null && au1c.term.includes('근무자가 고친 명령'), JSON.stringify(au1c).slice(0, 300));
+  check('확인 기한이 지나도 자동 실행하지 않고 다시 알림. 실행 안 함은 사유가 있어야 하고, 고쳐서 실행하면 고친 명령이 터미널에 남고 블랙홀이 걸림', au1c.re >= 1 && au1c.bh == null && au1c.noWhy.includes('사유') && au1c.edit === '실행함' && au1c.bh2 != null && au1c.term.includes('근무자가 고친 명령'), JSON.stringify(au1c).slice(0, 300));
   const au1d = await page.evaluate(() => { AUTO.load('ddos'); AUTO.advance(8); const r = AUTO.decide('no', { who: '김근무', why: '고객사와 먼저 통화' }); AUTO.advance(5); return { r, stop: AUTO.state.ag.stopped && AUTO.state.ag.stopped.kind, sent: Object.keys(AUTO.state.sent).length, card: document.querySelector('#avGate').textContent }; });
   check('실행 안 함(사유 적음)을 고르면 그 뒤로 자동 대응이 멈추고, 카드에 사유와 확인자가 남음', au1d.r === '실행 안 함' && au1d.stop === 'reject' && au1d.sent === 0 && au1d.card.includes('고객사와 먼저 통화') && au1d.card.includes('김근무'), JSON.stringify(au1d));
   const au2 = await page.evaluate(() => { const out = []; for (const [id, o] of [['ddos', null], ['linkDown', { cause: 'work' }], ['linkDown', { cause: 'fiber' }], ['drop', null], ['redundancy', null]]) { AUTO.load(id, o); const sc = AUTO.scenario; let n = 0, k = 0; while (!AUTO.state.finished && k++ < 800) { AUTO.advance(0.5); if (AUTO.pending) { AUTO.decide('ok', { who: '김근무' }); n++; } } const s = AUTO.state; out.push({ id, fin: s.finished, all: Object.keys(s.done).length === sc.rows().length, sent: Object.keys(s.sent).join(), sms: s.done.sms - sc.alertAt, n, fix: s.fix || '', human: [...document.querySelectorAll('#avHow .lv-rule td:nth-child(4)')].filter(td => td.textContent.includes('사람 확인')).length, res: document.querySelector('#avResBody').textContent }); } return out; });
@@ -628,7 +628,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('서버실-3D: "전원·냉방 설비" 버튼이 UPS·분전반·항온항습기(3개)를 보여 주고 UPS 설명이 오른쪽에 나옴', fc.fac === 'UPS-A' && fc.n === 3 && fc.tx > 4 && fc.panel.includes('무정전전원장치') && fc.panel.includes('가상'), JSON.stringify(fc));
   await page.click('#glFit'); await flyDone();
   const vr = await page.evaluate(() => document.querySelector('#appVer').textContent);
-  check('화면 위에 버전 표시(v2.16.1)가 있음', vr === 'v2.16.1', vr);
+  check('화면 위에 버전 표시(v2.16.2)가 있음', vr === 'v2.16.2', vr);
   await page.mouse.move(cv.x + 300, cv.y + 300); await page.mouse.down(); await page.mouse.move(cv.x + 420, cv.y + 300, { steps: 5 }); await page.mouse.up();
   const az = await page.evaluate(() => G.cs.az);
   check('서버실-3D: 드래그하면 시점이 회전하고 좌우 70도를 넘지 않음', Math.abs(az) > 5 && Math.abs(az) <= 70, az);
@@ -809,15 +809,15 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   check('복구 원인에 따라 "원인 확인" 단계(8번째)가 다르게 나옴: 상대 구간 작업 / 일시 오류 / 광 모듈(SFP) 교체', ld.work.n === 9 && /상대/.test(ld.work.title) && /작업/.test(ld.work.title) && /일시/.test(ld.transient.title) && /SFP/.test(ld.fiber.title) && new Set([ld.work.title, ld.transient.title, ld.fiber.title]).size === 3 && Object.values(ld).every(x => x.allExpl && x.expl.length > 60), JSON.stringify([ld.work.title, ld.transient.title, ld.fiber.title]));
   check('원인별 마무리: 상대 작업은 사전 공지 재발 방지 요청, 일시 오류는 재발 감시, SFP 불량은 교체 전·후 광값을 보여 줌', /사전 공지/.test(ld.work.detail) && /재발/.test(ld.transient.detail) && /교체 전/.test(ld.fiber.detail) && /교체 후/.test(ld.fiber.detail) && /-40\.00 dBm/.test(ld.fiber.detail) && /-3\.\d\d dBm/.test(ld.fiber.detail));
   check('완료 문자의 원인과 조치가 복구 원인을 따름 (완료 문자 형식도 유지)', ['work', 'transient', 'fiber'].every(c => smsCheck(ld[c].done.split('[완료 문자 예시]\n')[1], '완료', '안산')) && /상대 구간/.test(ld.work.done) && /일시적/.test(ld.transient.done) && /SFP/.test(ld.fiber.done) && /회복/.test(ld.work.doneTitle) && ld.work.doneTitle.includes('자동 복구'));
-  // DDoS 시나리오: 데이터의 일정 없는 급증, 공격량, 클린존·블랙셧다운, 문자(발생·경과·완료)
+  // DDoS 시나리오: 데이터의 일정 없는 급증, 공격량, 클린존·블랙홀, 문자(발생·경과·완료)
   const dd = await page.evaluate(() => { const S = buildScenarios().ddos, st = S.steps, a = ALERTS.find(x => x.link === 'IDC_B_FS1_UP2' && x.kind.includes('급증') && !x.evName), L = LINK.IDC_B_FS1_UP2;
     const base = L.in[a.s - 1], peak = Math.max(...L.in.slice(a.s, a.e + 1)); return { n: st.length, sms: st[3].detail, prog: st[7].detail, done: st[9].detail, t5: st[5].detail, t6: st[6].detail, t4: st[4].detail, expl: st.every(x => x.explain && x.explain.length > 40), lesson: S.def ? '' : S.lesson, atk: peak - base, kinds: st.map(x => x.kind) }; });
   const atkTxt = (dd.sms.match(/공격량 : TCP \(([\d.]+) Gbps \/ ([\d.]+) Mpps\)/) || []);
   check('DDoS 시나리오: 10단계, 모든 단계에 설명, 데이터의 일정 없는 급증(IDC_B_FS1_UP2 새벽)을 사용', dd.n === 10 && dd.expl && dd.kinds[0] === '감지' && dd.kinds[9] === '결과');
   check('DDoS 발생 문자: 양식 + ■ 공격량이 원인 다음에 나오고, 공격량이 그래프의 급증분과 같고 Mpps는 138바이트 가정에 맞음', smsCheck(dd.sms, '발생', '분당') && /■ 원인 : .+\n■ 공격량 : TCP/.test(dd.sms) && Math.abs(+atkTxt[1] - dd.atk) < 0.06 && Math.abs(+atkTxt[2] - dd.atk * 1000 / (138 * 8)) < 0.06 && /서비스영향 : 파악중/.test(dd.sms), atkTxt.slice(1).join('/') + ' vs ' + dd.atk.toFixed(1));
-  check('DDoS 경과 문자: 블랙셧다운 중이라 대상 IP 접속 불가를 서비스영향에 쓰고, 조치 시간표에 블랙셧다운 차단·상위 연동망 요청이 있음', smsCheck(dd.prog.slice(dd.prog.indexOf('[TEP IDC]')), '경과', '분당') && /서비스영향 : 대상 IP.+접속 불가\(블랙셧다운 중\)/.test(dd.prog) && /블랙셧다운 차단/.test(dd.prog) && /상위 연동망에 블랙셧다운 요청/.test(dd.prog) && !/■ 일시 : .* ~ \d/.test(dd.prog.slice(dd.prog.indexOf('[TEP IDC]'))));
-  check('DDoS 완료 문자: 블랙셧다운 해제까지 끝난 뒤에만 완료, 해제 조치와 블랙셧다운 구간이 있음', smsCheck(dd.done.slice(dd.done.indexOf('[TEP IDC]')), '완료', '분당') && /블랙셧다운 해제/.test(dd.done) && /블랙셧다운 구간\(\d\d:\d\d~\d\d:\d\d\)/.test(dd.done) && /\[주의_분당_완료\]/.test(dd.done));
-  check('DDoS 시나리오: 클린존(공격만 거름)과 블랙셧다운(전부 버림, 대상도 접속 불가)의 차이, 블랙셧다운 명령 예시(discard), 상위 연동망 요청(65535:666)이 설명됨', /클린존/.test(dd.t4) && /전부 버립니다/.test(dd.t4) && /공격만 버리고 정상 트래픽은 되돌려/.test(dd.t4) && /static route .*\/32 discard/.test(dd.t5) && /65535:666/.test(dd.t6) && /연동망에 문의할 때 확인할 3가지/.test(dd.t6));
+  check('DDoS 경과 문자: 블랙홀 중이라 대상 IP 접속 불가를 서비스영향에 쓰고, 조치 시간표에 블랙홀 차단·상위 연동망 요청이 있음', smsCheck(dd.prog.slice(dd.prog.indexOf('[TEP IDC]')), '경과', '분당') && /서비스영향 : 대상 IP.+접속 불가\(블랙홀 중\)/.test(dd.prog) && /블랙홀 차단/.test(dd.prog) && /상위 연동망에 블랙홀 요청/.test(dd.prog) && !/■ 일시 : .* ~ \d/.test(dd.prog.slice(dd.prog.indexOf('[TEP IDC]'))));
+  check('DDoS 완료 문자: 블랙홀 해제까지 끝난 뒤에만 완료, 해제 조치와 블랙홀 구간이 있음', smsCheck(dd.done.slice(dd.done.indexOf('[TEP IDC]')), '완료', '분당') && /블랙홀 해제/.test(dd.done) && /블랙홀 구간\(\d\d:\d\d~\d\d:\d\d\)/.test(dd.done) && /\[주의_분당_완료\]/.test(dd.done));
+  check('DDoS 시나리오: 클린존(공격만 거름)과 블랙홀(전부 버림, 대상도 접속 불가)의 차이, 블랙홀 명령 예시(discard), 상위 연동망 요청(65535:666)이 설명됨', /클린존/.test(dd.t4) && /전부 버립니다/.test(dd.t4) && /공격만 버리고 정상 트래픽은 되돌려/.test(dd.t4) && /static route .*\/32 discard/.test(dd.t5) && /65535:666/.test(dd.t6) && /연동망에 문의할 때 확인할 3가지/.test(dd.t6));
   check('모든 시나리오의 모든 단계에 설명이 있음 (팝업이 비지 않음)', await page.evaluate(() => Object.values(buildScenarios()).every(S => S.steps.every(x => x.explain && x.explain.length > 30))));
   check('모든 시나리오 본문에 글자 그대로의 "\\n"이 남아 있지 않음(줄바꿈이 깨지지 않음)', await page.evaluate(() => Object.values(buildScenarios()).every(S => S.steps.every(x => !String(x.detail || '').includes('\\n') && !String(x.explain || '').includes('\\n')))));
   // 탭 아이콘(로고)
@@ -827,7 +827,7 @@ const check = (name, ok, extra = '') => { console.log((ok ? 'PASS ' : 'FAIL ') +
   const mails = await page.evaluate(() => [(ev => evNoticeList(ev, evCalc(ev))[0].text)(DATA.events.find(e => e.name === '축구 결승')), replyText(parseMail(SAMPLE_MAIL))].map(x => x.split('\n')[0]));
   check('다른 메일에도 회사 이름이 붙음 (경기 사전 안내·방문 회신 모두 "제목:" 글자 없이 [TEP IDC]로 시작)', mails[0].startsWith('[TEP IDC] ') && !mails[0].includes('제목:') && mails[1].startsWith('[TEP IDC] 방문 등록 완료') && !mails[1].includes('제목'), mails.join(' | '));
   const scenarios = [['calm', '평일 오후 7시', 4, ['그래프 15개 확인', '서버실 확인', '이상 없음']], ['drop', '트래픽 급감', 6, ['급감', 'IDC_B_FS2_INTL1', '광값', '예시미디어', '회복']],
-    ['redundancy', '이중화로 무사히 넘기기', 8, ['이중화', '전원 꺼짐', '트래픽은 거의 그대로', '고객 영향 없음']], ['linkDown', '업링크 회선 다운', 9, ['Admin', '트래픽(전/후)', '광값', 'ping', '연동망', '원인 확인', '회복']], ['ddos', 'DDoS 공격 수신', 10, ['DDoS', '공격량', '클린존', '블랙셧다운', '정상화', '해제']], ['surge', '트래픽 폭주', 7, ['사전 연락', '분산', '하이드레이션', '경고선 80%', '사후 정리', 'TEP IDC']], ['temp', '서버실 온도 변화', 7, ['온도 경고', '빨강 깜박임', '터미널', '냉각 복구', '-40.00 dBm']]];
+    ['redundancy', '이중화로 무사히 넘기기', 8, ['이중화', '전원 꺼짐', '트래픽은 거의 그대로', '고객 영향 없음']], ['linkDown', '업링크 회선 다운', 9, ['Admin', '트래픽(전/후)', '광값', 'ping', '연동망', '원인 확인', '회복']], ['ddos', 'DDoS 공격 수신', 10, ['DDoS', '공격량', '클린존', '블랙홀', '정상화', '해제']], ['surge', '트래픽 폭주', 7, ['사전 연락', '분산', '하이드레이션', '경고선 80%', '사후 정리', 'TEP IDC']], ['temp', '서버실 온도 변화', 7, ['온도 경고', '빨강 깜박임', '터미널', '냉각 복구', '-40.00 dBm']]];
   for (const [id, name, n, words] of scenarios) {
     await goTab('monitor');
     await page.evaluate(([i]) => startScn(i, i === 'linkDown' ? { cause: 'work' } : undefined), [id]);   // 슬라이드 버전은 목록에서 뺐지만 코드는 남아 있다
